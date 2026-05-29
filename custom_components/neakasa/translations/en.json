@@ -1,0 +1,114 @@
+{
+    "title": "Neakasa",
+    "config": {
+        "step": {
+            "user": {
+                "title": "Neakasa Setup",
+                "description": "The credentials will be used to pull the data from the server.",
+                "data": {
+                    "username": "Username",
+                    "password": "Password"
+                }
+            },
+            "device": {
+                "description": "Select one of the available device ids.",
+                "data": {
+                    "device_id": "Device ID"
+                }
+            }
+        },
+        "abort": {
+            "connenction": "Error during connection.",
+            "authentication": "Error during authentication.",
+            "unknown": "Unknown Error"
+        }
+    },
+    "entity": {
+        "button": {
+            "clean": {
+                "name": "Clean"
+            },
+            "level": {
+                "name": "Level"
+            }
+        },
+        "binary_sensor": {
+            "bin_full": {
+                "name": "Garbage can full"
+            }
+        },
+        "sensor": {
+            "cat_sensor": {
+                "name": "Cat {name}"
+            },
+            "sand_percent": {
+                "name": "Cat litter level"
+            },
+            "wifi_rssi": {
+                "name": "WiFi RSSI"
+            },
+            "stay_time": {
+                "name": "Last stay time"
+            },
+            "last_usage": {
+                "name": "Last usage"
+            },
+            "current_status": {
+                "name": "Device status",
+                "state": {
+                    "idle": "Idle",
+                    "cleaning": "Cleaning",
+                    "leveling": "Leveling",
+                    "flipover": "Upside Down",
+                    "cat_present": "Cat Present",
+                    "paused": "Paused",
+                    "side_bin_locking_panels_missing": "Side bin locking panels missing",
+                    "cleaning_interrupted": "Cleaning interrupted"
+                }
+            },
+            "sand_state": {
+                "name": "Cat litter state",
+                "state": {
+                    "insufficient": "Insufficient",
+                    "moderate": "Moderate",
+                    "sufficient": "Sufficient",
+                    "overfilled": "Overfilled"
+                }
+            },
+            "bin_state": {
+                "name": "Bin state",
+                "state": {
+                    "normal": "Normal",
+                    "full": "Garbage can full",
+                    "missing": "Not in position"
+                }
+            }
+        },
+        "switch": {
+            "auto_clean": {
+                "name": "Auto clean"
+            },
+            "young_cat_mode": {
+                "name": "Kitten mode"
+            },
+            "child_lock": {
+                "name": "Child lock"
+            },
+            "auto_bury": {
+                "name": "Automatic cover"
+            },
+            "auto_level": {
+                "name": "Automatic leveling"
+            },
+            "silent_mode": {
+                "name": "Silent mode"
+            },
+            "auto_recovery": {
+                "name": "Automatic recovery"
+            },
+            "unstoppable_cycle": {
+                "name": "Unstoppable cycle"
+            }
+        }
+    }
+}
