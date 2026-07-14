@@ -51,18 +51,35 @@ class NeakasaAPI:
             timestamp = str(int(time.time()))
             signature_raw = hmac.new(self._app_secret.encode(), (self._app_key + timestamp).encode(), digestmod=hashlib.sha256)
             signature = base64.b64encode(signature_raw.digest()).decode("utf-8")
+            
+            _LOGGER.debug("Fetching base URL from global.genhigh.com")
+            
             async with self._session.get(
                 url='https://global.genhigh.com/global/baseurl/account',
                 params={
                     "account": hashlib.md5(username.encode()).hexdigest()
                 },
                 headers={
-                "Request-Id": signature,
-                "Appid": self._app_key,
-                "Timestamp": timestamp,
-                "Sign": signature,
-            }) as response:
-                response_json = await response.json()
+                    "Request-Id": signature,
+                    "Appid": self._app_key,
+                    "Timestamp": timestamp,
+                    "Sign": signature,
+                }) as response:
+                
+                _LOGGER.debug(f"Base URL response - Status: {response.status}, Content-Type: {response.content_type or 'EMPTY'}")
+                
+                if response.status != 200:
+                    text = await response.text()
+                    _LOGGER.error(f"Base URL failed with status {response.status}: {text[:400]}")
+                    raise APIConnectionError("Error connecting to api.")
+                
+                try:
+                    response_json = await response.json(content_type=None)  # Fix for pyOpenSSL 26+
+                except Exception as e:
+                    text = await response.text()
+                    _LOGGER.error(f"Failed to parse base URL JSON: {e}. Body: {text[:400]}")
+                    raise APIConnectionError("Error connecting to api.") from e
+                
                 if response_json['code'] != 0:
                     raise APIAuthError("Error connecting to api. Invalid username.")
                 self.baseurl = response_json['data']['web']
@@ -74,6 +91,7 @@ class NeakasaAPI:
             timestamp = str(int(time.time()))
             signature_raw = hmac.new(self._app_secret.encode(), (self._app_key + timestamp).encode(), digestmod=hashlib.sha256)
             signature = base64.b64encode(signature_raw.digest()).decode("utf-8")
+            
             async with self._session.post(
                 url=self.baseurl + '/login/user',
                 json={
@@ -84,21 +102,36 @@ class NeakasaAPI:
                     "app_version": "2.0.9",
                     "account": username,
                     "type": 3,
-                    "password": hashlib.md5(hashlib.md5(password.encode()).hexdigest().encode()).hexdigest() #hash twice
+                    "password": hashlib.md5(hashlib.md5(password.encode()).hexdigest().encode()).hexdigest()
                 },
                 headers={
-                "Request-Id": signature,
-                "Appid": self._app_key,
-                "Timestamp": timestamp,
-                "Sign": signature,
-            }) as response:
-                response_json = await response.json()
+                    "Request-Id": signature,
+                    "Appid": self._app_key,
+                    "Timestamp": timestamp,
+                    "Sign": signature,
+                }) as response:
+                
+                _LOGGER.debug(f"Login response - Status: {response.status}, Content-Type: {response.content_type or 'EMPTY'}")
+                
+                if response.status != 200:
+                    text = await response.text()
+                    _LOGGER.error(f"Login failed with status {response.status}: {text[:500]}")
+                    raise APIConnectionError("Error connecting to api.")
+                
+                try:
+                    response_json = await response.json(content_type=None)  # Fix for pyOpenSSL 26+
+                except Exception as e:
+                    text = await response.text()
+                    _LOGGER.error(f"Failed to parse login JSON: {e}. Body: {text[:500]}")
+                    raise APIConnectionError("Error connecting to api.") from e
+                
                 if response_json['code'] != 0:
                     raise APIAuthError("Error connecting to api. Invalid username or password.")
                 self._ali_authentication_token = response_json['data']['user_info']['ali_authentication_token']
                 await self._encryption.decodeLoginToken(response_json['data']['login_token'])
         except ClientError as exc:
             raise APIConnectionError("Error connecting to api.")
+            
 
     async def _loadRegionData(self):
         config = Config(
