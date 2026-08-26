@@ -1,0 +1,112 @@
+rules:
+  # Bronze
+  action-setup:
+    status: exempt
+    comment: This integration does not register any service actions.
+  appropriate-polling:
+    status: todo
+    comment: Polling interval (60s) is hardcoded; should be user-configurable via options flow.
+  brands:
+    status: todo
+    comment: No brand/ directory with icon assets yet.
+  common-modules: done
+  config-flow: done
+  config-flow-test-coverage:
+    status: todo
+    comment: No test suite exists yet for config flow.
+  dependency-transparency: done
+  docs-actions:
+    status: exempt
+    comment: This integration does not register any service actions.
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  docs-removal-instructions:
+    status: todo
+  entity-event-setup: done
+  entity-unique-id: done
+  has-entity-name: done
+  runtime-data:
+    status: todo
+    comment: Uses legacy hass.data[DOMAIN][entry_id] pattern; migration to entry.runtime_data is planned.
+  test-before-configure:
+    status: todo
+    comment: No test suite exists yet.
+  test-before-setup:
+    status: todo
+    comment: No test suite exists yet.
+  unique-config-entry: done
+
+  # Silver
+  action-exceptions:
+    status: exempt
+    comment: This integration does not register any service actions.
+  config-entry-unloading: done
+  docs-configuration-parameters:
+    status: todo
+  docs-installation-parameters:
+    status: todo
+  entity-unavailable: done
+  integration-owner: done
+  log-when-unavailable: done
+  parallel-updates:
+    status: todo
+  reauthentication-flow:
+    status: todo
+    comment: No reauth flow; expired credentials require delete-and-re-add.
+  test-coverage:
+    status: todo
+    comment: No test suite exists yet.
+
+  # Gold
+  devices: done
+  diagnostics:
+    status: todo
+    comment: No diagnostics export is implemented yet.
+  discovery:
+    status: exempt
+    comment: Cloud service with no local discovery mechanism.
+  discovery-update-info:
+    status: exempt
+    comment: Cloud service with no local discovery mechanism.
+  docs-data-update:
+    status: todo
+  docs-examples:
+    status: todo
+  docs-known-limitations:
+    status: todo
+  docs-supported-devices: done
+  docs-supported-functions:
+    status: todo
+  docs-troubleshooting:
+    status: todo
+  docs-use-cases:
+    status: todo
+  dynamic-devices:
+    status: todo
+    comment: One config entry per device; multi-device-per-account is planned.
+  entity-category: done
+  entity-device-class: done
+  entity-disabled-by-default: done
+  entity-translations: done
+  exception-translations:
+    status: todo
+    comment: Raised exceptions do not carry translation keys.
+  icon-translations:
+    status: exempt
+    comment: Static MDI icons per entity; no state-based icon mapping needed.
+  reconfiguration-flow:
+    status: todo
+    comment: No reconfigure flow; editing credentials requires delete-and-re-add.
+  repair-issues:
+    status: todo
+  stale-devices:
+    status: todo
+
+  # Platinum
+  async-dependency: done
+  inject-websession:
+    status: done
+    comment: Session is obtained via async_get_clientsession.
+  strict-typing:
+    status: todo
+    comment: Codebase uses bare dict/list/Any; strict typing is planned.
