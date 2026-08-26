@@ -18,6 +18,9 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.const import PERCENTAGE
 
+from typing import cast
+
+from .data import NeakasaConfigEntry
 from .const import DOMAIN, _LOGGER
 from .coordinator import NeakasaCoordinator
 
@@ -25,12 +28,10 @@ async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
-):
+) -> None:
     """Set up the Sensors."""
-    # This gets the data update coordinator from hass.data as specified in your __init__.py
-    coordinator: NeakasaCoordinator = hass.data[DOMAIN][
-        config_entry.entry_id
-    ].coordinator
+    entry = cast(NeakasaConfigEntry, config_entry)
+    coordinator: NeakasaCoordinator = entry.runtime_data.coordinator
 
     device_info = DeviceInfo(
         name=coordinator.devicename,
