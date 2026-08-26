@@ -11,7 +11,13 @@ from homeassistant.const import (
     CONF_USERNAME,
     CONF_PASSWORD,
 )
-from .api import NeakasaAPI, APIAuthError, APIConnectionError
+from .api import NeakasaAPI
+from .api_client import NeakasaApiClient
+from .exceptions import (
+    NeakasaApiClientAuthenticationError,
+    NeakasaApiClientCommunicationError,
+    NeakasaApiClientError,
+)
 from .const import DOMAIN, _LOGGER
 
 
@@ -50,8 +56,9 @@ class NeakasaConfigFlow(ConfigFlow, domain=DOMAIN):
             session = async_get_clientsession(self.hass)
             api = NeakasaAPI(session, self.hass.async_add_executor_job)
             await api.connect(self._username, self._password)
+            client = NeakasaApiClient(api)
 
-            devices = await api.getDevices()
+            devices = await client.get_devices()
             discovered_devices: dict[str, str] = {}
             for device in devices:
                 if device.get("categoryKey") == "CatLitter":
@@ -66,11 +73,9 @@ class NeakasaConfigFlow(ConfigFlow, domain=DOMAIN):
 
             return await self.async_step_device(None)
 
-        except APIAuthError:
-            # Bad creds → stop the flow with a clear reason
+        except NeakasaApiClientAuthenticationError:
             return self.async_abort(reason="authentication")
-        except APIConnectionError:
-            # Network/service problem → stop cleanly
+        except NeakasaApiClientCommunicationError:
             return self.async_abort(reason="connection")
 
     async def async_step_device(self, user_input: dict[str, Any] | None = None):

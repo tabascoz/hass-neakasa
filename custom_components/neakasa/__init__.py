@@ -11,16 +11,17 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .const import DOMAIN, _LOGGER
 from .coordinator import NeakasaCoordinator
 from .api import NeakasaAPI
+from .api_client import NeakasaApiClient
 from .data import NeakasaConfigEntry, NeakasaData
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SWITCH, Platform.BUTTON]
 
 # Global shared API instances and locks
-_shared_apis: Dict[str, NeakasaAPI] = {}
+_shared_clients: Dict[str, NeakasaApiClient] = {}
 _shared_locks: Dict[str, asyncio.Lock] = {}
 
 
-async def get_shared_api(hass: HomeAssistant, username: str, password: str) -> NeakasaAPI:
+async def get_shared_api(hass: HomeAssistant, username: str, password: str) -> NeakasaApiClient:
     """Get or create a shared API instance for the given credentials."""
     credentials_key = f"{username}:{password}"
     
@@ -28,40 +29,40 @@ async def get_shared_api(hass: HomeAssistant, username: str, password: str) -> N
         _shared_locks[credentials_key] = asyncio.Lock()
     
     async with _shared_locks[credentials_key]:
-        if credentials_key in _shared_apis:
-            api = _shared_apis[credentials_key]
-            if api.connected and hasattr(api, '_iotToken') and api._iotToken:
-                _LOGGER.debug("Reusing existing shared API instance for %s", username)
-                return api
-            _LOGGER.debug(
-                "Clearing invalid API instance for %s (connected: %s, has_token: %s)",
-                username, api.connected, hasattr(api, '_iotToken') and api._iotToken,
-            )
-                del _shared_apis[credentials_key]
-        
-        session = async_get_clientsession(hass)
-        api = NeakasaAPI(session, hass.async_add_executor_job)
-        
-        try:
-            _LOGGER.debug("Authenticating new shared API instance for %s", username)
-            await api.connect(username, password)
-            _shared_apis[credentials_key] = api
-            _LOGGER.debug("Successfully created and authenticated shared API instance for %s", username)
-            return api
-        except Exception as e:
-            _LOGGER.error("Failed to authenticate shared API for %s: %s", username, e)
-            raise
+            if credentials_key in _shared_clients:
+                client = _shared_clients[credentials_key]
+                if client.connected:
+                    _LOGGER.debug("Reusing existing shared API client for %s", username)
+                    return client
+                _LOGGER.debug("Clearing invalid API client for %s", username)
+                del _shared_clients[credentials_key]
+
+            session = async_get_clientsession(hass)
+            api = NeakasaAPI(session, hass.async_add_executor_job)
+
+            try:
+                _LOGGER.debug("Authenticating new shared API client for %s", username)
+                await api.connect(username, password)
+                client = NeakasaApiClient(api)
+                _shared_clients[credentials_key] = client
+                _LOGGER.debug("Authenticated shared API client for %s", username)
+                return client
+            except Exception as e:
+                _LOGGER.error("Failed to authenticate shared API for %s: %s", username, e)
+                raise
 
 
 def clear_shared_api(username: str, password: str) -> None:
-    """Clear the shared API instance for the given credentials."""
+    """Clear the shared API client for the given credentials."""
     credentials_key = f"{username}:{password}"
-    _shared_apis.pop(credentials_key, None)
+    _shared_clients.pop(credentials_key, None)
     _shared_locks.pop(credentials_key, None)
-async def force_reconnect_api(hass: HomeAssistant, username: str, password: str) -> NeakasaAPI:
-    """Force reconnection of the API for the given credentials."""
+
+
+async def force_reconnect_api(hass: HomeAssistant, username: str, password: str) -> NeakasaApiClient:
+    """Force reconnection of the API client for the given credentials."""
     credentials_key = f"{username}:{password}"
-    _shared_apis.pop(credentials_key, None)
+    _shared_clients.pop(credentials_key, None)
     return await get_shared_api(hass, username, password)
 
 

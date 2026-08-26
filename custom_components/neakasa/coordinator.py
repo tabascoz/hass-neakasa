@@ -16,7 +16,13 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from datetime import datetime
 
-from .api import NeakasaAPI, APIAuthError, APIConnectionError
+from .api_client import NeakasaApiClient
+from .exceptions import (
+    NeakasaApiClientAuthenticationError,
+    NeakasaApiClientCommunicationError,
+    NeakasaApiClientError,
+    NeakasaApiClientSessionExpiredError,
+)
 from .value_cacher import ValueCacher
 from .const import DOMAIN, _LOGGER
 
@@ -192,34 +198,36 @@ class NeakasaCoordinator(DataUpdateCoordinator):
         
 
     async def setProperty(self, key: str, value: Any):
-        from . import get_shared_api
-        api = await get_shared_api(self.hass, self.username, self.password)
-        await api.setDeviceProperties(self.deviceid, {key: value})
+        client = await self._get_client()
+        await client.set_device_properties(self.deviceid, {key: value})
         #update data
         setattr(self.data, key, value)
         self.async_set_updated_data(self.data)
 
     async def invokeService(self, service: str):
-        from . import get_shared_api
-        api = await get_shared_api(self.hass, self.username, self.password)
+        client = await self._get_client()
         match service:
             case 'clean':
-                return await api.cleanNow(self.deviceid)
+                return await client.clean_now(self.deviceid)
             case 'level':
-                return await api.sandLeveling(self.deviceid)
+                return await client.sand_leveling(self.deviceid)
         raise Exception('cannot find service to invoke')
+
+    async def _get_client(self) -> NeakasaApiClient:
+        """Return the shared API client for this coordinator's credentials."""
+        from . import get_shared_api
+        return await get_shared_api(self.hass, self.username, self.password)
 
     async def _getDeviceName(self):
         if self._deviceName is not None:
             return self._deviceName
 
         """get deviceName by iotId"""
-        from . import get_shared_api
-        api = await get_shared_api(self.hass, self.username, self.password)
-        devices = await api.getDevices()
-        devices = list(filter(lambda devices: devices['iotId'] == self.deviceid, devices))
-        if(len(devices) == 0):
-            raise APIConnectionError("iotId not found in device list")
+        client = await self._get_client()
+        devices = await client.get_devices()
+        devices = list(filter(lambda d: d['iotId'] == self.deviceid, devices))
+        if len(devices) == 0:
+            raise NeakasaApiClientCommunicationError("iotId not found in device list")
         deviceName = devices[0]['deviceName']
         self._deviceName = deviceName
         return deviceName
@@ -227,17 +235,15 @@ class NeakasaCoordinator(DataUpdateCoordinator):
     async def _getRecords(self):
         async def fetch():
             deviceName = await self._getDeviceName()
-            from . import get_shared_api
-            api = await get_shared_api(self.hass, self.username, self.password)
-            return await api.getRecords(deviceName)
+            client = await self._get_client()
+            return await client.get_records(deviceName)
 
         return await self._recordsCache.get_or_update(fetch)
 
     async def _getDeviceProperties(self):
         async def fetch():
-            from . import get_shared_api
-            api = await get_shared_api(self.hass, self.username, self.password)
-            return await api.getDeviceProperties(self.deviceid)
+            client = await self._get_client()
+            return await client.get_device_properties(self.deviceid)
 
         return await self._devicePropertiesCache.get_or_update(fetch)
 
@@ -258,15 +264,13 @@ class NeakasaCoordinator(DataUpdateCoordinator):
 
             records = await self._getRecords()
             return _build_api_data(devicedata, records, newLastUseDate)
-        except APIAuthError as err:
-            _LOGGER.warning(f"Authentication error for device {self.devicename}, attempting to reconnect: {err}")
+        except NeakasaApiClientSessionExpiredError as err:
+            _LOGGER.warning("Session expired for device %s, reconnecting silently: %s", self.devicename, err)
             try:
-                # Force reconnection of the API
                 from . import force_reconnect_api
-                api = await force_reconnect_api(self.hass, self.username, self.password)
-                _LOGGER.info(f"Successfully reconnected API for device {self.devicename}")
-                # Retry the data fetch after reconnection
-                devicedata = await api.getDeviceProperties(self.deviceid)
+                client = await force_reconnect_api(self.hass, self.username, self.password)
+                _LOGGER.info("Successfully reconnected API for device %s", self.devicename)
+                devicedata = await client.get_device_properties(self.deviceid)
                 newLastUseDate = _get_last_use_date(devicedata)
                 if self.lastUseDate != newLastUseDate:
                     self._recordsCache.mark_as_stale()
@@ -274,20 +278,33 @@ class NeakasaCoordinator(DataUpdateCoordinator):
                 records = await self._getRecords()
                 return _build_api_data(devicedata, records, newLastUseDate)
             except Exception as reconnect_err:
-                _LOGGER.error(f"Failed to reconnect API for device {self.devicename}: {reconnect_err}")
-                raise UpdateFailed(f"Authentication failed and reconnection failed: {err}") from err
-        except APIConnectionError as err:
-            # Check if this is an identityId error, which indicates authentication issues
+                _LOGGER.error("Failed to reconnect after session expiry for device %s: %s", self.devicename, reconnect_err)
+                raise UpdateFailed("Session expired and reconnection failed: %s" % err) from err
+        except NeakasaApiClientAuthenticationError as err:
+            _LOGGER.warning("Authentication error for device %s, attempting to reconnect: %s", self.devicename, err)
+            try:
+                from . import force_reconnect_api
+                client = await force_reconnect_api(self.hass, self.username, self.password)
+                _LOGGER.info("Successfully reconnected API for device %s", self.devicename)
+                devicedata = await client.get_device_properties(self.deviceid)
+                newLastUseDate = _get_last_use_date(devicedata)
+                if self.lastUseDate != newLastUseDate:
+                    self._recordsCache.mark_as_stale()
+                self.lastUseDate = newLastUseDate
+                records = await self._getRecords()
+                return _build_api_data(devicedata, records, newLastUseDate)
+            except Exception as reconnect_err:
+                _LOGGER.error("Failed to reconnect API for device %s: %s", self.devicename, reconnect_err)
+                raise UpdateFailed("Authentication failed and reconnection failed: %s" % err) from err
+        except NeakasaApiClientCommunicationError as err:
             if "identityId is blank" in str(err):
-                _LOGGER.debug(f"IdentityId error for device {self.devicename}, attempting automatic reconnection")
+                _LOGGER.debug("IdentityId error for device %s, attempting automatic reconnection", self.devicename)
                 try:
-                    # Clear the shared API to force a fresh connection
                     from . import clear_shared_api, force_reconnect_api
                     clear_shared_api(self.username, self.password)
-                    api = await force_reconnect_api(self.hass, self.username, self.password)
-                    _LOGGER.debug(f"Successfully reconnected API for device {self.devicename}")
-                    # Retry the data fetch after reconnection
-                    devicedata = await api.getDeviceProperties(self.deviceid)
+                    client = await force_reconnect_api(self.hass, self.username, self.password)
+                    _LOGGER.debug("Successfully reconnected API for device %s", self.devicename)
+                    devicedata = await client.get_device_properties(self.deviceid)
                     newLastUseDate = _get_last_use_date(devicedata)
                     if self.lastUseDate != newLastUseDate:
                         self._recordsCache.mark_as_stale()
@@ -295,8 +312,7 @@ class NeakasaCoordinator(DataUpdateCoordinator):
                     records = await self._getRecords()
                     return _build_api_data(devicedata, records, newLastUseDate)
                 except Exception as reconnect_err:
-                    _LOGGER.error(f"Failed to reconnect API after identityId error for device {self.devicename}: {reconnect_err}")
-                    raise UpdateFailed(f"IdentityId error and reconnection failed: {err}") from err
-            else:
-                _LOGGER.error(f"API connection error for device {self.devicename}: {err}")
-                raise UpdateFailed(err) from err
+                    _LOGGER.error("Failed to reconnect after identityId error for device %s: %s", self.devicename, reconnect_err)
+                    raise UpdateFailed("IdentityId error and reconnection failed: %s" % err) from err
+            _LOGGER.error("API connection error for device %s: %s", self.devicename, err)
+            raise UpdateFailed("Communication error: %s" % err) from err
