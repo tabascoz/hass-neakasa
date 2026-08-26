@@ -19,6 +19,8 @@ from .api import NeakasaAPI, APIAuthError, APIConnectionError
 from .value_cacher import ValueCacher
 from .const import DOMAIN, _LOGGER
 
+_clean_cfg_warning_logged = False
+
 @dataclass
 class NeakasaAPIData:
     """Class to hold api data."""
@@ -41,6 +43,117 @@ class NeakasaAPIData:
     lastUse: int
     cat_list: list[object] = field(default_factory=list)
     record_list: list[object] = field(default_factory=list)
+
+
+def _property_value(devicedata: Any, key: str, default: Any = None) -> Any:
+    """Return ``devicedata[key]['value']`` or *default* when the property is absent.
+
+    The Aliyun IoT gateway wraps every property as ``{"time": ..., "value": ...}``.
+    Some firmware variants / device models do not publish every property (for example
+    ``cleanCfg``), so this must never raise ``KeyError``.
+    """
+    if not isinstance(devicedata, dict):
+        return default
+    entry = devicedata.get(key)
+    if not isinstance(entry, dict):
+        return default
+    return entry.get('value', default)
+
+
+def _to_int(value: Any, default: int = 0) -> int:
+    """Coerce a wire value to ``int``, returning *default* if that is impossible."""
+    if isinstance(value, bool):
+        return int(value)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _to_list(value: Any) -> list[object]:
+    """Coerce a wire value to a list, returning an empty list when unusable."""
+    if isinstance(value, list):
+        return value
+    if value is None:
+        return []
+    if isinstance(value, (dict, tuple)):
+        return list(value)
+    return []
+
+
+def _get_last_use_date(devicedata: Any) -> Any:
+    """Return the ``catLeft`` timestamp used to invalidate the records cache."""
+    if not isinstance(devicedata, dict):
+        return 0
+    cat_left = devicedata.get('catLeft')
+    if not isinstance(cat_left, dict):
+        return 0
+    return cat_left.get('time', 0)
+
+
+def _build_api_data(devicedata: Any, records: Any, new_last_use_date: Any) -> NeakasaAPIData:
+    """Build :class:`NeakasaAPIData` without crashing on missing properties."""
+    if not isinstance(devicedata, dict):
+        devicedata = {}
+    if not isinstance(records, dict):
+        records = {}
+
+    sand = _property_value(devicedata, 'Sand', {})
+    if not isinstance(sand, dict):
+        sand = {}
+    network = _property_value(devicedata, 'NetWorkStatus', {})
+    if not isinstance(network, dict):
+        network = {}
+    cat_left_value = _property_value(devicedata, 'catLeft', {})
+    if not isinstance(cat_left_value, dict):
+        cat_left_value = {}
+    clean_cfg = _property_value(devicedata, 'cleanCfg', {})
+    if not isinstance(clean_cfg, dict):
+        clean_cfg = {}
+
+    expected_keys = (
+        'binFullWaitReset', 'cleanCfg', 'youngCatMode', 'childLockOnOff',
+        'autoBury', 'autoLevel', 'silentMode', 'autoForceInit',
+        'bIntrptRangeDet', 'Sand', 'NetWorkStatus', 'bucketStatus',
+        'room_of_bin', 'catLeft',
+    )
+    missing_keys = [key for key in expected_keys if key not in devicedata]
+    if missing_keys:
+        _LOGGER.debug(
+            "Neakasa device properties missing keys %s (available: %s)",
+            missing_keys, list(devicedata.keys()),
+        )
+
+    global _clean_cfg_warning_logged
+    if 'cleanCfg' in missing_keys and not _clean_cfg_warning_logged:
+        _clean_cfg_warning_logged = True
+        _LOGGER.warning(
+            "Neakasa device did not report the 'cleanCfg' property; "
+            "the auto-clean switch will be unavailable. Available properties: %s",
+            list(devicedata.keys()),
+        )
+
+    return NeakasaAPIData(
+        binFullWaitReset=_property_value(devicedata, 'binFullWaitReset', 0) == 1,  # -> Abfalleimer voll
+        cleanCfg=clean_cfg,
+        youngCatMode=_property_value(devicedata, 'youngCatMode', 0) == 1,  # -> Kätzchen Modus
+        childLockOnOff=_property_value(devicedata, 'childLockOnOff', 0) == 1,  # -> Kindersicherung
+        autoBury=_property_value(devicedata, 'autoBury', 0) == 1,  # -> automatische Abdeckung
+        autoLevel=_property_value(devicedata, 'autoLevel', 0) == 1,  # -> automatische Nivellierung
+        silentMode=_property_value(devicedata, 'silentMode', 0) == 1,  # -> Stiller Modus
+        autoForceInit=_property_value(devicedata, 'autoForceInit', 0) == 1,  # -> automatische Wiederherstellung
+        bIntrptRangeDet=_property_value(devicedata, 'bIntrptRangeDet', 0) == 1,  # -> Unaufhaltsamer Kreislauf
+        sandLevelPercent=_to_int(sand.get('percent', 0)),  # -> Katzenstreu Prozent
+        wifiRssi=_to_int(network.get('WiFi_RSSI', 0)),  # -> WLAN RSSI
+        bucketStatus=_to_int(_property_value(devicedata, 'bucketStatus', 0)),  # -> Aktueller Status
+        room_of_bin=_to_int(_property_value(devicedata, 'room_of_bin', 0)),  # -> Abfalleimer
+        sandLevelState=_to_int(sand.get('level', 0)),  # -> Katzenstreu
+        stayTime=_to_int(cat_left_value.get('stayTime', 0)),
+        lastUse=new_last_use_date,
+        cat_list=_to_list(records.get('cat_list')),
+        record_list=_to_list(records.get('record_list')),
+    )
+
 
 class NeakasaCoordinator(DataUpdateCoordinator):
     """My coordinator."""
@@ -135,42 +248,15 @@ class NeakasaCoordinator(DataUpdateCoordinator):
         """
         try:
             devicedata = await self._getDeviceProperties()
-            
-            newLastUseDate = devicedata['catLeft']['time']
+            newLastUseDate = _get_last_use_date(devicedata)
 
             if self.lastUseDate != newLastUseDate:
                 self._recordsCache.mark_as_stale()
 
             self.lastUseDate = newLastUseDate
-            
+
             records = await self._getRecords()
-
-            try:
-                return NeakasaAPIData(
-                    binFullWaitReset=devicedata['binFullWaitReset']['value'] == 1, #-> Abfalleimer voll
-                    cleanCfg=devicedata['cleanCfg']['value'],
-                    youngCatMode=devicedata['youngCatMode']['value'] == 1, #-> Kätzchen Modus
-                    childLockOnOff=devicedata['childLockOnOff']['value'] == 1, #-> Kindersicherung
-                    autoBury=devicedata['autoBury']['value'] == 1, #-> automatische Abdeckung
-                    autoLevel=devicedata['autoLevel']['value'] == 1, #-> automatische Nivellierung
-                    silentMode=devicedata['silentMode']['value'] == 1, #-> Stiller Modus
-                    autoForceInit=devicedata['autoForceInit']['value'] == 1, #-> automatische Wiederherstellung
-                    bIntrptRangeDet=devicedata['bIntrptRangeDet']['value'] == 1, #-> Unaufhaltsamer Kreislauf
-                    sandLevelPercent=devicedata['Sand']['value']['percent'], #-> Katzenstreu Prozent
-                    wifiRssi=devicedata['NetWorkStatus']['value']['WiFi_RSSI'], #-> WLAN RSSI
-                    bucketStatus=devicedata['bucketStatus']['value'], #-> Aktueller Status [0=Leerlauf,2=Reinigung,3=Nivellierung]
-                    room_of_bin=devicedata['room_of_bin']['value'], #-> Abfalleimer [2=nicht in Position,0=Normal]
-                    sandLevelState=devicedata['Sand']['value']['level'], #-> Katzenstreu [0=Unzureichend,1=Mäßig,2=Ausreichend]
-                    stayTime=devicedata['catLeft']['value'].get('stayTime', 0),
-                    lastUse=newLastUseDate,
-
-                    cat_list=records['cat_list'],
-                    record_list=records['record_list']
-                )
-            except Exception as err:
-                _LOGGER.error(err)
-                # This will show entities as unavailable by raising UpdateFailed exception
-                raise UpdateFailed(f"Got no data from api, please try to restart your litter box.") from err
+            return _build_api_data(devicedata, records, newLastUseDate)
         except APIAuthError as err:
             _LOGGER.warning(f"Authentication error for device {self.devicename}, attempting to reconnect: {err}")
             try:
@@ -180,33 +266,12 @@ class NeakasaCoordinator(DataUpdateCoordinator):
                 _LOGGER.info(f"Successfully reconnected API for device {self.devicename}")
                 # Retry the data fetch after reconnection
                 devicedata = await api.getDeviceProperties(self.deviceid)
-                # Continue with the rest of the data processing...
-                newLastUseDate = devicedata['catLeft']['time']
+                newLastUseDate = _get_last_use_date(devicedata)
                 if self.lastUseDate != newLastUseDate:
                     self._recordsCache.mark_as_stale()
                 self.lastUseDate = newLastUseDate
                 records = await self._getRecords()
-                
-                return NeakasaAPIData(
-                    binFullWaitReset=devicedata['binFullWaitReset']['value'] == 1,
-                    cleanCfg=devicedata['cleanCfg']['value'],
-                    youngCatMode=devicedata['youngCatMode']['value'] == 1,
-                    childLockOnOff=devicedata['childLockOnOff']['value'] == 1,
-                    autoBury=devicedata['autoBury']['value'] == 1,
-                    autoLevel=devicedata['autoLevel']['value'] == 1,
-                    silentMode=devicedata['silentMode']['value'] == 1,
-                    autoForceInit=devicedata['autoForceInit']['value'] == 1,
-                    bIntrptRangeDet=devicedata['bIntrptRangeDet']['value'] == 1,
-                    sandLevelPercent=devicedata['Sand']['value']['percent'],
-                    wifiRssi=devicedata['NetWorkStatus']['value']['WiFi_RSSI'],
-                    bucketStatus=devicedata['bucketStatus']['value'],
-                    room_of_bin=devicedata['room_of_bin']['value'],
-                    sandLevelState=devicedata['Sand']['value']['level'],
-                    stayTime=devicedata['catLeft']['value'].get('stayTime', 0),
-                    lastUse=newLastUseDate,
-                    cat_list=records['cat_list'],
-                    record_list=records['record_list']
-                )
+                return _build_api_data(devicedata, records, newLastUseDate)
             except Exception as reconnect_err:
                 _LOGGER.error(f"Failed to reconnect API for device {self.devicename}: {reconnect_err}")
                 raise UpdateFailed(f"Authentication failed and reconnection failed: {err}") from err
@@ -222,33 +287,12 @@ class NeakasaCoordinator(DataUpdateCoordinator):
                     _LOGGER.debug(f"Successfully reconnected API for device {self.devicename}")
                     # Retry the data fetch after reconnection
                     devicedata = await api.getDeviceProperties(self.deviceid)
-                    # Continue with the rest of the data processing...
-                    newLastUseDate = devicedata['catLeft']['time']
+                    newLastUseDate = _get_last_use_date(devicedata)
                     if self.lastUseDate != newLastUseDate:
                         self._recordsCache.mark_as_stale()
                     self.lastUseDate = newLastUseDate
                     records = await self._getRecords()
-                    
-                    return NeakasaAPIData(
-                        binFullWaitReset=devicedata['binFullWaitReset']['value'] == 1,
-                        cleanCfg=devicedata['cleanCfg']['value'],
-                        youngCatMode=devicedata['youngCatMode']['value'] == 1,
-                        childLockOnOff=devicedata['childLockOnOff']['value'] == 1,
-                        autoBury=devicedata['autoBury']['value'] == 1,
-                        autoLevel=devicedata['autoLevel']['value'] == 1,
-                        silentMode=devicedata['silentMode']['value'] == 1,
-                        autoForceInit=devicedata['autoForceInit']['value'] == 1,
-                        bIntrptRangeDet=devicedata['bIntrptRangeDet']['value'] == 1,
-                        sandLevelPercent=devicedata['Sand']['value']['percent'],
-                        wifiRssi=devicedata['NetWorkStatus']['value']['WiFi_RSSI'],
-                        bucketStatus=devicedata['bucketStatus']['value'],
-                        room_of_bin=devicedata['room_of_bin']['value'],
-                        sandLevelState=devicedata['Sand']['value']['level'],
-                        stayTime=devicedata['catLeft']['value'].get('stayTime', 0),
-                        lastUse=newLastUseDate,
-                        cat_list=records['cat_list'],
-                        record_list=records['record_list']
-                    )
+                    return _build_api_data(devicedata, records, newLastUseDate)
                 except Exception as reconnect_err:
                     _LOGGER.error(f"Failed to reconnect API after identityId error for device {self.devicename}: {reconnect_err}")
                     raise UpdateFailed(f"IdentityId error and reconnection failed: {err}") from err

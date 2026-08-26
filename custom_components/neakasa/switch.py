@@ -87,21 +87,27 @@ class NeakasaSwitch(CoordinatorEntity):
             return
 
         value = getattr(self.coordinator.data, self.data_key, None)
+        if not isinstance(value, dict):
+            value = {}
+        else:
+            value = dict(value)
+
         value[self.data_subkey] = state
 
         await self.coordinator.setProperty(self.data_key, value)
 
     @property
     def is_on(self) -> bool:
-        """Return the state of the sensor."""
+        """Return the state of the switch."""
         value = getattr(self.coordinator.data, self.data_key, None)
 
         if self.data_subkey is None:
-            return value
+            return bool(value)
 
-        sub_value = value.get(self.data_subkey, None)
+        if not isinstance(value, dict):
+            return False
 
-        return sub_value
+        return bool(value.get(self.data_subkey, False))
 
     @property
     def state(self):
