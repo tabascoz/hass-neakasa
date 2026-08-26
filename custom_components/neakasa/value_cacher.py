@@ -1,10 +1,9 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import timedelta, datetime, timezone
-import logging
 from typing import Optional, Any, Awaitable, Callable
 
-_LOGGER = logging.getLogger(__name__)
+from .const import _LOGGER
 
 class ValueCacher:
     def __init__(self, refresh_after: Optional[timedelta], discard_after: Optional[timedelta]):
