@@ -180,5 +180,17 @@ class NeakasaTimestampSensor(CoordinatorEntity):
     
     @property
     def state(self):
-        timestamp = getattr(self.coordinator.data, self.data_key) / 1000
+        raw_value = getattr(self.coordinator.data, self.data_key)
+
+        # ``lastUse`` is 0 before the first cat visit (Neakasa omits ``catLeft``
+        # entirely in that case). Return ``None`` so Home Assistant reports the
+        # sensor as unavailable instead of showing the Unix epoch (1970).
+        if not raw_value:
+            return None
+
+        try:
+            timestamp = raw_value / 1000
+        except (TypeError, ValueError):
+            return None
+
         return datetime.fromtimestamp(timestamp)
