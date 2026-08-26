@@ -1,3 +1,4 @@
+from __future__ import annotations
 import json
 from datetime import timedelta, datetime
 from alibabacloud_iot_api_gateway.models import Config, IoTApiRequest, CommonParams

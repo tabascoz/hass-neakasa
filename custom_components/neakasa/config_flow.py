@@ -1,3 +1,4 @@
+from __future__ import annotations
 import voluptuous as vol
 from typing import Any
 from homeassistant.config_entries import ConfigFlow

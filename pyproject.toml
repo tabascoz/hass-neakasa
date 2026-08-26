@@ -1,0 +1,96 @@
+[project]
+name = "hass-neakasa"
+version = "1.3.1"
+description = "Home Assistant integration for Neakasa appliances"
+requires-python = ">=3.12"
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "homeassistant",
+    "pre-commit>=4.0",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=5.0",
+]
+lint = [
+    "ruff>=0.9",
+    "mypy>=1.14",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = [
+    "--cov=custom_components/neakasa",
+    "--cov-report=term-missing",
+]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["custom_components/neakasa"]
+ignore_missing_imports = true
+follow_imports = "silent"
+strict_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unreachable = true
+no_implicit_optional = true
+check_untyped_defs = true
+disallow_untyped_defs = false
+disallow_any_generics = false
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+check_untyped_defs = false
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.format]
+exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "ANN401",
+    "D203",
+    "D212",
+    "COM812",
+    "ISC001",
+    "CPY001",
+]
+
+[tool.ruff.lint.flake8-pytest-style]
+fixture-parentheses = false
+
+[tool.ruff.lint.pyupgrade]
+keep-runtime-typing = true
+
+[tool.ruff.lint.mccabe]
+max-complexity = 25
+
+[tool.ruff.lint.per-file-ignores]
+"custom_components/neakasa/**" = [
+    "TID252",
+]
+"tests/**" = [
+    "S101",
+    "S105",
+    "S106",
+    "D",
+    "ANN",
+    "ARG001",
+    "PLC0415",
+    "SLF001",
+    "PLR2004",
+    "PLR0913",
+    "PLR0917",
+    "EM101",
+    "TRY003",
+    "FBT003",
+]
