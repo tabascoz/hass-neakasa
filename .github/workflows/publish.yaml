@@ -21,8 +21,12 @@ jobs:
         if: ${{ github.event_name == 'release' }}
         shell: bash
         run: |
-          yq -i -o json '.version="${{ github.event.release.tag_name }}"' \
-            "${{ github.workspace }}/custom_components/${{ steps.information.outputs.name }}/manifest.json"
+          version="${{ github.event.release.tag_name }}"
+          # Strip leading 'v' if present (e.g. 'v1.3.1' -> '1.3.1')
+          version="${version#v}"
+          manifest="${{ github.workspace }}/custom_components/${{ steps.information.outputs.name }}/manifest.json"
+          jq --arg ver "$version" '.version=$ver' "$manifest" > "${manifest}.tmp" \
+            && mv "${manifest}.tmp" "$manifest"
       - name: Create zip file for the integration
         shell: bash
         run: |
