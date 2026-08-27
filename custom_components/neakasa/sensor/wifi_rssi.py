@@ -65,5 +65,3 @@ class NeakasaWifiRssiSensor(CoordinatorEntity[NeakasaCoordinator], SensorEntity)
         if snap is None:
             return None
         return snap.wifi_rssi
-
-

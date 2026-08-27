@@ -62,5 +62,3 @@ class NeakasaSandPercentSensor(CoordinatorEntity[NeakasaCoordinator], SensorEnti
         if snap is None:
             return None
         return snap.sand_level_percent
-
-
