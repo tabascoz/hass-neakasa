@@ -49,8 +49,8 @@ rules:
     status: done
     comment: All entities set _attr_should_poll = False; updates are push-based.
   reauthentication-flow:
-    status: todo
-    comment: No reauth flow; expired credentials require delete-and-re-add.
+    status: done
+    comment: Reauth flow triggers on persistent auth failure via async_start_reauth.
   test-coverage:
     status: todo
     comment: No test suite exists yet.
@@ -92,7 +92,7 @@ rules:
     comment: Static MDI icons per entity; no state-based icon mapping needed.
   reconfiguration-flow:
     status: done
-    comment: Options flow allows changing scan_interval and stats_lookback_days.
+    comment: Options flow (scan_interval/stats_lookback) + credential reconfigure via async_step_reconfigure.
   repair-issues:
     status: todo
   stale-devices:
