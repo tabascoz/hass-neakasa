@@ -128,4 +128,5 @@ max-complexity = 25
     "S324",    # MD5 required by Aliyun IoT Gateway Content-MD5 header
     "PLR0913", # _sign() args match Aliyun protocol spec
     "PLR0917",
+    "PLR2004", # HTTP status code 200 is standard
 ]

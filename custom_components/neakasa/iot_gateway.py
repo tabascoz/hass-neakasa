@@ -12,6 +12,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import time
 import urllib.parse
 import uuid
@@ -21,6 +22,8 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from aiohttp import ClientSession
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -143,11 +146,16 @@ class AliyunIoTClient:
             hashlib.md5(json_body.encode()).digest()
         ).decode()
 
-        xca_headers = (
-            f"x-ca-key:{self._cfg.app_key}\n"
-            f"x-ca-nonce:{nonce}\n"
-            f"x-ca-signaturemethod:HmacSHA256"
-        )
+        # Build x-ca headers — these drive both the signature string and the
+        # ``x-ca-signature-headers`` hint that the Aliyun gateway requires.
+        x_ca: dict[str, str] = {
+            "x-ca-key": self._cfg.app_key,
+            "x-ca-nonce": nonce,
+            "x-ca-signaturemethod": "HmacSHA256",
+        }
+        sorted_keys = sorted(x_ca)
+        x_ca_header_str = "\n".join(f"{k}:{x_ca[k]}" for k in sorted_keys)
+        x_ca_sign_headers = ",".join(sorted_keys)
 
         signature = self._sign(
             method="POST",
@@ -155,29 +163,36 @@ class AliyunIoTClient:
             content_md5=content_md5,
             content_type="application/octet-stream",
             date_val=date_val,
-            xca_headers=xca_headers,
+            xca_headers=x_ca_header_str,
             path_and_query=pathname,
         )
 
         headers = {
             "host": self._cfg.domain,
             "date": date_val,
-            "x-ca-nonce": nonce,
-            "x-ca-key": self._cfg.app_key,
-            "x-ca-signaturemethod": "HmacSHA256",
             "accept": "application/json",
             "content-type": "application/octet-stream",
             "content-md5": content_md5,
             "x-ca-signature": signature,
+            "x-ca-signature-headers": x_ca_sign_headers,
         }
+        headers.update(x_ca)
 
         url = f"https://{self._cfg.domain}{pathname}"
         async with self._session.post(url, headers=headers, data=json_body) as resp:
+            body_bytes = await resp.read()
+            if resp.status != 200:
+                _LOGGER.debug(
+                    "IoT gateway HTTP %s on %s: %s",
+                    resp.status,
+                    pathname,
+                    body_bytes[:500],
+                )
             return IoTResponse(
                 status_code=resp.status,
                 status_message=resp.reason or "",
                 headers=dict(resp.headers),
-                body=await resp.read(),
+                body=body_bytes,
             )
 
     # -- Form-encoded path (replaces ``Client.do_request_raw``) ------------
