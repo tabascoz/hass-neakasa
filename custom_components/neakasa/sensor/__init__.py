@@ -34,28 +34,38 @@ async def async_setup_entry(
     entry = cast("NeakasaConfigEntry", config_entry)
     coordinator: NeakasaCoordinator = entry.runtime_data.coordinator
 
+    _seen_iot_ids: set[str] = set()
+
     @callback
     def _discover() -> None:
         entities: list = []
         for iot_id, snap in coordinator.data.items():
+            if iot_id in _seen_iot_ids:
+                continue
+            _seen_iot_ids.add(iot_id)
             device_info = DeviceInfo(
                 name=snap.device_name,
                 manufacturer="Neakasa",
                 identifiers={(DOMAIN, iot_id)},
             )
-            entities.extend([
-                NeakasaSandPercentSensor(coordinator, device_info, iot_id),
-                NeakasaWifiRssiSensor(coordinator, device_info, iot_id),
-                NeakasaStayTimeSensor(coordinator, device_info, iot_id),
-                NeakasaLastUsageSensor(coordinator, device_info, iot_id),
-                NeakasaBucketStatusSensor(coordinator, device_info, iot_id),
-                NeakasaSandLevelStateSensor(coordinator, device_info, iot_id),
-                NeakasaBinStateSensor(coordinator, device_info, iot_id),
-            ])
+            entities.extend(
+                [
+                    NeakasaSandPercentSensor(coordinator, device_info, iot_id),
+                    NeakasaWifiRssiSensor(coordinator, device_info, iot_id),
+                    NeakasaStayTimeSensor(coordinator, device_info, iot_id),
+                    NeakasaLastUsageSensor(coordinator, device_info, iot_id),
+                    NeakasaBucketStatusSensor(coordinator, device_info, iot_id),
+                    NeakasaSandLevelStateSensor(coordinator, device_info, iot_id),
+                    NeakasaBinStateSensor(coordinator, device_info, iot_id),
+                ]
+            )
             entities.extend(
                 NeakasaCatWeightSensor(
-                    coordinator, device_info, iot_id,
-                    cat_name=cat["name"], cat_id=cat["id"],
+                    coordinator,
+                    device_info,
+                    iot_id,
+                    cat_name=cat["name"],
+                    cat_id=cat["id"],
                 )
                 for cat in snap.cat_list
             )

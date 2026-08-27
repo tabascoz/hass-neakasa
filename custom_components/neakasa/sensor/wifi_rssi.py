@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from homeassistant.components.sensor import SensorStateClass
+from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.const import SIGNAL_STRENGTH_DECIBELS, EntityCategory
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from homeassistant.helpers.device_registry import DeviceInfo
 
 
-class NeakasaWifiRssiSensor(CoordinatorEntity[NeakasaCoordinator]):
+class NeakasaWifiRssiSensor(CoordinatorEntity[NeakasaCoordinator], SensorEntity):
     """WiFi signal strength in dBm."""
 
     _attr_should_poll = False
@@ -25,6 +25,7 @@ class NeakasaWifiRssiSensor(CoordinatorEntity[NeakasaCoordinator]):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
     _attr_icon = "mdi:wifi"
+    _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(
         self,
@@ -42,6 +43,17 @@ class NeakasaWifiRssiSensor(CoordinatorEntity[NeakasaCoordinator]):
     def _handle_coordinator_update(self) -> None:
         self.async_write_ha_state()
 
+    async def async_update(self) -> None:
+        """Update entity state from coordinator data."""
+        if self.entity_id is None:
+            return
+        self._handle_coordinator_update()
+
+    async def async_added_to_hass(self) -> None:
+        """Write initial state once entity_id is assigned."""
+        await super().async_added_to_hass()
+        self._handle_coordinator_update()
+
     @property
     def _snap(self) -> NeakasaDeviceSnapshot | None:
         return self.coordinator.device_snapshot(self._iot_id)
@@ -54,7 +66,4 @@ class NeakasaWifiRssiSensor(CoordinatorEntity[NeakasaCoordinator]):
             return None
         return snap.wifi_rssi
 
-    @property
-    def extra_state_attributes(self) -> dict[str, str]:
-        """Return additional state attributes."""
-        return {"state_class": SensorStateClass.MEASUREMENT}
+

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -15,7 +16,7 @@ if TYPE_CHECKING:
 _LEVEL_OPTIONS = ["insufficient", "moderate", "sufficient", "overfilled"]
 
 
-class NeakasaSandLevelStateSensor(CoordinatorEntity[NeakasaCoordinator]):
+class NeakasaSandLevelStateSensor(CoordinatorEntity[NeakasaCoordinator], SensorEntity):
     """Cat litter fill state (insufficient, moderate, sufficient, overfilled)."""
 
     _attr_should_poll = False
@@ -37,6 +38,17 @@ class NeakasaSandLevelStateSensor(CoordinatorEntity[NeakasaCoordinator]):
     @callback
     def _handle_coordinator_update(self) -> None:
         self.async_write_ha_state()
+
+    async def async_update(self) -> None:
+        """Update entity state from coordinator data."""
+        if self.entity_id is None:
+            return
+        self._handle_coordinator_update()
+
+    async def async_added_to_hass(self) -> None:
+        """Write initial state once entity_id is assigned."""
+        await super().async_added_to_hass()
+        self._handle_coordinator_update()
 
     @property
     def _snap(self) -> NeakasaDeviceSnapshot | None:

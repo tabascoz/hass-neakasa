@@ -197,7 +197,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         "b_intrpt_range_det": "bIntrptRangeDet",
         "clean_cfg": "cleanCfg",
         "bin_full": "binFullWaitReset",
-    }  # noqa: RUF012
+    }
 
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         self.username = config_entry.data[CONF_USERNAME]
@@ -231,7 +231,8 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
 
     async def set_property(self, iot_id: str, key: str, value: Any) -> None:
         client = await self._get_client()
-        await client.set_device_properties(iot_id, {key: value})
+        wire_key = self._SNAP_TO_WIRE.get(key, key)
+        await client.set_device_properties(iot_id, {wire_key: value})
         if self.data and iot_id in self.data:
             setattr(self.data[iot_id], key, value)
             self.async_set_updated_data(self.data)
@@ -369,9 +370,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             except Exception as reconnect_err:
                 _LOGGER.error("Failed to reconnect after auth error: %s", reconnect_err)
                 msg = "Authentication failed and reconnection failed"
-                raise UpdateFailed(
-                    msg
-                ) from err
+                raise UpdateFailed(msg) from err
 
         except NeakasaApiClientCommunicationError as err:
             if "identityId is blank" in str(err):
@@ -387,9 +386,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                         "Failed to reconnect after identityId error: %s", reconnect_err
                     )
                     msg = "IdentityId error and reconnection failed"
-                    raise UpdateFailed(
-                        msg
-                    ) from err
+                    raise UpdateFailed(msg) from err
             _LOGGER.error("API communication error: %s", err)
             msg_0 = f"Communication error: {err}"
             raise UpdateFailed(msg_0) from err

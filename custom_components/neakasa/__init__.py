@@ -5,7 +5,11 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, cast
 
-from homeassistant.const import Platform
+from homeassistant.const import (
+    CONF_PASSWORD,
+    CONF_USERNAME,
+    Platform,
+)
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import NeakasaAPI
@@ -79,6 +83,36 @@ async def force_reconnect_api(
     return await get_shared_api(hass, username, password)
 
 
+async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+    """
+    Migrate config entry from VERSION 1 → 2.
+
+    V1 entries stored ``device_id``, ``friendly_name``, ``username``, ``password``
+    in data and used the device IOT ID as the unique_id.  V2 keeps only
+    ``username`` + ``password`` and uses ``account:{username}`` as the unique_id.
+    """
+    if config_entry.version == 1:
+        _LOGGER.debug("Migrating config entry %s from V1 to V2", config_entry.entry_id)
+
+        username = config_entry.data[CONF_USERNAME]
+        password = config_entry.data[CONF_PASSWORD]
+
+        new_data = {
+            CONF_USERNAME: username,
+            CONF_PASSWORD: password,
+        }
+        new_unique_id = f"account:{username.lower()}"
+
+        hass.config_entries.async_update_entry(
+            config_entry,
+            data=new_data,
+            unique_id=new_unique_id,
+            version=2,
+        )
+        _LOGGER.debug("Migrated config entry %s to V2", config_entry.entry_id)
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Set up Neakasa Integration from a config entry."""
     entry = cast("NeakasaConfigEntry", config_entry)
@@ -90,7 +124,6 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     entry.runtime_data = NeakasaData(coordinator=coordinator)
 
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
-
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True

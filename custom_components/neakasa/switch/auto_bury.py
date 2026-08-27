@@ -39,6 +39,17 @@ class NeakasaAutoBurySwitch(CoordinatorEntity[NeakasaCoordinator], SwitchEntity)
     def _handle_coordinator_update(self) -> None:
         self.async_write_ha_state()
 
+    async def async_update(self) -> None:
+        """Update entity state from coordinator data."""
+        if self.entity_id is None:
+            return
+        self._handle_coordinator_update()
+
+    async def async_added_to_hass(self) -> None:
+        """Write initial state once entity_id is assigned."""
+        await super().async_added_to_hass()
+        self._handle_coordinator_update()
+
     @property
     def _snap(self) -> NeakasaDeviceSnapshot | None:
         return self.coordinator.device_snapshot(self._iot_id)
