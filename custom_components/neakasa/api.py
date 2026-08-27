@@ -1,28 +1,39 @@
 from __future__ import annotations
-import json
-from datetime import timedelta, datetime
-from alibabacloud_iot_api_gateway.models import Config, IoTApiRequest, CommonParams
-from aiohttp import ClientError
-from .client import Client
-from alibabacloud_tea_util.models import RuntimeOptions
-import time
-import hmac
-import hashlib
+
 import base64
+import hashlib
+import hmac
+import json
+import time
+from datetime import datetime, timedelta
+
+from aiohttp import ClientError
+from alibabacloud_iot_api_gateway.models import CommonParams, Config, IoTApiRequest
+from alibabacloud_tea_util.models import RuntimeOptions
+
 from .api_encryption import APIEncryption
+from .client import Client
 from .const import _LOGGER
 
 #############################
 # Neakasa API by @timniklas #
 #############################
 
-#for debug only
+
+# for debug only
 async def async_add_executor_job(target, *args):
     return target(*args)
 
 
 class NeakasaAPI:
-    def __init__(self, session, async_executor = async_add_executor_job, app_key: str = "32715650", app_secret: str = "698ee0ef531c3df2ddded87563643860", language = "en-US") -> None:
+    def __init__(
+        self,
+        session,
+        async_executor=async_add_executor_job,
+        app_key: str = "32715650",
+        app_secret: str = "698ee0ef531c3df2ddded87563643860",
+        language="en-US",
+    ) -> None:
         self._app_key = app_key
         self._app_secret = app_secret
         self._language = language
@@ -31,8 +42,8 @@ class NeakasaAPI:
         self.async_executor = async_executor
         self.connected: bool = False
 
-    async def connect(self, username: str, password: str, firstRun: bool = True):
-        if self.connected == False:
+    async def connect(self, username: str, password: str, firstRun: bool = True) -> None:
+        if not self.connected:
             await self._loadBaseUrlByAccount(username)
             await self.loadAuthTokens(username, password)
             await self._loadRegionData()
@@ -41,60 +52,78 @@ class NeakasaAPI:
         try:
             self._iotToken = await self._getIotTokenBySid(self._sid)
             self.connected = True
-        except APIAuthError as exc:
+        except APIAuthError:
             if firstRun:
                 await self.connect(username, password, False)
             else:
-                raise exc
-    
-    async def _loadBaseUrlByAccount(self, username: str):
+                raise
+
+    async def _loadBaseUrlByAccount(self, username: str) -> None:
         try:
             timestamp = str(int(time.time()))
-            signature_raw = hmac.new(self._app_secret.encode(), (self._app_key + timestamp).encode(), digestmod=hashlib.sha256)
+            signature_raw = hmac.new(
+                self._app_secret.encode(),
+                (self._app_key + timestamp).encode(),
+                digestmod=hashlib.sha256,
+            )
             signature = base64.b64encode(signature_raw.digest()).decode("utf-8")
-            
+
             _LOGGER.debug("Fetching base URL from global.genhigh.com")
-            
+
             async with self._session.get(
-                url='https://global.genhigh.com/global/baseurl/account',
-                params={
-                    "account": hashlib.md5(username.encode()).hexdigest()
-                },
+                url="https://global.genhigh.com/global/baseurl/account",
+                params={"account": hashlib.md5(username.encode()).hexdigest()},
                 headers={
                     "Request-Id": signature,
                     "Appid": self._app_key,
                     "Timestamp": timestamp,
                     "Sign": signature,
-                }) as response:
-                
-                _LOGGER.debug(f"Base URL response - Status: {response.status}, Content-Type: {response.content_type or 'EMPTY'}")
-                
+                },
+            ) as response:
+                _LOGGER.debug(
+                    f"Base URL response - Status: {response.status}, Content-Type: {response.content_type or 'EMPTY'}"
+                )
+
                 if response.status != 200:
                     text = await response.text()
-                    _LOGGER.error(f"Base URL failed with status {response.status}: {text[:400]}")
-                    raise APIConnectionError("Error connecting to api.")
-                
+                    _LOGGER.error(
+                        f"Base URL failed with status {response.status}: {text[:400]}"
+                    )
+                    msg = "Error connecting to api."
+                    raise APIConnectionError(msg)
+
                 try:
-                    response_json = await response.json(content_type=None)  # Fix for pyOpenSSL 26+
+                    response_json = await response.json(
+                        content_type=None
+                    )  # Fix for pyOpenSSL 26+
                 except Exception as e:
                     text = await response.text()
-                    _LOGGER.error(f"Failed to parse base URL JSON: {e}. Body: {text[:400]}")
-                    raise APIConnectionError("Error connecting to api.") from e
-                
-                if response_json['code'] != 0:
-                    raise APIAuthError("Error connecting to api. Invalid username.")
-                self.baseurl = response_json['data']['web']
-        except ClientError as exc:
-            raise APIConnectionError("Error connecting to api.")
-    
-    async def loadAuthTokens(self, username: str, password: str):
+                    _LOGGER.error(
+                        f"Failed to parse base URL JSON: {e}. Body: {text[:400]}"
+                    )
+                    msg = "Error connecting to api."
+                    raise APIConnectionError(msg) from e
+
+                if response_json["code"] != 0:
+                    msg = "Error connecting to api. Invalid username."
+                    raise APIAuthError(msg)
+                self.baseurl = response_json["data"]["web"]
+        except ClientError:
+            msg = "Error connecting to api."
+            raise APIConnectionError(msg)
+
+    async def loadAuthTokens(self, username: str, password: str) -> None:
         try:
             timestamp = str(int(time.time()))
-            signature_raw = hmac.new(self._app_secret.encode(), (self._app_key + timestamp).encode(), digestmod=hashlib.sha256)
+            signature_raw = hmac.new(
+                self._app_secret.encode(),
+                (self._app_key + timestamp).encode(),
+                digestmod=hashlib.sha256,
+            )
             signature = base64.b64encode(signature_raw.digest()).decode("utf-8")
-            
+
             async with self._session.post(
-                url=self.baseurl + '/login/user',
+                url=self.baseurl + "/login/user",
                 json={
                     "product_id": "a123nCqsrQm3vEbt",
                     "system": 2,
@@ -103,398 +132,463 @@ class NeakasaAPI:
                     "app_version": "2.0.9",
                     "account": username,
                     "type": 3,
-                    "password": hashlib.md5(hashlib.md5(password.encode()).hexdigest().encode()).hexdigest()
+                    "password": hashlib.md5(
+                        hashlib.md5(password.encode()).hexdigest().encode()
+                    ).hexdigest(),
                 },
                 headers={
                     "Request-Id": signature,
                     "Appid": self._app_key,
                     "Timestamp": timestamp,
                     "Sign": signature,
-                }) as response:
-                
-                _LOGGER.debug(f"Login response - Status: {response.status}, Content-Type: {response.content_type or 'EMPTY'}")
-                
+                },
+            ) as response:
+                _LOGGER.debug(
+                    f"Login response - Status: {response.status}, Content-Type: {response.content_type or 'EMPTY'}"
+                )
+
                 if response.status != 200:
                     text = await response.text()
-                    _LOGGER.error(f"Login failed with status {response.status}: {text[:500]}")
-                    raise APIConnectionError("Error connecting to api.")
-                
+                    _LOGGER.error(
+                        f"Login failed with status {response.status}: {text[:500]}"
+                    )
+                    msg = "Error connecting to api."
+                    raise APIConnectionError(msg)
+
                 try:
-                    response_json = await response.json(content_type=None)  # Fix for pyOpenSSL 26+
+                    response_json = await response.json(
+                        content_type=None
+                    )  # Fix for pyOpenSSL 26+
                 except Exception as e:
                     text = await response.text()
-                    _LOGGER.error(f"Failed to parse login JSON: {e}. Body: {text[:500]}")
-                    raise APIConnectionError("Error connecting to api.") from e
-                
-                if response_json['code'] != 0:
-                    raise APIAuthError("Error connecting to api. Invalid username or password.")
-                self._ali_authentication_token = response_json['data']['user_info']['ali_authentication_token']
-                await self._encryption.decodeLoginToken(response_json['data']['login_token'])
-        except ClientError as exc:
-            raise APIConnectionError("Error connecting to api.")
-            
+                    _LOGGER.error(
+                        f"Failed to parse login JSON: {e}. Body: {text[:500]}"
+                    )
+                    msg = "Error connecting to api."
+                    raise APIConnectionError(msg) from e
 
-    async def _loadRegionData(self):
+                if response_json["code"] != 0:
+                    msg = "Error connecting to api. Invalid username or password."
+                    raise APIAuthError(
+                        msg
+                    )
+                self._ali_authentication_token = response_json["data"]["user_info"][
+                    "ali_authentication_token"
+                ]
+                await self._encryption.decodeLoginToken(
+                    response_json["data"]["login_token"]
+                )
+        except ClientError:
+            msg = "Error connecting to api."
+            raise APIConnectionError(msg)
+
+    async def _loadRegionData(self) -> None:
         config = Config(
             app_key=self._app_key,
             app_secret=self._app_secret,
-            domain="cn-shanghai.api-iot.aliyuncs.com"
+            domain="cn-shanghai.api-iot.aliyuncs.com",
         )
         client = Client(config)
-        request = CommonParams(api_ver='1.0.2', language=self._language)
+        request = CommonParams(api_ver="1.0.2", language=self._language)
         body = IoTApiRequest(
             version="1.0",
             params={
                 "authCode": self._ali_authentication_token,
-                "type": "THIRD_AUTHCODE"
+                "type": "THIRD_AUTHCODE",
             },
-            request=request
+            request=request,
         )
-        response = await self.async_executor(client.do_request,
-            '/living/account/region/get',
-            'https',
-            'POST',
+        response = await self.async_executor(
+            client.do_request,
+            "/living/account/region/get",
+            "https",
+            "POST",
             None,
             body,
-            RuntimeOptions()
+            RuntimeOptions(),
         )
         response_data = json.loads(response.body)
-        if response_data['code'] != 200:
-            raise APIConnectionError("Error loading region data." + response_data['message'])
-        self.oaApiGatewayEndpoint = response_data['data']['oaApiGatewayEndpoint']
-        self.apiGatewayEndpoint = response_data['data']['apiGatewayEndpoint']
-    
+        if response_data["code"] != 200:
+            raise APIConnectionError(
+                "Error loading region data." + response_data["message"]
+            )
+        self.oaApiGatewayEndpoint = response_data["data"]["oaApiGatewayEndpoint"]
+        self.apiGatewayEndpoint = response_data["data"]["apiGatewayEndpoint"]
+
     async def _getVid(self):
         config = Config(
             app_key=self._app_key,
             app_secret=self._app_secret,
-            domain=self.oaApiGatewayEndpoint
+            domain=self.oaApiGatewayEndpoint,
         )
         client = Client(config)
         body = {
             "request": {
-                "context":{
-                    "appKey": self._app_key
-                },
-                "config":{
-                    "version":0,
-                    "lastModify":0
-                },
-                "device":{}
+                "context": {"appKey": self._app_key},
+                "config": {"version": 0, "lastModify": 0},
+                "device": {},
             }
         }
-        response = await self.async_executor(client.do_request_raw,
-            '/api/prd/connect.json',
-            'https',
-            'POST',
+        response = await self.async_executor(
+            client.do_request_raw,
+            "/api/prd/connect.json",
+            "https",
+            "POST",
             None,
             body,
-            RuntimeOptions()
+            RuntimeOptions(),
         )
         response_data = json.loads(response.body)
-        if response_data['success'] != 'true':
-            raise APIConnectionError("Error getting vid.")
-        if response_data['data']['successful'] != 'true':
-            raise APIConnectionError("Error getting vid: " + response_data['data']['message'])
-        return response_data['data']['vid']
+        if response_data["success"] != "true":
+            msg = "Error getting vid."
+            raise APIConnectionError(msg)
+        if response_data["data"]["successful"] != "true":
+            raise APIConnectionError(
+                "Error getting vid: " + response_data["data"]["message"]
+            )
+        return response_data["data"]["vid"]
 
     async def _getSidByVid(self, vid: str):
         config = Config(
             app_key=self._app_key,
             app_secret=self._app_secret,
-            domain=self.oaApiGatewayEndpoint
+            domain=self.oaApiGatewayEndpoint,
         )
         client = Client(config)
-        headers = {
-            "Vid":  vid
-        }
+        headers = {"Vid": vid}
         body = {
             "loginByOauthRequest": {
                 "authCode": self._ali_authentication_token,
                 "oauthPlateform": 23,
                 "oauthAppKey": self._app_key,
-                "riskControlInfo":{ }
+                "riskControlInfo": {},
             }
         }
-        response = await self.async_executor(client.do_request_raw,
-            '/api/prd/loginbyoauth.json',
-            'https',
-            'POST',
+        response = await self.async_executor(
+            client.do_request_raw,
+            "/api/prd/loginbyoauth.json",
+            "https",
+            "POST",
             headers,
             body,
-            RuntimeOptions()
+            RuntimeOptions(),
         )
         response_data = json.loads(response.body)
-        if response_data['success'] != 'true':
-            raise APIAuthError("Error getting sid: " + response_data['errorMsg'])
-        if response_data['data']['successful'] != 'true':
-            raise APIAuthError("Error getting sid: " + response_data['data']['message'])
-        return response_data['data']['data']['loginSuccessResult']['sid']
+        if response_data["success"] != "true":
+            raise APIAuthError("Error getting sid: " + response_data["errorMsg"])
+        if response_data["data"]["successful"] != "true":
+            raise APIAuthError("Error getting sid: " + response_data["data"]["message"])
+        return response_data["data"]["data"]["loginSuccessResult"]["sid"]
 
     async def _getIotTokenBySid(self, sid: str):
         config = Config(
             app_key=self._app_key,
             app_secret=self._app_secret,
-            domain=self.apiGatewayEndpoint
+            domain=self.apiGatewayEndpoint,
         )
         client = Client(config)
-        request = CommonParams(api_ver='1.0.4', language=self._language)
+        request = CommonParams(api_ver="1.0.4", language=self._language)
         body = IoTApiRequest(
             version="1.0",
             params={
                 "request": {
                     "authCode": sid,
                     "accountType": "OA_SESSION",
-                    "appKey": self._app_key
+                    "appKey": self._app_key,
                 }
             },
-            request=request
+            request=request,
         )
-        response = await self.async_executor(client.do_request,
-            '/account/createSessionByAuthCode',
-            'https',
-            'POST',
+        response = await self.async_executor(
+            client.do_request,
+            "/account/createSessionByAuthCode",
+            "https",
+            "POST",
             None,
             body,
-            RuntimeOptions()
+            RuntimeOptions(),
         )
         response_data = json.loads(response.body)
-        if response_data['code'] != 200:
+        if response_data["code"] != 200:
             self.connected = False
-            raise APIAuthError("Error getting iot token: " + response_data['message'])
-        return response_data['data']['iotToken']
+            raise APIAuthError("Error getting iot token: " + response_data["message"])
+        return response_data["data"]["iotToken"]
 
     async def getProductList(self):
-        if self.connected == False:
-            raise APIConnectionError("api not connected")
+        if not self.connected:
+            msg = "api not connected"
+            raise APIConnectionError(msg)
         config = Config(
             app_key=self._app_key,
             app_secret=self._app_secret,
-            domain=self.apiGatewayEndpoint
+            domain=self.apiGatewayEndpoint,
         )
         client = Client(config)
-        request = CommonParams(api_ver='1.1.7', language=self._language, iot_token=self._iotToken)
-        body = IoTApiRequest(
-            version="1.0",
-            params={
-                "productStatusEnv": "release"
-            },
-            request=request
+        request = CommonParams(
+            api_ver="1.1.7", language=self._language, iot_token=self._iotToken
         )
-        response = await self.async_executor(client.do_request,
-            '/thing/productInfo/getByAppKey',
-            'https',
-            'POST',
+        body = IoTApiRequest(
+            version="1.0", params={"productStatusEnv": "release"}, request=request
+        )
+        response = await self.async_executor(
+            client.do_request,
+            "/thing/productInfo/getByAppKey",
+            "https",
+            "POST",
             None,
             body,
-            RuntimeOptions()
+            RuntimeOptions(),
         )
         response_data = json.loads(response.body)
-        if response_data['code'] != 200:
-            raise APIConnectionError("Error getting product list: " + response_data['message'])
-        return response_data['data']
+        if response_data["code"] != 200:
+            raise APIConnectionError(
+                "Error getting product list: " + response_data["message"]
+            )
+        return response_data["data"]
 
     async def getDevices(self, pageNo: int = 1, pageSize: int = 20):
-        if self.connected == False:
-            raise APIConnectionError("api not connected")
+        if not self.connected:
+            msg = "api not connected"
+            raise APIConnectionError(msg)
         config = Config(
             app_key=self._app_key,
             app_secret=self._app_secret,
-            domain=self.apiGatewayEndpoint
+            domain=self.apiGatewayEndpoint,
         )
         client = Client(config)
-        request = CommonParams(api_ver='1.0.8', language=self._language, iot_token=self._iotToken)
+        request = CommonParams(
+            api_ver="1.0.8", language=self._language, iot_token=self._iotToken
+        )
         body = IoTApiRequest(
             version="1.0",
             params={
                 "pageSize": pageSize,
                 "thingType": "DEVICE",
                 "nodeType": "DEVICE",
-                "pageNo": pageNo
+                "pageNo": pageNo,
             },
-            request=request
+            request=request,
         )
-        response = await self.async_executor(client.do_request,
-            '/uc/listBindingByAccount',
-            'https',
-            'POST',
+        response = await self.async_executor(
+            client.do_request,
+            "/uc/listBindingByAccount",
+            "https",
+            "POST",
             None,
             body,
-            RuntimeOptions()
+            RuntimeOptions(),
         )
         response_data = json.loads(response.body)
-        if response_data['code'] != 200:
-            raise APIConnectionError("Error getting devices: " + response_data['message'])
-        return response_data['data']['data']
+        if response_data["code"] != 200:
+            raise APIConnectionError(
+                "Error getting devices: " + response_data["message"]
+            )
+        return response_data["data"]["data"]
 
     async def getDeviceProperties(self, iotId: str):
-        if self.connected == False:
-            raise APIConnectionError("api not connected")
-        
+        if not self.connected:
+            msg = "api not connected"
+            raise APIConnectionError(msg)
+
         # Debug logging for authentication tokens
         _LOGGER.debug(f"Getting device properties for iotId: {iotId}")
-        _LOGGER.debug(f"API connected: {self.connected}, iotToken present: {hasattr(self, '_iotToken') and self._iotToken is not None}")
-        
+        _LOGGER.debug(
+            f"API connected: {self.connected}, iotToken present: {hasattr(self, '_iotToken') and self._iotToken is not None}"
+        )
+
         config = Config(
             app_key=self._app_key,
             app_secret=self._app_secret,
-            domain=self.apiGatewayEndpoint
+            domain=self.apiGatewayEndpoint,
         )
         client = Client(config)
-        request = CommonParams(api_ver='1.0.4', language=self._language, iot_token=self._iotToken)
-        body = IoTApiRequest(
-            version="1.0",
-            params={
-                "iotId": iotId
-            },
-            request=request
+        request = CommonParams(
+            api_ver="1.0.4", language=self._language, iot_token=self._iotToken
         )
+        body = IoTApiRequest(version="1.0", params={"iotId": iotId}, request=request)
         # send request
-        response = await self.async_executor(client.do_request,
-            '/thing/properties/get',
-            'https',
-            'POST',
+        response = await self.async_executor(
+            client.do_request,
+            "/thing/properties/get",
+            "https",
+            "POST",
             None,
             body,
-            RuntimeOptions()
+            RuntimeOptions(),
         )
         response_data = json.loads(response.body)
-        if response_data['code'] != 200:
+        if response_data["code"] != 200:
             # Check for specific authentication errors that should trigger reconnection
-            if "identityId is blank" in response_data['message']:
-                _LOGGER.debug(f"IdentityId error detected, marking API as disconnected for automatic reconnection")
+            if "identityId is blank" in response_data["message"]:
+                _LOGGER.debug(
+                    "IdentityId error detected, marking API as disconnected for automatic reconnection"
+                )
                 self.connected = False
-                raise APIConnectionError("Error getting device properties: " + response_data['message'])
-            else:
-                # For other errors, log as error since they're not automatically recoverable
-                _LOGGER.error(f"API Error - Code: {response_data['code']}, Message: {response_data['message']}")
-                _LOGGER.error(f"iotToken: {self._iotToken[:20] if hasattr(self, '_iotToken') and self._iotToken else 'None'}...")
-                raise APIConnectionError("Error getting device properties: " + response_data['message'])
-        return response_data['data']
+                raise APIConnectionError(
+                    "Error getting device properties: " + response_data["message"]
+                )
+            # For other errors, log as error since they're not automatically recoverable
+            _LOGGER.error(
+                f"API Error - Code: {response_data['code']}, Message: {response_data['message']}"
+            )
+            _LOGGER.error(
+                f"iotToken: {self._iotToken[:20] if hasattr(self, '_iotToken') and self._iotToken else 'None'}..."
+            )
+            raise APIConnectionError(
+                "Error getting device properties: " + response_data["message"]
+            )
+        return response_data["data"]
 
-    async def setDeviceProperties(self, iotId: str, items: dict[str, any]):
-        if self.connected == False:
-            raise APIConnectionError("api not connected")
+    async def setDeviceProperties(self, iotId: str, items: dict[str, any]) -> None:
+        if not self.connected:
+            msg = "api not connected"
+            raise APIConnectionError(msg)
         config = Config(
             app_key=self._app_key,
             app_secret=self._app_secret,
-            domain=self.apiGatewayEndpoint
+            domain=self.apiGatewayEndpoint,
         )
         client = Client(config)
-        request = CommonParams(api_ver='1.0.4', language=self._language, iot_token=self._iotToken)
-        body = IoTApiRequest(
-            version="1.0",
-            params={
-                "items": items,
-                "iotId": iotId
-            },
-            request=request
+        request = CommonParams(
+            api_ver="1.0.4", language=self._language, iot_token=self._iotToken
         )
-        response = await self.async_executor(client.do_request,
-            '/thing/properties/set',
-            'https',
-            'POST',
+        body = IoTApiRequest(
+            version="1.0", params={"items": items, "iotId": iotId}, request=request
+        )
+        response = await self.async_executor(
+            client.do_request,
+            "/thing/properties/set",
+            "https",
+            "POST",
             None,
             body,
-            RuntimeOptions()
+            RuntimeOptions(),
         )
         response_data = json.loads(response.body)
-        if response_data['code'] != 200:
-            raise APIConnectionError("Error setting device properties.")
+        if response_data["code"] != 200:
+            msg = "Error setting device properties."
+            raise APIConnectionError(msg)
 
-    async def _invokeService(self, iotId: str, identifier: str, args: dict[str, any]):
-        if self.connected == False:
-            raise APIConnectionError("api not connected")
+    async def _invokeService(self, iotId: str, identifier: str, args: dict[str, any]) -> None:
+        if not self.connected:
+            msg = "api not connected"
+            raise APIConnectionError(msg)
         config = Config(
             app_key=self._app_key,
             app_secret=self._app_secret,
-            domain=self.apiGatewayEndpoint
+            domain=self.apiGatewayEndpoint,
         )
         client = Client(config)
-        request = CommonParams(api_ver='1.0.5', language=self._language, iot_token=self._iotToken)
+        request = CommonParams(
+            api_ver="1.0.5", language=self._language, iot_token=self._iotToken
+        )
         body = IoTApiRequest(
             version="1.0",
-            params={
-                "args": args,
-                "identifier": identifier,
-                "iotId": iotId
-            },
-            request=request
+            params={"args": args, "identifier": identifier, "iotId": iotId},
+            request=request,
         )
-        response = await self.async_executor(client.do_request,
-            '/thing/service/invoke',
-            'https',
-            'POST',
+        response = await self.async_executor(
+            client.do_request,
+            "/thing/service/invoke",
+            "https",
+            "POST",
             None,
             body,
-            RuntimeOptions()
+            RuntimeOptions(),
         )
         response_data = json.loads(response.body)
-        if response_data['code'] != 200:
-            raise APIConnectionError("Error invoking service.")
-    
-    async def cleanNow(self, iotId: str):
-        await self._invokeService(iotId, "cleanNow", {"bStartClean":1})
-    
-    async def sandLeveling(self, iotId: str):
-        await self._invokeService(iotId, "sandLeveling", {"bStartLeveling":1})
-    
+        if response_data["code"] != 200:
+            msg = "Error invoking service."
+            raise APIConnectionError(msg)
+
+    async def cleanNow(self, iotId: str) -> None:
+        await self._invokeService(iotId, "cleanNow", {"bStartClean": 1})
+
+    async def sandLeveling(self, iotId: str) -> None:
+        await self._invokeService(iotId, "sandLeveling", {"bStartLeveling": 1})
+
     async def getStatistics(self, deviceName: str):
         try:
             timestamp = int(time.time())
-            signature_raw = hmac.new(self._app_secret.encode(), (self._app_key + str(timestamp)).encode(), digestmod=hashlib.sha256)
+            signature_raw = hmac.new(
+                self._app_secret.encode(),
+                (self._app_key + str(timestamp)).encode(),
+                digestmod=hashlib.sha256,
+            )
             signature = base64.b64encode(signature_raw.digest()).decode("utf-8")
             async with self._session.get(
-                url=self.baseurl + '/catbox/toilet/statistics',
+                url=self.baseurl + "/catbox/toilet/statistics",
                 params={
                     "user_id": self._encryption.userid,
                     "device_name": deviceName,
                     "bind_status": 2,
-                    "start_time": int((datetime.fromtimestamp(timestamp) - timedelta(days=7)).timestamp()), #7 days ago
-                    "end_time": timestamp
+                    "start_time": int(
+                        (
+                            datetime.fromtimestamp(timestamp) - timedelta(days=7)
+                        ).timestamp()
+                    ),  # 7 days ago
+                    "end_time": timestamp,
                 },
                 headers={
-                "Request-Id": signature,
-                "Token": str(await self._encryption.getToken()),
-                "Uid": self._encryption.uid,
-                "Accept-Language": "en"
-            }) as response:
+                    "Request-Id": signature,
+                    "Token": str(await self._encryption.getToken()),
+                    "Uid": self._encryption.uid,
+                    "Accept-Language": "en",
+                },
+            ) as response:
                 response_json = await response.json()
-                if response_json['code'] != 0:
-                    raise APIConnectionError("Error getting statistics: " + response_json['message'])
-                return response_json['data']
-        except ClientError as exc:
-            raise APIConnectionError("Error connecting to api.")
-    
+                if response_json["code"] != 0:
+                    raise APIConnectionError(
+                        "Error getting statistics: " + response_json["message"]
+                    )
+                return response_json["data"]
+        except ClientError:
+            msg = "Error connecting to api."
+            raise APIConnectionError(msg)
+
     async def getRecords(self, deviceName: str):
         try:
             timestamp = int(time.time())
-            signature_raw = hmac.new(self._app_secret.encode(), (self._app_key + str(timestamp)).encode(), digestmod=hashlib.sha256)
+            signature_raw = hmac.new(
+                self._app_secret.encode(),
+                (self._app_key + str(timestamp)).encode(),
+                digestmod=hashlib.sha256,
+            )
             signature = base64.b64encode(signature_raw.digest()).decode("utf-8")
             async with self._session.get(
-                url=self.baseurl + '/catbox/record',
+                url=self.baseurl + "/catbox/record",
                 params={
                     "user_id": self._encryption.userid,
                     "device_name": deviceName,
                     "bind_status": 2,
-                    "start_time": int((datetime.fromtimestamp(timestamp) - timedelta(days=7)).timestamp()), #7 days ago
-                    "end_time": timestamp
+                    "start_time": int(
+                        (
+                            datetime.fromtimestamp(timestamp) - timedelta(days=7)
+                        ).timestamp()
+                    ),  # 7 days ago
+                    "end_time": timestamp,
                 },
                 headers={
-                "Request-Id": signature,
-                "Token": str(await self._encryption.getToken()),
-                "Uid": self._encryption.uid,
-                "Accept-Language": "en"
-            }) as response:
+                    "Request-Id": signature,
+                    "Token": str(await self._encryption.getToken()),
+                    "Uid": self._encryption.uid,
+                    "Accept-Language": "en",
+                },
+            ) as response:
                 response_json = await response.json()
-                if response_json['code'] != 0:
-                    raise APIConnectionError("Error getting statistics: " + response_json['message'])
-                return response_json['data']
-        except ClientError as exc:
-            raise APIConnectionError("Error connecting to api.")
+                if response_json["code"] != 0:
+                    raise APIConnectionError(
+                        "Error getting statistics: " + response_json["message"]
+                    )
+                return response_json["data"]
+        except ClientError:
+            msg = "Error connecting to api."
+            raise APIConnectionError(msg)
+
 
 class APIAuthError(Exception):
     """Exception class for auth error."""
+
 
 class APIConnectionError(Exception):
     """Exception class for connection error."""

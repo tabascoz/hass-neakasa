@@ -5,15 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 import voluptuous as vol
-
-from homeassistant.config_entries import OptionsFlow, ConfigEntry, ConfigFlowResult
+from homeassistant.config_entries import ConfigEntry, ConfigFlowResult, OptionsFlow
 from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
 )
-
-from .const import DOMAIN, _LOGGER
 
 
 class NeakasaOptionsFlow(OptionsFlow):
@@ -24,7 +21,8 @@ class NeakasaOptionsFlow(OptionsFlow):
         self.config_entry = config_entry
 
     async def async_step_init(
-        self, user_input: dict[str, Any] | None = None,
+        self,
+        user_input: dict[str, Any] | None = None,
     ) -> ConfigFlowResult:
         """Manage the options."""
         if user_input is not None:

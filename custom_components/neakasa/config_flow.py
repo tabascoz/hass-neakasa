@@ -2,23 +2,24 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
-
-from homeassistant.config_entries import ConfigFlow, ConfigEntry, ConfigFlowResult
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
-from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import NeakasaAPI
 from .api_client import NeakasaApiClient
+from .const import _LOGGER, DOMAIN
 from .exceptions import (
     NeakasaApiClientAuthenticationError,
     NeakasaApiClientCommunicationError,
 )
-from .const import DOMAIN, _LOGGER
 from .options_flow import NeakasaOptionsFlow
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
 
 
 class NeakasaConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -31,10 +32,14 @@ class NeakasaConfigFlow(ConfigFlow, domain=DOMAIN):
         """Return the options flow."""
         return NeakasaOptionsFlow(config_entry)
 
-    async def async_migrate_entry(self, hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+    async def async_migrate_entry(
+        self, hass: HomeAssistant, config_entry: ConfigEntry
+    ) -> bool:
         """Migrate config entry from VERSION 1 → 2."""
         if config_entry.version == 1:
-            _LOGGER.debug("Migrating config entry %s from V1 to V2", config_entry.entry_id)
+            _LOGGER.debug(
+                "Migrating config entry %s from V1 to V2", config_entry.entry_id
+            )
 
             new_data = {
                 CONF_USERNAME: config_entry.data[CONF_USERNAME],
@@ -53,7 +58,8 @@ class NeakasaConfigFlow(ConfigFlow, domain=DOMAIN):
         return True
 
     async def async_step_user(
-        self, user_input: dict[str, Any] | None = None,
+        self,
+        user_input: dict[str, Any] | None = None,
     ) -> ConfigFlowResult:
         """Handle the initial step — credentials only."""
         errors: dict[str, str] = {}
@@ -75,13 +81,16 @@ class NeakasaConfigFlow(ConfigFlow, domain=DOMAIN):
 
                 # Verify at least one CatLitter device exists
                 devices = await client.get_devices()
-                cat_devices = [d for d in devices if d.get("categoryKey") == "CatLitter"]
+                cat_devices = [
+                    d for d in devices if d.get("categoryKey") == "CatLitter"
+                ]
                 if not cat_devices:
                     return self.async_abort(reason="no_devices_found")
 
                 _LOGGER.debug(
                     "Account %s validated — %d CatLitter device(s) found",
-                    username, len(cat_devices),
+                    username,
+                    len(cat_devices),
                 )
 
                 return self.async_create_entry(
@@ -107,4 +116,3 @@ class NeakasaConfigFlow(ConfigFlow, domain=DOMAIN):
             ),
             errors=errors,
         )
-

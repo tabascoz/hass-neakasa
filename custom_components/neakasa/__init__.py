@@ -3,18 +3,20 @@
 from __future__ import annotations
 
 import asyncio
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.const import Platform
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import NeakasaAPI
 from .api_client import NeakasaApiClient
-from .const import DOMAIN, _LOGGER
+from .const import _LOGGER
 from .coordinator import NeakasaCoordinator
 from .data import NeakasaConfigEntry, NeakasaData
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
@@ -28,7 +30,9 @@ _shared_clients: dict[str, NeakasaApiClient] = {}
 _shared_locks: dict[str, asyncio.Lock] = {}
 
 
-async def get_shared_api(hass: HomeAssistant, username: str, password: str) -> NeakasaApiClient:
+async def get_shared_api(
+    hass: HomeAssistant, username: str, password: str
+) -> NeakasaApiClient:
     """Get or create a shared API client for the given credentials."""
     credentials_key = f"{username}:{password}"
 
@@ -53,7 +57,7 @@ async def get_shared_api(hass: HomeAssistant, username: str, password: str) -> N
             client = NeakasaApiClient(api)
             _shared_clients[credentials_key] = client
             _LOGGER.debug("Authenticated shared API client for %s", username)
-            return client
+            return client  # noqa: TRY300
         except Exception as e:
             _LOGGER.error("Failed to authenticate shared API for %s: %s", username, e)
             raise
@@ -66,7 +70,9 @@ def clear_shared_api(username: str, password: str) -> None:
     _shared_locks.pop(credentials_key, None)
 
 
-async def force_reconnect_api(hass: HomeAssistant, username: str, password: str) -> NeakasaApiClient:
+async def force_reconnect_api(
+    hass: HomeAssistant, username: str, password: str
+) -> NeakasaApiClient:
     """Force reconnection of the API client for the given credentials."""
     credentials_key = f"{username}:{password}"
     _shared_clients.pop(credentials_key, None)
@@ -75,7 +81,7 @@ async def force_reconnect_api(hass: HomeAssistant, username: str, password: str)
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Set up Neakasa Integration from a config entry."""
-    entry = cast(NeakasaConfigEntry, config_entry)
+    entry = cast("NeakasaConfigEntry", config_entry)
 
     coordinator = NeakasaCoordinator(hass, config_entry)
 
@@ -90,14 +96,16 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     return True
 
 
-async def _async_update_listener(hass: HomeAssistant, config_entry: ConfigEntry) -> None:
+async def _async_update_listener(
+    hass: HomeAssistant, config_entry: ConfigEntry
+) -> None:
     """Handle config options update."""
     await hass.config_entries.async_reload(config_entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    entry = cast(NeakasaConfigEntry, config_entry)
+    entry = cast("NeakasaConfigEntry", config_entry)
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 

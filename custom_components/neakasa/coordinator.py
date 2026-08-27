@@ -3,21 +3,24 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
-from homeassistant.core import HomeAssistant
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api_client import NeakasaApiClient
+from .const import _LOGGER, DOMAIN
 from .exceptions import (
     NeakasaApiClientAuthenticationError,
     NeakasaApiClientCommunicationError,
     NeakasaApiClientSessionExpiredError,
 )
 from .value_cacher import ValueCacher
-from .const import DOMAIN, _LOGGER
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
+
+    from .api_client import NeakasaApiClient
 
 _clean_cfg_warning_logged = False
 
@@ -54,6 +57,7 @@ NeakasaPayload = dict[str, NeakasaDeviceSnapshot]
 # ---------------------------------------------------------------------------
 # Wire-value helpers
 # ---------------------------------------------------------------------------
+
 
 def _property_value(devicedata: Any, key: str, default: Any = None) -> Any:
     if not isinstance(devicedata, dict):
@@ -118,16 +122,28 @@ def _build_device_snapshot(
         clean_cfg = {}
 
     expected_keys = (
-        "binFullWaitReset", "cleanCfg", "youngCatMode", "childLockOnOff",
-        "autoBury", "autoLevel", "silentMode", "autoForceInit",
-        "bIntrptRangeDet", "Sand", "NetWorkStatus", "bucketStatus",
-        "room_of_bin", "catLeft",
+        "binFullWaitReset",
+        "cleanCfg",
+        "youngCatMode",
+        "childLockOnOff",
+        "autoBury",
+        "autoLevel",
+        "silentMode",
+        "autoForceInit",
+        "bIntrptRangeDet",
+        "Sand",
+        "NetWorkStatus",
+        "bucketStatus",
+        "room_of_bin",
+        "catLeft",
     )
     missing_keys = [key for key in expected_keys if key not in devicedata]
     if missing_keys:
         _LOGGER.debug(
             "Neakasa device %s missing keys %s (available: %s)",
-            iot_id, missing_keys, list(devicedata.keys()),
+            iot_id,
+            missing_keys,
+            list(devicedata.keys()),
         )
 
     global _clean_cfg_warning_logged
@@ -167,8 +183,21 @@ def _build_device_snapshot(
 # Coordinator
 # ---------------------------------------------------------------------------
 
+
 class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
     """Coordinator that fetches all Neakasa devices under one account."""
+
+    _SNAP_TO_WIRE: dict[str, str] = {
+        "young_cat_mode": "youngCatMode",
+        "child_lock": "childLockOnOff",
+        "auto_bury": "autoBury",
+        "auto_level": "autoLevel",
+        "silent_mode": "silentMode",
+        "auto_force_init": "autoForceInit",
+        "b_intrpt_range_det": "bIntrptRangeDet",
+        "clean_cfg": "cleanCfg",
+        "bin_full": "binFullWaitReset",
+    }  # noqa: RUF012
 
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         self.username = config_entry.data[CONF_USERNAME]
@@ -215,7 +244,8 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             case "level":
                 await client.sand_leveling(iot_id)
             case _:
-                raise ValueError(f"Unknown service: {service}")
+                msg = f"Unknown service: {service}"
+                raise ValueError(msg)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -223,6 +253,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
 
     async def _get_client(self) -> NeakasaApiClient:
         from . import get_shared_api
+
         return await get_shared_api(self.hass, self.username, self.password)
 
     async def _discover_devices(self) -> list[dict[str, Any]]:
@@ -233,11 +264,13 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
     def _cache_for(self, iot_id: str) -> tuple[ValueCacher, ValueCacher]:
         if iot_id not in self._records_caches:
             self._records_caches[iot_id] = ValueCacher(
-                refresh_after=timedelta(minutes=30), discard_after=timedelta(hours=4),
+                refresh_after=timedelta(minutes=30),
+                discard_after=timedelta(hours=4),
             )
         if iot_id not in self._properties_caches:
             self._properties_caches[iot_id] = ValueCacher(
-                refresh_after=timedelta(seconds=0), discard_after=timedelta(minutes=30),
+                refresh_after=timedelta(seconds=0),
+                discard_after=timedelta(minutes=30),
             )
         return self._records_caches[iot_id], self._properties_caches[iot_id]
 
@@ -284,7 +317,9 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
 
         records = await self._get_records(iot_id)
         device_name = await self._get_device_name(iot_id)
-        return _build_device_snapshot(iot_id, device_name, devicedata, records, new_last_use)
+        return _build_device_snapshot(
+            iot_id, device_name, devicedata, records, new_last_use
+        )
 
     # ------------------------------------------------------------------
     # Main update loop
@@ -301,7 +336,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             )
 
             payload: NeakasaPayload = {}
-            for iot_id, result in zip(self._device_ids, snapshots):
+            for iot_id, result in zip(self._device_ids, snapshots, strict=False):
                 if isinstance(result, BaseException):
                     _LOGGER.error("Failed to fetch device %s: %s", iot_id, result)
                     continue
@@ -314,32 +349,47 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             _LOGGER.warning("Session expired, reconnecting silently: %s", err)
             try:
                 from . import force_reconnect_api
+
                 await force_reconnect_api(self.hass, self.username, self.password)
                 return await self.async_update_data()
             except Exception as reconnect_err:
-                _LOGGER.error("Failed to reconnect after session expiry: %s", reconnect_err)
-                raise UpdateFailed("Session expired and reconnection failed") from err
+                _LOGGER.error(
+                    "Failed to reconnect after session expiry: %s", reconnect_err
+                )
+                msg = "Session expired and reconnection failed"
+                raise UpdateFailed(msg) from err
 
         except NeakasaApiClientAuthenticationError as err:
             _LOGGER.warning("Authentication error, attempting reconnect: %s", err)
             try:
                 from . import force_reconnect_api
+
                 await force_reconnect_api(self.hass, self.username, self.password)
                 return await self.async_update_data()
             except Exception as reconnect_err:
                 _LOGGER.error("Failed to reconnect after auth error: %s", reconnect_err)
-                raise UpdateFailed("Authentication failed and reconnection failed") from err
+                msg = "Authentication failed and reconnection failed"
+                raise UpdateFailed(
+                    msg
+                ) from err
 
         except NeakasaApiClientCommunicationError as err:
             if "identityId is blank" in str(err):
                 _LOGGER.debug("IdentityId error, attempting automatic reconnection")
                 try:
                     from . import clear_shared_api, force_reconnect_api
+
                     clear_shared_api(self.username, self.password)
                     await force_reconnect_api(self.hass, self.username, self.password)
                     return await self.async_update_data()
                 except Exception as reconnect_err:
-                    _LOGGER.error("Failed to reconnect after identityId error: %s", reconnect_err)
-                    raise UpdateFailed("IdentityId error and reconnection failed") from err
+                    _LOGGER.error(
+                        "Failed to reconnect after identityId error: %s", reconnect_err
+                    )
+                    msg = "IdentityId error and reconnection failed"
+                    raise UpdateFailed(
+                        msg
+                    ) from err
             _LOGGER.error("API communication error: %s", err)
-            raise UpdateFailed("Communication error: %s" % err) from err
+            msg_0 = f"Communication error: {err}"
+            raise UpdateFailed(msg_0) from err
