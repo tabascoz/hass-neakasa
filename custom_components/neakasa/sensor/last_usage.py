@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from homeassistant.helpers.device_registry import DeviceInfo
 
 
-class NeakasaLastUsageSensor(CoordinatorEntity[NeakasaCoordinator]):
+class NeakasaLastUsageSensor(CoordinatorEntity[NeakasaCoordinator], SensorEntity):
     """Timestamp of the last time a cat used the litter box."""
 
     _attr_should_poll = False
@@ -38,6 +38,17 @@ class NeakasaLastUsageSensor(CoordinatorEntity[NeakasaCoordinator]):
     @callback
     def _handle_coordinator_update(self) -> None:
         self.async_write_ha_state()
+
+    async def async_update(self) -> None:
+        """Update entity state from coordinator data."""
+        if self.entity_id is None:
+            return
+        self._handle_coordinator_update()
+
+    async def async_added_to_hass(self) -> None:
+        """Write initial state once entity_id is assigned."""
+        await super().async_added_to_hass()
+        self._handle_coordinator_update()
 
     @property
     def _snap(self) -> NeakasaDeviceSnapshot | None:

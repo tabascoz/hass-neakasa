@@ -27,10 +27,15 @@ async def async_setup_entry(
     entry = cast("NeakasaConfigEntry", config_entry)
     coordinator: NeakasaCoordinator = entry.runtime_data.coordinator
 
+    _seen_iot_ids: set[str] = set()
+
     @callback
     def _discover() -> None:
         entities: list = []
         for iot_id, snap in coordinator.data.items():
+            if iot_id in _seen_iot_ids:
+                continue
+            _seen_iot_ids.add(iot_id)
             device_info = DeviceInfo(
                 name=snap.device_name,
                 manufacturer="Neakasa",

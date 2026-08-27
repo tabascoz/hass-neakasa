@@ -27,7 +27,10 @@ async def _translate_errors() -> AsyncIterator[None]:
             raise NeakasaApiClientSessionExpiredError(message) from err
         raise NeakasaApiClientAuthenticationError(message) from err
     except APIConnectionError as err:
-        raise NeakasaApiClientCommunicationError(str(err)) from err
+        message = str(err)
+        if "auth" in message.lower():
+            raise NeakasaApiClientSessionExpiredError(message) from err
+        raise NeakasaApiClientCommunicationError(message) from err
 
 
 class NeakasaApiClient:

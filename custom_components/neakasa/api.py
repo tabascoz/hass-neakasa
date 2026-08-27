@@ -42,7 +42,9 @@ class NeakasaAPI:
         self.async_executor = async_executor
         self.connected: bool = False
 
-    async def connect(self, username: str, password: str, firstRun: bool = True) -> None:
+    async def connect(
+        self, username: str, password: str, firstRun: bool = True
+    ) -> None:
         if not self.connected:
             await self._loadBaseUrlByAccount(username)
             await self.loadAuthTokens(username, password)
@@ -169,9 +171,7 @@ class NeakasaAPI:
 
                 if response_json["code"] != 0:
                     msg = "Error connecting to api. Invalid username or password."
-                    raise APIAuthError(
-                        msg
-                    )
+                    raise APIAuthError(msg)
                 self._ali_authentication_token = response_json["data"]["user_info"][
                     "ali_authentication_token"
                 ]
@@ -469,7 +469,9 @@ class NeakasaAPI:
             msg = "Error setting device properties."
             raise APIConnectionError(msg)
 
-    async def _invokeService(self, iotId: str, identifier: str, args: dict[str, any]) -> None:
+    async def _invokeService(
+        self, iotId: str, identifier: str, args: dict[str, any]
+    ) -> None:
         if not self.connected:
             msg = "api not connected"
             raise APIConnectionError(msg)

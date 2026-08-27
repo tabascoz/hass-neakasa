@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult
@@ -18,9 +18,6 @@ from .exceptions import (
 )
 from .options_flow import NeakasaOptionsFlow
 
-if TYPE_CHECKING:
-    from homeassistant.core import HomeAssistant
-
 
 class NeakasaConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Neakasa."""
@@ -31,31 +28,6 @@ class NeakasaConfigFlow(ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(config_entry: ConfigEntry) -> NeakasaOptionsFlow:
         """Return the options flow."""
         return NeakasaOptionsFlow(config_entry)
-
-    async def async_migrate_entry(
-        self, hass: HomeAssistant, config_entry: ConfigEntry
-    ) -> bool:
-        """Migrate config entry from VERSION 1 → 2."""
-        if config_entry.version == 1:
-            _LOGGER.debug(
-                "Migrating config entry %s from V1 to V2", config_entry.entry_id
-            )
-
-            new_data = {
-                CONF_USERNAME: config_entry.data[CONF_USERNAME],
-                CONF_PASSWORD: config_entry.data[CONF_PASSWORD],
-            }
-            new_unique_id = f"account:{new_data[CONF_USERNAME].lower()}"
-
-            hass.config_entries.async_update_entry(
-                config_entry,
-                data=new_data,
-                unique_id=new_unique_id,
-                version=2,
-            )
-            _LOGGER.debug("Migrated config entry %s to V2", config_entry.entry_id)
-
-        return True
 
     async def async_step_user(
         self,
