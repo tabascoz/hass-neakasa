@@ -5,7 +5,7 @@ import hashlib
 import hmac
 import json
 import time
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from aiohttp import ClientError
 from alibabacloud_iot_api_gateway.models import CommonParams, Config, IoTApiRequest
@@ -526,7 +526,7 @@ class NeakasaAPI:
                     "bind_status": 2,
                     "start_time": int(
                         (
-                            datetime.fromtimestamp(timestamp) - timedelta(days=7)
+                            datetime.fromtimestamp(timestamp, tz=UTC) - timedelta(days=7)
                         ).timestamp()
                     ),  # 7 days ago
                     "end_time": timestamp,
@@ -565,7 +565,7 @@ class NeakasaAPI:
                     "bind_status": 2,
                     "start_time": int(
                         (
-                            datetime.fromtimestamp(timestamp) - timedelta(days=7)
+                            datetime.fromtimestamp(timestamp, tz=UTC) - timedelta(days=7)
                         ).timestamp()
                     ),  # 7 days ago
                     "end_time": timestamp,
