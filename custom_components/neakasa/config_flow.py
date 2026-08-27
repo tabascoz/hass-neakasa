@@ -1,103 +1,110 @@
+"""Config flow for Neakasa."""
+
 from __future__ import annotations
-import voluptuous as vol
+
 from typing import Any
-from homeassistant.config_entries import ConfigFlow
+
+import voluptuous as vol
+
+from homeassistant.config_entries import ConfigFlow, ConfigEntry, ConfigFlowResult
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from homeassistant.const import (
-    CONF_DEVICE_ID,
-    CONF_FRIENDLY_NAME,
-    CONF_USERNAME,
-    CONF_PASSWORD,
-)
 from .api import NeakasaAPI
 from .api_client import NeakasaApiClient
 from .exceptions import (
     NeakasaApiClientAuthenticationError,
     NeakasaApiClientCommunicationError,
-    NeakasaApiClientError,
 )
 from .const import DOMAIN, _LOGGER
+from .options_flow import NeakasaOptionsFlow
 
 
 class NeakasaConfigFlow(ConfigFlow, domain=DOMAIN):
-    VERSION = 1
+    """Handle a config flow for Neakasa."""
 
-    def __init__(self) -> None:
-        self._username: str | None = None
-        self._password: str | None = None
-        self._discovered_devices: dict[str, str] = {}
-        _LOGGER.debug("Initializing NeakasaConfigFlow")
+    VERSION = 2
 
-    async def async_step_user(self, user_input: dict[str, Any] | None = None):
-        # Prevent duplicate config for the same account
-        if user_input is None:
-            return self.async_show_form(
-                step_id="user",
-                data_schema=vol.Schema(
-                    {
-                        vol.Required(CONF_USERNAME): str,
-                        vol.Required(CONF_PASSWORD): str,
-                    }
-                ),
+    @staticmethod
+    def async_get_options_flow(config_entry: ConfigEntry) -> NeakasaOptionsFlow:
+        """Return the options flow."""
+        return NeakasaOptionsFlow(config_entry)
+
+    async def async_migrate_entry(self, hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+        """Migrate config entry from VERSION 1 → 2."""
+        if config_entry.version == 1:
+            _LOGGER.debug("Migrating config entry %s from V1 to V2", config_entry.entry_id)
+
+            new_data = {
+                CONF_USERNAME: config_entry.data[CONF_USERNAME],
+                CONF_PASSWORD: config_entry.data[CONF_PASSWORD],
+            }
+            new_unique_id = f"account:{new_data[CONF_USERNAME].lower()}"
+
+            hass.config_entries.async_update_entry(
+                config_entry,
+                data=new_data,
+                unique_id=new_unique_id,
+                version=2,
             )
+            _LOGGER.debug("Migrated config entry %s to V2", config_entry.entry_id)
 
-        _LOGGER.debug("Collecting username/password for Neakasa")
-        self._username = user_input[CONF_USERNAME].strip()
-        self._password = user_input[CONF_PASSWORD]
+        return True
 
-        # Use email (account) as unique id to enforce single instance per account
-        account_uid = f"account:{self._username.lower()}"
-        await self.async_set_unique_id(account_uid, raise_on_progress=False)
-        self._abort_if_unique_id_configured()
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None,
+    ) -> ConfigFlowResult:
+        """Handle the initial step — credentials only."""
+        errors: dict[str, str] = {}
 
-        try:
-            session = async_get_clientsession(self.hass)
-            api = NeakasaAPI(session, self.hass.async_add_executor_job)
-            await api.connect(self._username, self._password)
-            client = NeakasaApiClient(api)
+        if user_input is not None:
+            username = user_input[CONF_USERNAME].strip()
+            password = user_input[CONF_PASSWORD]
 
-            devices = await client.get_devices()
-            discovered_devices: dict[str, str] = {}
-            for device in devices:
-                if device.get("categoryKey") == "CatLitter":
-                    device_id = device.get("iotId")
-                    device_name = device.get("deviceName") or device_id
-                    if device_id:
-                        discovered_devices[device_id] = device_name
+            # One config entry per account
+            account_uid = f"account:{username.lower()}"
+            await self.async_set_unique_id(account_uid, raise_on_progress=False)
+            self._abort_if_unique_id_configured()
 
-            self._discovered_devices = discovered_devices
-            if not self._discovered_devices:
-                return self.async_abort(reason="no_devices_found")
+            try:
+                session = async_get_clientsession(self.hass)
+                api = NeakasaAPI(session, self.hass.async_add_executor_job)
+                await api.connect(username, password)
+                client = NeakasaApiClient(api)
 
-            return await self.async_step_device(None)
+                # Verify at least one CatLitter device exists
+                devices = await client.get_devices()
+                cat_devices = [d for d in devices if d.get("categoryKey") == "CatLitter"]
+                if not cat_devices:
+                    return self.async_abort(reason="no_devices_found")
 
-        except NeakasaApiClientAuthenticationError:
-            return self.async_abort(reason="authentication")
-        except NeakasaApiClientCommunicationError:
-            return self.async_abort(reason="connection")
+                _LOGGER.debug(
+                    "Account %s validated — %d CatLitter device(s) found",
+                    username, len(cat_devices),
+                )
 
-    async def async_step_device(self, user_input: dict[str, Any] | None = None):
-        if user_input is None:
-            return self.async_show_form(
-                step_id="device",
-                data_schema=vol.Schema(
-                    {vol.Required(CONF_DEVICE_ID): vol.In(self._discovered_devices)}
-                ),
-            )
+                return self.async_create_entry(
+                    title=f"Neakasa ({username})",
+                    data={
+                        CONF_USERNAME: username,
+                        CONF_PASSWORD: password,
+                    },
+                )
 
-        device_id = user_input[CONF_DEVICE_ID]
-        # Keep device id as the entry's unique id too, to avoid dup device entries
-        # If you prefer *one* entry that owns *multiple* devices, move device selection to OptionsFlow instead.
-        await self.async_set_unique_id(device_id, raise_on_progress=False)
-        self._abort_if_unique_id_configured()
+            except NeakasaApiClientAuthenticationError:
+                errors["base"] = "authentication"
+            except NeakasaApiClientCommunicationError:
+                errors["base"] = "connection"
 
-        data = {
-            CONF_DEVICE_ID: device_id,
-            CONF_FRIENDLY_NAME: self._discovered_devices[device_id],
-            CONF_USERNAME: self._username,
-            CONF_PASSWORD: self._password,
-        }
-        title = self._discovered_devices[device_id]
-        return self.async_create_entry(title=title, data=data)
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_USERNAME): str,
+                    vol.Required(CONF_PASSWORD): str,
+                },
+            ),
+            errors=errors,
+        )
+
