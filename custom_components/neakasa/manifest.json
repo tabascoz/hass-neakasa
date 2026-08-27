@@ -6,11 +6,8 @@
   "documentation": "https://github.com/tabascoz/hass-neakasa",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/tabascoz/hass-neakasa/issues",
-  "requirements": [
-    "alibabacloud_iot_api_gateway",
-    "alibabacloud_tea_util"
-  ],
-  "version": "1.4.0-beta4"
+  "requirements": [],
+  "version": "1.4.0-beta5"
 }
 
 
