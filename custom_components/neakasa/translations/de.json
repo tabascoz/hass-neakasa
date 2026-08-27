@@ -9,18 +9,13 @@
                     "username": "Benutzername",
                     "password": "Kennwort"
                 }
-            },
-            "device": {
-                "description": "Wähle eins der Geräte aus.",
-                "data": {
-                    "device_id": "Geräte ID"
-                }
             }
         },
         "abort": {
-            "connenction": "Fehler bei dem Verbindungsaufbau.",
             "authentication": "Fehler bei der Authentifizierung.",
-            "unknown": "Unbekannter Fehler."
+            "unknown": "Unbekannter Fehler.",
+            "connection": "Fehler bei dem Verbindungsaufbau.",
+            "no_devices_found": "Keine Neakasa CatLitter-Geräte mit diesem Konto gefunden."
         }
     },
     "entity": {

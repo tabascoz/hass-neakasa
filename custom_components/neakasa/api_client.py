@@ -6,12 +6,9 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
 from .api import APIAuthError, APIConnectionError, NeakasaAPI
-from .const import _LOGGER
 from .exceptions import (
     NeakasaApiClientAuthenticationError,
     NeakasaApiClientCommunicationError,
-    NeakasaApiClientDeviceBusyError,
-    NeakasaApiClientError,
     NeakasaApiClientSessionExpiredError,
 )
 

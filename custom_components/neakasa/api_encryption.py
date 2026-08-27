@@ -1,20 +1,21 @@
 from __future__ import annotations
-from base64 import b64encode, b64decode
+
 import time
+from base64 import b64decode, b64encode
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from .const import AES_KEY_DEFAULT, AES_IV_DEFAULT
+from .const import AES_IV_DEFAULT, AES_KEY_DEFAULT
 
 
 class APIEncryption:
-    def __init__(self):
+    def __init__(self) -> None:
         self.resetEncryption()
 
-    def resetEncryption(self):
-        self.aes_key = AES_KEY_DEFAULT   # must be 16/24/32 bytes
-        self.aes_iv = AES_IV_DEFAULT     # must be 16 bytes
-        self._token = ""                 # ensure defined
+    def resetEncryption(self) -> None:
+        self.aes_key = AES_KEY_DEFAULT  # must be 16/24/32 bytes
+        self.aes_iv = AES_IV_DEFAULT  # must be 16 bytes
+        self._token = ""  # ensure defined
 
     async def _pad(self, data: bytes) -> bytes:
         """Manual zero padding to 16-byte blocks (matches your NoPadding approach)."""
@@ -47,7 +48,7 @@ class APIEncryption:
     async def getToken(self) -> str:
         return await self.encrypt(self._token + "@" + await self._get_timestamp())
 
-    async def decodeLoginToken(self, login_token: str):
+    async def decodeLoginToken(self, login_token: str) -> None:
         self.resetEncryption()
 
         decrypted = await self.decrypt(login_token)
@@ -61,4 +62,4 @@ class APIEncryption:
         if len(parts) >= 3:
             self.aes_key = parts[2].encode()  # ensure 16/24/32 bytes
         if len(parts) >= 4:
-            self.aes_iv = parts[3].encode()   # ensure 16 bytes
+            self.aes_iv = parts[3].encode()  # ensure 16 bytes
