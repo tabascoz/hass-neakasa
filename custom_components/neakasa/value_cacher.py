@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    import asyncio
     from collections.abc import Awaitable, Callable
 
 
@@ -16,11 +17,10 @@ class ValueCacher:
         self._manually_marked_stale = False
         self._value: Any | None = None
         self._last_update: datetime | None = None
-        # concurrency
-        import asyncio
+        import asyncio as _asyncio
 
-        self._lock = asyncio.Lock()
-        self._inflight = None  # asyncio.Task | None
+        self._lock = _asyncio.Lock()
+        self._inflight: asyncio.Task[Any] | None = None
 
     def set(self, value: Any) -> None:
         self._value = value

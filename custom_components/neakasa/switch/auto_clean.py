@@ -60,10 +60,7 @@ class NeakasaAutoCleanSwitch(CoordinatorEntity[NeakasaCoordinator], SwitchEntity
         snap = self._snap
         if snap is None:
             return False
-        cfg = snap.clean_cfg
-        if not isinstance(cfg, dict):
-            return False
-        return bool(cfg.get("active", False))
+        return bool(snap.clean_cfg.get("active", False))
 
     @property
     def state(self) -> str:
@@ -80,6 +77,8 @@ class NeakasaAutoCleanSwitch(CoordinatorEntity[NeakasaCoordinator], SwitchEntity
 
     async def _set_active(self, value: int) -> None:
         snap = self._snap
-        cfg = dict(snap.clean_cfg if isinstance(snap.clean_cfg, dict) else {})
+        if snap is None:
+            return
+        cfg = dict(snap.clean_cfg)
         cfg["active"] = value
         await self.coordinator.set_property(self._iot_id, "clean_cfg", cfg)

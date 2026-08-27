@@ -29,7 +29,7 @@ async def _validate_credentials(
     """
     try:
         session = async_get_clientsession(hass)
-        api = NeakasaAPI(session, hass.async_add_executor_job)
+        api = NeakasaAPI(session)
         await api.connect(username, password)
         client = NeakasaApiClient(api)
         devices = await client.get_devices()
@@ -43,7 +43,7 @@ async def _validate_credentials(
         return None, "connection"
 
 
-class NeakasaConfigFlow(ConfigFlow, domain=DOMAIN):
+class NeakasaConfigFlow(ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]  # HA __init_subclass__ convention
     """Handle a config flow for Neakasa."""
 
     VERSION = 2

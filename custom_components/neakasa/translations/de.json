@@ -9,13 +9,36 @@
                     "username": "Benutzername",
                     "password": "Kennwort"
                 }
+            },
+            "reauth_confirm": {
+                "title": "Reauthenticate Neakasa",
+                "description": "Your Neakasa credentials for {username} are no longer valid. Enter new credentials to restore access.",
+                "data": {
+                    "username": "Username",
+                    "password": "Password"
+                }
+            },
+            "reconfigure": {
+                "title": "Reconfigure Neakasa",
+                "description": "Update your Neakasa account credentials.",
+                "data": {
+                    "username": "Username",
+                    "password": "Password"
+                }
             }
         },
         "abort": {
             "authentication": "Fehler bei der Authentifizierung.",
             "unknown": "Unbekannter Fehler.",
             "connection": "Fehler bei dem Verbindungsaufbau.",
-            "no_devices_found": "Keine Neakasa CatLitter-Geräte mit diesem Konto gefunden."
+            "no_devices_found": "Keine Neakasa CatLitter-Geräte mit diesem Konto gefunden.",
+            "reauth_successful": "Reauthentication successful.",
+            "reconfigure_successful": "Reconfiguration successful."
+        },
+        "error": {
+            "authentication": "Invalid username or password.",
+            "connection": "Could not connect to Neakasa servers. Check your network.",
+            "no_devices_found": "No CatLitter devices found for this account."
         }
     },
     "entity": {
@@ -33,9 +56,6 @@
             }
         },
         "sensor": {
-            "auto_clean": {
-                "name": "Automatische Reinigung"
-            },
             "cat_sensor": {
                 "name": "Katze {name}"
             },
@@ -103,6 +123,9 @@
             },
             "unstoppable_cycle": {
                 "name": "Unaufhaltsamer Kreislauf"
+            },
+            "auto_clean": {
+                "name": "Auto clean"
             }
         }
     }
