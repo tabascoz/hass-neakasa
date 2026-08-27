@@ -52,34 +52,34 @@ class NeakasaApiClient:
     async def get_devices(self, page_no: int = 1, page_size: int = 20) -> Any:
         """Fetch devices, translating errors."""
         async with _translate_errors():
-            return await self._api.getDevices(page_no, page_size)
+            return await self._api.get_devices(page_no, page_size)
 
     async def get_device_properties(self, iot_id: str) -> Any:
         """Fetch device properties, translating errors."""
         async with _translate_errors():
-            return await self._api.getDeviceProperties(iot_id)
+            return await self._api.get_device_properties(iot_id)
 
     async def set_device_properties(self, iot_id: str, items: dict[str, Any]) -> None:
         """Set device properties, translating errors."""
         async with _translate_errors():
-            await self._api.setDeviceProperties(iot_id, items)
+            await self._api.set_device_properties(iot_id, items)
 
     async def clean_now(self, iot_id: str) -> None:
         """Trigger an immediate clean cycle."""
         async with _translate_errors():
-            await self._api.cleanNow(iot_id)
+            await self._api.clean_now(iot_id)
 
     async def sand_leveling(self, iot_id: str) -> None:
         """Trigger an immediate sand-leveling cycle."""
         async with _translate_errors():
-            await self._api.sandLeveling(iot_id)
+            await self._api.sand_leveling(iot_id)
 
     async def get_records(self, device_name: str) -> Any:
         """Fetch toilet records, translating errors."""
         async with _translate_errors():
-            return await self._api.getRecords(device_name)
+            return await self._api.get_records(device_name)
 
     async def get_statistics(self, device_name: str) -> Any:
         """Fetch statistics, translating errors."""
         async with _translate_errors():
-            return await self._api.getStatistics(device_name)
+            return await self._api.get_statistics(device_name)

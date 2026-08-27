@@ -97,27 +97,18 @@ max-complexity = 25
 # Legacy API layer ported from Node.js — cosmetic issues only;
 # these files are stable and changing them risks breaking the protocol.
 "custom_components/neakasa/api.py" = [
-    "D",       # docstrings
-    "ANN",     # type annotations
-    "N802",    # camelCase method names from Aliyun SDK
-    "N803",    # camelCase argument names
-    "S107",    # hardcoded app secret (required by Neakasa API)
-    "FBT001",  # boolean positional args
-    "FBT002",  # boolean defaults
-    "FBT003",  # boolean positional values
-    "E501",    # long lines from debug logging
-    "PLR2004", # magic numbers (HTTP status codes)
-    "B904",    # bare raise in except
-    "S324",    # md5 hash (required by Neakasa auth protocol)
-    "TRY300",  # return in try
-]
-"custom_components/neakasa/client.py" = [
     "D",
     "ANN",
-    "PLR0913", # too many args (Aliyun Gateway protocol)
-    "PLR0917", # too many positional args
+    "S107",
     "E501",
-    "PERF401", # list comprehension style
+    "PLR2004",
+    "B904",
+    "S324",
+    "TRY300",
+    "EM101",
+    "EM102",
+    "TRY003",
+    "SLF001",
 ]
 "custom_components/neakasa/api_encryption.py" = [
     "D",
@@ -132,4 +123,9 @@ max-complexity = 25
     "D",
     "PLC0415",
     "TRY300",
+]
+"custom_components/neakasa/iot_gateway.py" = [
+    "S324",    # MD5 required by Aliyun IoT Gateway Content-MD5 header
+    "PLR0913", # _sign() args match Aliyun protocol spec
+    "PLR0917",
 ]

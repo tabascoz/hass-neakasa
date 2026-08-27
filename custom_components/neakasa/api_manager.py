@@ -35,7 +35,7 @@ async def get_shared_api(
             del _shared_clients[credentials_key]
 
         session = async_get_clientsession(hass)
-        api = NeakasaAPI(session, hass.async_add_executor_job)
+        api = NeakasaAPI(session)
         try:
             _LOGGER.debug("Authenticating shared API client for %s", username)
             await api.connect(username, password)
