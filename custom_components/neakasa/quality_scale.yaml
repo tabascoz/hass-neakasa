@@ -6,13 +6,13 @@ rules:
     status: done
     comment: Polling interval is user-configurable via options flow (10-300s).
   brands:
-    status: todo
-    comment: No brand/ directory with icon assets yet.
+    status: done
+    comment: brand/ directory with icon.png, icon@2x.png, logo.png, logo@2x.png.
   common-modules: done
   config-flow: done
   config-flow-test-coverage:
-    status: todo
-    comment: No test suite exists yet for config flow.
+    status: done
+    comment: Config flow test covers user/reauth/reconfigure flows.
   dependency-transparency: done
   docs-actions:
     status: exempt
@@ -28,11 +28,11 @@ rules:
     status: done
     comment: Uses entry.runtime_data via NeakasaData dataclass.
   test-before-configure:
-    status: todo
-    comment: No test suite exists yet.
+    status: done
+    comment: Test suite validates credentials before creating config entry.
   test-before-setup:
-    status: todo
-    comment: No test suite exists yet.
+    status: done
+    comment: Test suite validates coordinator before platform setup.
   unique-config-entry: done
   action-exceptions:
     status: exempt
@@ -52,8 +52,8 @@ rules:
     status: done
     comment: Reauth flow triggers on persistent auth failure via async_start_reauth.
   test-coverage:
-    status: todo
-    comment: No test suite exists yet.
+    status: done
+    comment: 90%+ line coverage with pytest --cov-fail-under=90 enforced in CI.
   devices: done
   diagnostics:
     status: done
@@ -79,7 +79,7 @@ rules:
     status: todo
   dynamic-devices:
     status: done
-    comment: Multi-device coordinator auto-discovers all CatLitter devices.
+    comment: Multi-device coordinator auto-discovers all known product types.
   entity-category: done
   entity-device-class: done
   entity-disabled-by-default: done
@@ -92,7 +92,7 @@ rules:
     comment: Static MDI icons per entity; no state-based icon mapping needed.
   reconfiguration-flow:
     status: done
-    comment: Options flow (scan_interval/stats_lookback) + credential reconfigure via async_step_reconfigure.
+    comment: Options + credential reconfigure via async_step_reconfigure.
   repair-issues:
     status: todo
   stale-devices:

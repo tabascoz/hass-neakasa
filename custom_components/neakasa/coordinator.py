@@ -35,6 +35,8 @@ class NeakasaDeviceSnapshot:
 
     iot_id: str
     device_name: str
+    category_key: str
+    product_key: str
     bin_full: bool
     clean_cfg: dict[str, Any]
     sand_level_state: int
@@ -110,6 +112,9 @@ def _build_device_snapshot(
     devicedata: Any,
     records: Any,
     new_last_use: int,
+    *,
+    category_key: str = "CatLitter",
+    product_key: str = "",
 ) -> NeakasaDeviceSnapshot:
     """Build a :class:`NeakasaDeviceSnapshot` without crashing on missing keys."""
     if not isinstance(devicedata, dict):
@@ -167,6 +172,8 @@ def _build_device_snapshot(
     return NeakasaDeviceSnapshot(
         iot_id=iot_id,
         device_name=device_name,
+        category_key=category_key,
+        product_key=product_key,
         bin_full=_property_value(devicedata, "binFullWaitReset", 0) == 1,
         clean_cfg=clean_cfg,
         young_cat_mode=_property_value(devicedata, "youngCatMode", 0) == 1,
@@ -177,7 +184,7 @@ def _build_device_snapshot(
         auto_force_init=_property_value(devicedata, "autoForceInit", 0) == 1,
         b_intrpt_range_det=_property_value(devicedata, "bIntrptRangeDet", 0) == 1,
         sand_level_percent=_to_int(sand.get("percent", 0)),
-        wifi_rssi=_to_int(network.get("WiFi_RSSI", 0)),
+        wifi_rssi=_to_int(network.get("WiFiRSSI", 0)),
         bucket_status=_to_int(_property_value(devicedata, "bucketStatus", 0)),
         room_of_bin=_to_int(_property_value(devicedata, "room_of_bin", 0)),
         sand_level_state=_to_int(sand.get("level", 0)),
@@ -203,8 +210,34 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         "bin_full": "binFullWaitReset",
     }
 
+    # ------------------------------------------------------------------
+    # Product-type routing
+    # ------------------------------------------------------------------
+    # When adding a new Neakasa product:
+    # 1. Add its categoryKey to ``KNOWN_PRODUCT_TYPES``
+    # 2. Create entity classes under a new platform sub-package
+    # 3. Register the platform in ``__init__.py``
+    # 4. Add translations keys to ``translations/en.json``
+
+    KNOWN_PRODUCT_TYPES: ClassVar[set[str]] = {
+        "CatLitter",
+        # "WashingMachine",   # future
+        # "CatFoodFeeder",    # future
+        # "CatWaterFountain", # future
+    }
+
+    _SERVICE_DISPATCH: ClassVar[dict[str, dict[str, str]]] = {
+        "CatLitter": {
+            "clean": "clean_now",
+            "level": "sand_leveling",
+        },
+        # "WashingMachine": {"start": "start_wash", "pause": "pause_wash"},
+        # "CatFoodFeeder": {"dispense": "dispense_food"},
+    }
+
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         """Initialize the coordinator from a config entry."""
+        self.config_entry = config_entry
         self.username = config_entry.data[CONF_USERNAME]
         self.password = config_entry.data[CONF_PASSWORD]
 
@@ -212,6 +245,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         self._properties_caches: dict[str, ValueCacher] = {}
         self._last_use_dates: dict[str, int] = {}
         self._device_names: dict[str, str] = {}
+        self._device_meta: dict[str, dict[str, str]] = {}
         self._device_ids: list[str] = []
 
         scan_interval = config_entry.options.get("scan_interval", 60)
@@ -221,6 +255,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             name=f"{DOMAIN} ({config_entry.unique_id})",
             update_method=self.async_update_data,
             update_interval=timedelta(seconds=scan_interval),
+            config_entry=config_entry,
         )
 
     # ------------------------------------------------------------------
@@ -235,6 +270,11 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
     def device_ids(self) -> list[str]:
         """Return the list of known device IOT IDs."""
         return self._device_ids
+
+    def device_category(self, iot_id: str) -> str:
+        """Return the ``categoryKey`` for *iot_id*, e.g. ``"CatLitter"``."""
+        snap = self.device_snapshot(iot_id)
+        return snap.category_key if snap else "unknown"
 
     async def set_property(self, iot_id: str, key: str, value: Any) -> None:
         """Set a device property via the Aliyun IoT gateway."""
@@ -266,10 +306,20 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         return await get_shared_api(self.hass, self.username, self.password)
 
     async def _discover_devices(self) -> list[dict[str, Any]]:
-        """Fetch all CatLitter devices for the account."""
+        """Fetch all known Neakasa devices for the account."""
         client = await self._get_client()
         all_devices = await client.get_devices()
-        return [d for d in all_devices if d.get("categoryKey") == "CatLitter"]
+        matched: list[dict[str, Any]] = []
+        for d in all_devices:
+            cat_key: str = d.get("categoryKey", "")
+            if cat_key in self.KNOWN_PRODUCT_TYPES:
+                iot_id: str = d.get("iotId", "")
+                self._device_meta[iot_id] = {
+                    "category_key": cat_key,
+                    "product_key": d.get("productKey", ""),
+                }
+                matched.append(d)
+        return matched
 
     def _cache_for(self, iot_id: str) -> tuple[ValueCacher, ValueCacher]:
         """Return (records_cache, properties_cache) for *iot_id*."""
@@ -332,8 +382,15 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
 
         records = await self._get_records(iot_id)
         device_name = await self._get_device_name(iot_id)
+        meta = self._device_meta.get(iot_id, {})
         return _build_device_snapshot(
-            iot_id, device_name, devicedata, records, new_last_use
+            iot_id,
+            device_name,
+            devicedata,
+            records,
+            new_last_use,
+            category_key=meta.get("category_key", "CatLitter"),
+            product_key=meta.get("product_key", ""),
         )
 
     # ------------------------------------------------------------------

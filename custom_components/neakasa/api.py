@@ -146,14 +146,10 @@ class NeakasaAPI:
                 url=self.baseurl + "/login/user",
                 json={
                     "product_id": "a123nCqsrQm3vEbt",
-                    "system": 2,
-                    "system_version": "Android14,SDK:34",
-                    "system_number": (
-                        "GOOGLE_sdk_gphone64_x86_64-userdebug "
-                        "14 UE1A.230829.050 12077443 "
-                        "dev-keys_sdk_gphone64_x86_64"
-                    ),
-                    "app_version": "2.0.9",
+                    "system": 1,
+                    "system_version": "iOS18.5",
+                    "system_number": "iPhone17,1",
+                    "app_version": "2.3.6",
                     "account": username,
                     "type": 3,
                     "password": hashlib.md5(
