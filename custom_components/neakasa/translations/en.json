@@ -9,13 +9,36 @@
                     "username": "Username",
                     "password": "Password"
                 }
+            },
+            "reauth_confirm": {
+                "title": "Reauthenticate Neakasa",
+                "description": "Your Neakasa credentials for {username} are no longer valid. Enter new credentials to restore access.",
+                "data": {
+                    "username": "Username",
+                    "password": "Password"
+                }
+            },
+            "reconfigure": {
+                "title": "Reconfigure Neakasa",
+                "description": "Update your Neakasa account credentials.",
+                "data": {
+                    "username": "Username",
+                    "password": "Password"
+                }
             }
         },
         "abort": {
             "authentication": "Error during authentication.",
             "unknown": "Unknown Error",
             "connection": "Error during connection.",
-            "no_devices_found": "No Neakasa CatLitter devices found on this account."
+            "no_devices_found": "No Neakasa CatLitter devices found on this account.",
+            "reauth_successful": "Reauthentication successful.",
+            "reconfigure_successful": "Reconfiguration successful."
+        },
+        "error": {
+            "authentication": "Invalid username or password.",
+            "connection": "Could not connect to Neakasa servers. Check your network.",
+            "no_devices_found": "No CatLitter devices found for this account."
         }
     },
     "entity": {

@@ -63,5 +63,3 @@ class NeakasaStayTimeSensor(CoordinatorEntity[NeakasaCoordinator], SensorEntity)
         if snap is None:
             return None
         return snap.stay_time
-
-

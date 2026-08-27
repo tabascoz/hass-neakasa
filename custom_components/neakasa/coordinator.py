@@ -369,7 +369,13 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                 return await self.async_update_data()
             except Exception as reconnect_err:
                 _LOGGER.error("Failed to reconnect after auth error: %s", reconnect_err)
-                msg = "Authentication failed and reconnection failed"
+                _LOGGER.info(
+                    "Starting reauth flow for entry %s", self.config_entry.entry_id
+                )
+                self.hass.async_create_task(
+                    self.config_entry.async_start_reauth(self.hass)
+                )
+                msg = "Authentication failed - reauth required"
                 raise UpdateFailed(msg) from err
 
         except NeakasaApiClientCommunicationError as err:
@@ -387,6 +393,15 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                     )
                     msg = "IdentityId error and reconnection failed"
                     raise UpdateFailed(msg) from err
-            _LOGGER.error("API communication error: %s", err)
-            msg_0 = f"Communication error: {err}"
+
+            _LOGGER.warning("API communication error (retrying): %s", err)
+            for delay in (2, 4, 8, 16, 32):
+                _LOGGER.debug("Retrying after %ds ...", delay)
+                await asyncio.sleep(delay)
+                try:
+                    return await self.async_update_data()
+                except NeakasaApiClientCommunicationError:
+                    continue
+            _LOGGER.error("API communication error after all retries: %s", err)
+            msg_0 = f"Communication error after 5 retries: {err}"
             raise UpdateFailed(msg_0) from err
