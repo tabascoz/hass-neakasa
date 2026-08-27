@@ -14,7 +14,7 @@ from aiohttp import ClientError
 
 from .api_encryption import APIEncryption
 from .const import _LOGGER
-from .iot_gateway import AliyunIoTClient, IoTConfig
+from .iot_gateway import AliyunIoTClient, IoTConfig, IoTResponse
 
 if TYPE_CHECKING:
     from aiohttp import ClientSession
@@ -59,6 +59,24 @@ class NeakasaAPI:
     # ------------------------------------------------------------------
     # Internal helpers (no Aliyun SDK — pure aiohttp + manual HMAC)
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_iot_response(resp: IoTResponse, pathname: str) -> dict[str, Any]:
+        """Parse an IoT gateway response, raising with context on failure."""
+        body_text: str | None = None
+        try:
+            body_text = resp.body.decode("utf-8")
+            result: dict[str, Any] = json.loads(body_text)
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            if resp.status_code != 200:
+                raise APIConnectionError(
+                    f"IoT gateway returned HTTP {resp.status_code} on "
+                    f"{pathname} with non-JSON body"
+                ) from exc
+            raise APIConnectionError(
+                f"Invalid JSON from {pathname}: {resp.body[:200]!r}"
+            ) from exc
+        return result
 
     async def _load_base_url_by_account(self, username: str) -> None:
         try:
@@ -207,7 +225,7 @@ class NeakasaAPI:
             },
         }
         resp = await client.do_request("/living/account/region/get", body)
-        data = json.loads(resp.body)
+        data = self._parse_iot_response(resp, "/living/account/region/get")
         if data["code"] != 200:
             raise APIConnectionError("Error loading region data." + data["message"])
         self.oaApiGatewayEndpoint = data["data"]["oaApiGatewayEndpoint"]
@@ -229,7 +247,7 @@ class NeakasaAPI:
             }
         }
         resp = await client.do_request_raw("/api/prd/connect.json", None, params)
-        data = json.loads(resp.body)
+        data = self._parse_iot_response(resp, "/api/prd/connect.json")
         if data["success"] != "true":
             raise APIConnectionError("Error getting vid.")
         if data["data"]["successful"] != "true":
@@ -255,7 +273,7 @@ class NeakasaAPI:
         resp = await client.do_request_raw(
             "/api/prd/loginbyoauth.json", {"Vid": vid}, params
         )
-        data = json.loads(resp.body)
+        data = self._parse_iot_response(resp, "/api/prd/loginbyoauth.json")
         if data["success"] != "true":
             raise APIAuthError("Error getting sid: " + data["errorMsg"])
         if data["data"]["successful"] != "true":
@@ -286,7 +304,7 @@ class NeakasaAPI:
             },
         }
         resp = await client.do_request("/account/createSessionByAuthCode", body)
-        data = json.loads(resp.body)
+        data = self._parse_iot_response(resp, "/account/createSessionByAuthCode")
         if data["code"] != 200:
             self.connected = False
             raise APIAuthError("Error getting iot token: " + data["message"])
@@ -319,7 +337,7 @@ class NeakasaAPI:
             "params": params,
         }
         resp = await client.do_request(pathname, body)
-        data = json.loads(resp.body)
+        data = self._parse_iot_response(resp, pathname)
         if data["code"] != 200:
             error_msg = data.get("message", "unknown error")
             # Check for specific authentication errors
