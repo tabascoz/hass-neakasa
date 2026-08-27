@@ -35,9 +35,9 @@ async def async_get_config_entry_diagnostics(
             "data": redacted_data,
             "options": dict(entry.options),
         },
-        "device": {
-            "iot_id": coordinator.deviceid,
-            "name": coordinator.devicename,
-            "connected": coordinator.data is not None,
+        "coordinator": {
+            "username": coordinator.username,
+            "device_ids": coordinator.device_ids,
+            "data_device_count": len(coordinator.data) if coordinator.data else 0,
         },
     }

@@ -1,26 +1,19 @@
 from __future__ import annotations
+
+import asyncio
 from dataclasses import dataclass, field
 from datetime import timedelta
-import logging
-from typing import Optional, Any, Awaitable, Callable
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    CONF_DEVICE_ID,
-    CONF_FRIENDLY_NAME,
-    CONF_USERNAME,
-    CONF_PASSWORD,
-)
+from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from datetime import datetime
 
 from .api_client import NeakasaApiClient
 from .exceptions import (
     NeakasaApiClientAuthenticationError,
     NeakasaApiClientCommunicationError,
-    NeakasaApiClientError,
     NeakasaApiClientSessionExpiredError,
 )
 from .value_cacher import ValueCacher
@@ -28,47 +21,50 @@ from .const import DOMAIN, _LOGGER
 
 _clean_cfg_warning_logged = False
 
+
 @dataclass
-class NeakasaAPIData:
-    """Class to hold api data."""
+class NeakasaDeviceSnapshot:
+    """Immutable snapshot of a single device's state at a point in time."""
 
-    binFullWaitReset: bool
-    cleanCfg: dict[str, Any]
-    sandLevelState: int
-    sandLevelPercent: int
-    bucketStatus: int
+    iot_id: str
+    device_name: str
+    bin_full: bool
+    clean_cfg: dict[str, Any]
+    sand_level_state: int
+    sand_level_percent: int
+    bucket_status: int
     room_of_bin: int
-    youngCatMode: bool
-    childLockOnOff: bool
-    autoBury: bool
-    autoLevel: bool
-    silentMode: bool
-    wifiRssi: int
-    autoForceInit: bool
-    bIntrptRangeDet: bool
-    stayTime: int
-    lastUse: int
-    cat_list: list[object] = field(default_factory=list)
-    record_list: list[object] = field(default_factory=list)
+    young_cat_mode: bool
+    child_lock: bool
+    auto_bury: bool
+    auto_level: bool
+    silent_mode: bool
+    wifi_rssi: int
+    auto_force_init: bool
+    b_intrpt_range_det: bool
+    stay_time: int
+    last_use: int
+    cat_list: list[dict[str, Any]] = field(default_factory=list)
+    record_list: list[dict[str, Any]] = field(default_factory=list)
 
+
+NeakasaPayload = dict[str, NeakasaDeviceSnapshot]
+
+
+# ---------------------------------------------------------------------------
+# Wire-value helpers
+# ---------------------------------------------------------------------------
 
 def _property_value(devicedata: Any, key: str, default: Any = None) -> Any:
-    """Return ``devicedata[key]['value']`` or *default* when the property is absent.
-
-    The Aliyun IoT gateway wraps every property as ``{"time": ..., "value": ...}``.
-    Some firmware variants / device models do not publish every property (for example
-    ``cleanCfg``), so this must never raise ``KeyError``.
-    """
     if not isinstance(devicedata, dict):
         return default
     entry = devicedata.get(key)
     if not isinstance(entry, dict):
         return default
-    return entry.get('value', default)
+    return entry.get("value", default)
 
 
 def _to_int(value: Any, default: int = 0) -> int:
-    """Coerce a wire value to ``int``, returning *default* if that is impossible."""
     if isinstance(value, bool):
         return int(value)
     try:
@@ -77,8 +73,7 @@ def _to_int(value: Any, default: int = 0) -> int:
         return default
 
 
-def _to_list(value: Any) -> list[object]:
-    """Coerce a wire value to a list, returning an empty list when unusable."""
+def _to_list(value: Any) -> list[dict[str, Any]]:
     if isinstance(value, list):
         return value
     if value is None:
@@ -88,51 +83,55 @@ def _to_list(value: Any) -> list[object]:
     return []
 
 
-def _get_last_use_date(devicedata: Any) -> Any:
-    """Return the ``catLeft`` timestamp used to invalidate the records cache."""
+def _get_last_use_date(devicedata: Any) -> int:
     if not isinstance(devicedata, dict):
         return 0
-    cat_left = devicedata.get('catLeft')
+    cat_left = devicedata.get("catLeft")
     if not isinstance(cat_left, dict):
         return 0
-    return cat_left.get('time', 0)
+    return cat_left.get("time", 0)
 
 
-def _build_api_data(devicedata: Any, records: Any, new_last_use_date: Any) -> NeakasaAPIData:
-    """Build :class:`NeakasaAPIData` without crashing on missing properties."""
+def _build_device_snapshot(
+    iot_id: str,
+    device_name: str,
+    devicedata: Any,
+    records: Any,
+    new_last_use: int,
+) -> NeakasaDeviceSnapshot:
     if not isinstance(devicedata, dict):
         devicedata = {}
     if not isinstance(records, dict):
         records = {}
 
-    sand = _property_value(devicedata, 'Sand', {})
+    sand = _property_value(devicedata, "Sand", {})
     if not isinstance(sand, dict):
         sand = {}
-    network = _property_value(devicedata, 'NetWorkStatus', {})
+    network = _property_value(devicedata, "NetWorkStatus", {})
     if not isinstance(network, dict):
         network = {}
-    cat_left_value = _property_value(devicedata, 'catLeft', {})
+    cat_left_value = _property_value(devicedata, "catLeft", {})
     if not isinstance(cat_left_value, dict):
         cat_left_value = {}
-    clean_cfg = _property_value(devicedata, 'cleanCfg', {})
+    clean_cfg = _property_value(devicedata, "cleanCfg", {})
     if not isinstance(clean_cfg, dict):
         clean_cfg = {}
 
     expected_keys = (
-        'binFullWaitReset', 'cleanCfg', 'youngCatMode', 'childLockOnOff',
-        'autoBury', 'autoLevel', 'silentMode', 'autoForceInit',
-        'bIntrptRangeDet', 'Sand', 'NetWorkStatus', 'bucketStatus',
-        'room_of_bin', 'catLeft',
+        "binFullWaitReset", "cleanCfg", "youngCatMode", "childLockOnOff",
+        "autoBury", "autoLevel", "silentMode", "autoForceInit",
+        "bIntrptRangeDet", "Sand", "NetWorkStatus", "bucketStatus",
+        "room_of_bin", "catLeft",
     )
     missing_keys = [key for key in expected_keys if key not in devicedata]
     if missing_keys:
         _LOGGER.debug(
-            "Neakasa device properties missing keys %s (available: %s)",
-            missing_keys, list(devicedata.keys()),
+            "Neakasa device %s missing keys %s (available: %s)",
+            iot_id, missing_keys, list(devicedata.keys()),
         )
 
     global _clean_cfg_warning_logged
-    if 'cleanCfg' in missing_keys and not _clean_cfg_warning_logged:
+    if "cleanCfg" in missing_keys and not _clean_cfg_warning_logged:
         _clean_cfg_warning_logged = True
         _LOGGER.warning(
             "Neakasa device did not report the 'cleanCfg' property; "
@@ -140,179 +139,207 @@ def _build_api_data(devicedata: Any, records: Any, new_last_use_date: Any) -> Ne
             list(devicedata.keys()),
         )
 
-    return NeakasaAPIData(
-        binFullWaitReset=_property_value(devicedata, 'binFullWaitReset', 0) == 1,  # -> Abfalleimer voll
-        cleanCfg=clean_cfg,
-        youngCatMode=_property_value(devicedata, 'youngCatMode', 0) == 1,  # -> Kätzchen Modus
-        childLockOnOff=_property_value(devicedata, 'childLockOnOff', 0) == 1,  # -> Kindersicherung
-        autoBury=_property_value(devicedata, 'autoBury', 0) == 1,  # -> automatische Abdeckung
-        autoLevel=_property_value(devicedata, 'autoLevel', 0) == 1,  # -> automatische Nivellierung
-        silentMode=_property_value(devicedata, 'silentMode', 0) == 1,  # -> Stiller Modus
-        autoForceInit=_property_value(devicedata, 'autoForceInit', 0) == 1,  # -> automatische Wiederherstellung
-        bIntrptRangeDet=_property_value(devicedata, 'bIntrptRangeDet', 0) == 1,  # -> Unaufhaltsamer Kreislauf
-        sandLevelPercent=_to_int(sand.get('percent', 0)),  # -> Katzenstreu Prozent
-        wifiRssi=_to_int(network.get('WiFi_RSSI', 0)),  # -> WLAN RSSI
-        bucketStatus=_to_int(_property_value(devicedata, 'bucketStatus', 0)),  # -> Aktueller Status
-        room_of_bin=_to_int(_property_value(devicedata, 'room_of_bin', 0)),  # -> Abfalleimer
-        sandLevelState=_to_int(sand.get('level', 0)),  # -> Katzenstreu
-        stayTime=_to_int(cat_left_value.get('stayTime', 0)),
-        lastUse=new_last_use_date,
-        cat_list=_to_list(records.get('cat_list')),
-        record_list=_to_list(records.get('record_list')),
+    return NeakasaDeviceSnapshot(
+        iot_id=iot_id,
+        device_name=device_name,
+        bin_full=_property_value(devicedata, "binFullWaitReset", 0) == 1,
+        clean_cfg=clean_cfg,
+        young_cat_mode=_property_value(devicedata, "youngCatMode", 0) == 1,
+        child_lock=_property_value(devicedata, "childLockOnOff", 0) == 1,
+        auto_bury=_property_value(devicedata, "autoBury", 0) == 1,
+        auto_level=_property_value(devicedata, "autoLevel", 0) == 1,
+        silent_mode=_property_value(devicedata, "silentMode", 0) == 1,
+        auto_force_init=_property_value(devicedata, "autoForceInit", 0) == 1,
+        b_intrpt_range_det=_property_value(devicedata, "bIntrptRangeDet", 0) == 1,
+        sand_level_percent=_to_int(sand.get("percent", 0)),
+        wifi_rssi=_to_int(network.get("WiFi_RSSI", 0)),
+        bucket_status=_to_int(_property_value(devicedata, "bucketStatus", 0)),
+        room_of_bin=_to_int(_property_value(devicedata, "room_of_bin", 0)),
+        sand_level_state=_to_int(sand.get("level", 0)),
+        stay_time=_to_int(cat_left_value.get("stayTime", 0)),
+        last_use=new_last_use,
+        cat_list=_to_list(records.get("cat_list")),
+        record_list=_to_list(records.get("record_list")),
     )
 
 
-class NeakasaCoordinator(DataUpdateCoordinator):
-    """My coordinator."""
+# ---------------------------------------------------------------------------
+# Coordinator
+# ---------------------------------------------------------------------------
 
-    data: NeakasaAPIData
+class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
+    """Coordinator that fetches all Neakasa devices under one account."""
 
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
-        """Initialize coordinator."""
-
-        # Set variables from values entered in config flow setup
-        self.deviceid = config_entry.data[CONF_DEVICE_ID]
-        self.devicename = config_entry.data[CONF_FRIENDLY_NAME]
         self.username = config_entry.data[CONF_USERNAME]
         self.password = config_entry.data[CONF_PASSWORD]
 
-        self._deviceName = None
-        self.lastUseDate = None
+        self._records_caches: dict[str, ValueCacher] = {}
+        self._properties_caches: dict[str, ValueCacher] = {}
+        self._last_use_dates: dict[str, int] = {}
+        self._device_names: dict[str, str] = {}
+        self._device_ids: list[str] = []
 
-        self._recordsCache = ValueCacher(refresh_after=timedelta(minutes=30), discard_after=timedelta(hours=4))
-        self._devicePropertiesCache = ValueCacher(refresh_after=timedelta(seconds=0), discard_after=timedelta(minutes=30))
-
-        # Initialise DataUpdateCoordinator
+        scan_interval = config_entry.options.get("scan_interval", 60)
         super().__init__(
             hass,
             _LOGGER,
             name=f"{DOMAIN} ({config_entry.unique_id})",
-            # Method to call on every update interval.
             update_method=self.async_update_data,
-            # Polling interval. Will only be polled if there are subscribers.
-            update_interval=timedelta(seconds=60),
+            update_interval=timedelta(seconds=scan_interval),
         )
 
-        # API will be obtained from the shared manager when needed
-        self.api = None
-        
+    # ------------------------------------------------------------------
+    # Public helpers for entities
+    # ------------------------------------------------------------------
 
-    async def setProperty(self, key: str, value: Any):
+    def device_snapshot(self, iot_id: str) -> NeakasaDeviceSnapshot | None:
+        return self.data.get(iot_id) if self.data else None
+
+    @property
+    def device_ids(self) -> list[str]:
+        return self._device_ids
+
+    async def set_property(self, iot_id: str, key: str, value: Any) -> None:
         client = await self._get_client()
-        await client.set_device_properties(self.deviceid, {key: value})
-        #update data
-        setattr(self.data, key, value)
-        self.async_set_updated_data(self.data)
+        await client.set_device_properties(iot_id, {key: value})
+        if self.data and iot_id in self.data:
+            setattr(self.data[iot_id], key, value)
+            self.async_set_updated_data(self.data)
 
-    async def invokeService(self, service: str):
+    async def invoke_service(self, iot_id: str, service: str) -> None:
         client = await self._get_client()
         match service:
-            case 'clean':
-                return await client.clean_now(self.deviceid)
-            case 'level':
-                return await client.sand_leveling(self.deviceid)
-        raise Exception('cannot find service to invoke')
+            case "clean":
+                await client.clean_now(iot_id)
+            case "level":
+                await client.sand_leveling(iot_id)
+            case _:
+                raise ValueError(f"Unknown service: {service}")
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
 
     async def _get_client(self) -> NeakasaApiClient:
-        """Return the shared API client for this coordinator's credentials."""
         from . import get_shared_api
         return await get_shared_api(self.hass, self.username, self.password)
 
-    async def _getDeviceName(self):
-        if self._deviceName is not None:
-            return self._deviceName
+    async def _discover_devices(self) -> list[dict[str, Any]]:
+        client = await self._get_client()
+        all_devices = await client.get_devices()
+        return [d for d in all_devices if d.get("categoryKey") == "CatLitter"]
 
-        """get deviceName by iotId"""
+    def _cache_for(self, iot_id: str) -> tuple[ValueCacher, ValueCacher]:
+        if iot_id not in self._records_caches:
+            self._records_caches[iot_id] = ValueCacher(
+                refresh_after=timedelta(minutes=30), discard_after=timedelta(hours=4),
+            )
+        if iot_id not in self._properties_caches:
+            self._properties_caches[iot_id] = ValueCacher(
+                refresh_after=timedelta(seconds=0), discard_after=timedelta(minutes=30),
+            )
+        return self._records_caches[iot_id], self._properties_caches[iot_id]
+
+    async def _get_device_name(self, iot_id: str) -> str:
+        if iot_id in self._device_names:
+            return self._device_names[iot_id]
         client = await self._get_client()
         devices = await client.get_devices()
-        devices = list(filter(lambda d: d['iotId'] == self.deviceid, devices))
-        if len(devices) == 0:
-            raise NeakasaApiClientCommunicationError("iotId not found in device list")
-        deviceName = devices[0]['deviceName']
-        self._deviceName = deviceName
-        return deviceName
+        for d in devices:
+            if d.get("iotId") == iot_id:
+                name = d.get("deviceName") or iot_id
+                self._device_names[iot_id] = name
+                return name
+        self._device_names[iot_id] = iot_id
+        return iot_id
 
-    async def _getRecords(self):
-        async def fetch():
-            deviceName = await self._getDeviceName()
+    async def _get_records(self, iot_id: str) -> Any:
+        records_cache, _ = self._cache_for(iot_id)
+
+        async def fetch() -> Any:
+            device_name = await self._get_device_name(iot_id)
             client = await self._get_client()
-            return await client.get_records(deviceName)
+            return await client.get_records(device_name)
 
-        return await self._recordsCache.get_or_update(fetch)
+        return await records_cache.get_or_update(fetch)
 
-    async def _getDeviceProperties(self):
-        async def fetch():
+    async def _get_properties(self, iot_id: str) -> Any:
+        _, props_cache = self._cache_for(iot_id)
+
+        async def fetch() -> Any:
             client = await self._get_client()
-            return await client.get_device_properties(self.deviceid)
+            return await client.get_device_properties(iot_id)
 
-        return await self._devicePropertiesCache.get_or_update(fetch)
+        return await props_cache.get_or_update(fetch)
 
-    async def async_update_data(self):
-        """Fetch data from API endpoint.
+    async def _fetch_single_device(self, iot_id: str) -> NeakasaDeviceSnapshot:
+        devicedata = await self._get_properties(iot_id)
+        new_last_use = _get_last_use_date(devicedata)
 
-        This is the place to pre-process the data to lookup tables
-        so entities can quickly look up their data.
-        """
+        records_cache, _ = self._cache_for(iot_id)
+        if self._last_use_dates.get(iot_id) != new_last_use:
+            records_cache.mark_as_stale()
+        self._last_use_dates[iot_id] = new_last_use
+
+        records = await self._get_records(iot_id)
+        device_name = await self._get_device_name(iot_id)
+        return _build_device_snapshot(iot_id, device_name, devicedata, records, new_last_use)
+
+    # ------------------------------------------------------------------
+    # Main update loop
+    # ------------------------------------------------------------------
+
+    async def async_update_data(self) -> NeakasaPayload:
         try:
-            devicedata = await self._getDeviceProperties()
-            newLastUseDate = _get_last_use_date(devicedata)
+            devices = await self._discover_devices()
+            self._device_ids = [d["iotId"] for d in devices]
 
-            if self.lastUseDate != newLastUseDate:
-                self._recordsCache.mark_as_stale()
+            snapshots = await asyncio.gather(
+                *(self._fetch_single_device(iot_id) for iot_id in self._device_ids),
+                return_exceptions=True,
+            )
 
-            self.lastUseDate = newLastUseDate
+            payload: NeakasaPayload = {}
+            for iot_id, result in zip(self._device_ids, snapshots):
+                if isinstance(result, BaseException):
+                    _LOGGER.error("Failed to fetch device %s: %s", iot_id, result)
+                    continue
+                payload[iot_id] = result
 
-            records = await self._getRecords()
-            return _build_api_data(devicedata, records, newLastUseDate)
+            _LOGGER.debug("Coordinator update complete: %d devices", len(payload))
+            return payload
+
         except NeakasaApiClientSessionExpiredError as err:
-            _LOGGER.warning("Session expired for device %s, reconnecting silently: %s", self.devicename, err)
+            _LOGGER.warning("Session expired, reconnecting silently: %s", err)
             try:
                 from . import force_reconnect_api
-                client = await force_reconnect_api(self.hass, self.username, self.password)
-                _LOGGER.info("Successfully reconnected API for device %s", self.devicename)
-                devicedata = await client.get_device_properties(self.deviceid)
-                newLastUseDate = _get_last_use_date(devicedata)
-                if self.lastUseDate != newLastUseDate:
-                    self._recordsCache.mark_as_stale()
-                self.lastUseDate = newLastUseDate
-                records = await self._getRecords()
-                return _build_api_data(devicedata, records, newLastUseDate)
+                await force_reconnect_api(self.hass, self.username, self.password)
+                return await self.async_update_data()
             except Exception as reconnect_err:
-                _LOGGER.error("Failed to reconnect after session expiry for device %s: %s", self.devicename, reconnect_err)
-                raise UpdateFailed("Session expired and reconnection failed: %s" % err) from err
+                _LOGGER.error("Failed to reconnect after session expiry: %s", reconnect_err)
+                raise UpdateFailed("Session expired and reconnection failed") from err
+
         except NeakasaApiClientAuthenticationError as err:
-            _LOGGER.warning("Authentication error for device %s, attempting to reconnect: %s", self.devicename, err)
+            _LOGGER.warning("Authentication error, attempting reconnect: %s", err)
             try:
                 from . import force_reconnect_api
-                client = await force_reconnect_api(self.hass, self.username, self.password)
-                _LOGGER.info("Successfully reconnected API for device %s", self.devicename)
-                devicedata = await client.get_device_properties(self.deviceid)
-                newLastUseDate = _get_last_use_date(devicedata)
-                if self.lastUseDate != newLastUseDate:
-                    self._recordsCache.mark_as_stale()
-                self.lastUseDate = newLastUseDate
-                records = await self._getRecords()
-                return _build_api_data(devicedata, records, newLastUseDate)
+                await force_reconnect_api(self.hass, self.username, self.password)
+                return await self.async_update_data()
             except Exception as reconnect_err:
-                _LOGGER.error("Failed to reconnect API for device %s: %s", self.devicename, reconnect_err)
-                raise UpdateFailed("Authentication failed and reconnection failed: %s" % err) from err
+                _LOGGER.error("Failed to reconnect after auth error: %s", reconnect_err)
+                raise UpdateFailed("Authentication failed and reconnection failed") from err
+
         except NeakasaApiClientCommunicationError as err:
             if "identityId is blank" in str(err):
-                _LOGGER.debug("IdentityId error for device %s, attempting automatic reconnection", self.devicename)
+                _LOGGER.debug("IdentityId error, attempting automatic reconnection")
                 try:
                     from . import clear_shared_api, force_reconnect_api
                     clear_shared_api(self.username, self.password)
-                    client = await force_reconnect_api(self.hass, self.username, self.password)
-                    _LOGGER.debug("Successfully reconnected API for device %s", self.devicename)
-                    devicedata = await client.get_device_properties(self.deviceid)
-                    newLastUseDate = _get_last_use_date(devicedata)
-                    if self.lastUseDate != newLastUseDate:
-                        self._recordsCache.mark_as_stale()
-                    self.lastUseDate = newLastUseDate
-                    records = await self._getRecords()
-                    return _build_api_data(devicedata, records, newLastUseDate)
+                    await force_reconnect_api(self.hass, self.username, self.password)
+                    return await self.async_update_data()
                 except Exception as reconnect_err:
-                    _LOGGER.error("Failed to reconnect after identityId error for device %s: %s", self.devicename, reconnect_err)
-                    raise UpdateFailed("IdentityId error and reconnection failed: %s" % err) from err
-            _LOGGER.error("API connection error for device %s: %s", self.devicename, err)
+                    _LOGGER.error("Failed to reconnect after identityId error: %s", reconnect_err)
+                    raise UpdateFailed("IdentityId error and reconnection failed") from err
+            _LOGGER.error("API communication error: %s", err)
             raise UpdateFailed("Communication error: %s" % err) from err
