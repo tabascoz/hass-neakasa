@@ -526,7 +526,8 @@ class NeakasaAPI:
                     "bind_status": 2,
                     "start_time": int(
                         (
-                            datetime.fromtimestamp(timestamp, tz=UTC) - timedelta(days=7)
+                            datetime.fromtimestamp(timestamp, tz=UTC)
+                            - timedelta(days=7)
                         ).timestamp()
                     ),  # 7 days ago
                     "end_time": timestamp,
@@ -565,7 +566,8 @@ class NeakasaAPI:
                     "bind_status": 2,
                     "start_time": int(
                         (
-                            datetime.fromtimestamp(timestamp, tz=UTC) - timedelta(days=7)
+                            datetime.fromtimestamp(timestamp, tz=UTC)
+                            - timedelta(days=7)
                         ).timestamp()
                     ),  # 7 days ago
                     "end_time": timestamp,
