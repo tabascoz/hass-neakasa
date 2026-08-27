@@ -148,7 +148,8 @@ class NeakasaConfigFlow(ConfigFlow, domain=DOMAIN):
     # ------------------------------------------------------------------
 
     async def async_step_reauth(
-        self, user_input: dict[str, Any] | None = None,  # noqa: ARG002
+        self,
+        user_input: dict[str, Any] | None = None,  # noqa: ARG002
     ) -> ConfigFlowResult:
         """Handle reauth triggered by persistent auth failure."""
         return await self.async_step_reauth_confirm()
