@@ -340,6 +340,15 @@ class NeakasaAPI:
             if "identityId is blank" in error_msg:
                 _LOGGER.debug("IdentityId error detected, marking API as disconnected")
                 self.connected = False
+            # Diagnostic: log the full cloud response so we can distinguish
+            # between token-expiry, rate-limiting, and other auth failures.
+            _LOGGER.info(
+                "IoT cloud error — path=%s code=%s message=%r data_keys=%s",
+                pathname,
+                data["code"],
+                error_msg,
+                list(data.keys()),
+            )
             raise APIConnectionError(f"Error in {pathname}: {error_msg}")
         return data["data"]
 

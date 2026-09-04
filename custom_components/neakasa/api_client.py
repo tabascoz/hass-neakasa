@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
@@ -11,6 +12,8 @@ from .exceptions import (
     NeakasaApiClientCommunicationError,
     NeakasaApiClientSessionExpiredError,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -24,12 +27,32 @@ async def _translate_errors() -> AsyncIterator[None]:
     except APIAuthError as err:
         message = str(err)
         if "session" in message.lower() or "expired" in message.lower():
+            _LOGGER.info(
+                "Error translation: APIAuthError -> SessionExpired"
+                " (matched session/expired in: %r)",
+                message,
+            )
             raise NeakasaApiClientSessionExpiredError(message) from err
+        _LOGGER.info(
+            "Error translation: APIAuthError -> AuthenticationError"
+            " (no session keyword in: %r)",
+            message,
+        )
         raise NeakasaApiClientAuthenticationError(message) from err
     except APIConnectionError as err:
         message = str(err)
         if "auth" in message.lower():
+            _LOGGER.info(
+                "Error translation: APIConnectionError -> SessionExpired"
+                " (matched auth in: %r)",
+                message,
+            )
             raise NeakasaApiClientSessionExpiredError(message) from err
+        _LOGGER.info(
+            "Error translation: APIConnectionError -> CommunicationError"
+            " (no auth keyword in: %r)",
+            message,
+        )
         raise NeakasaApiClientCommunicationError(message) from err
 
 

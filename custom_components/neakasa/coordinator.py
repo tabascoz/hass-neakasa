@@ -448,7 +448,17 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
 
         except NeakasaApiClientSessionExpiredError as err:
             _LOGGER.warning("Session expired, reconnecting silently: %s", err)
-            return await self._reconnect_and_retry()
+            try:
+                payload = await self._reconnect_and_retry()
+            except Exception as exc:
+                _LOGGER.warning("Reconnect+retry FAILED after session expiry: %s", exc)
+                raise
+            else:
+                _LOGGER.info(
+                    "Reconnect+retry SUCCEEDED after session expiry — %d devices",
+                    len(payload),
+                )
+                return payload
 
         except NeakasaApiClientAuthenticationError as err:
             _LOGGER.warning("Authentication error, attempting reconnect: %s", err)
