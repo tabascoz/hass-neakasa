@@ -7,7 +7,7 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/tabascoz/hass-neakasa/issues",
   "requirements": [],
-  "version": "1.4.0"
+  "version": "1.4.1"
 }
 
 
