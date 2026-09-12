@@ -191,7 +191,7 @@ FAKE_DEVICE_PROPERTIES: dict[str, Any] = {
     "bucketStatus": {"value": 0},
     "room_of_bin": {"value": 0},
     "Sand": {"value": {"percent": 65, "level": 2}},
-    "NetWorkStatus": {"value": {"WiFiRSSI": -55}},
+    "NetWorkStatus": {"value": {"WiFi_RSSI": -55}},
     "catLeft": {"value": {"stayTime": 120}, "time": 1730000000},
 }
 

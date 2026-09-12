@@ -184,7 +184,7 @@ def _build_device_snapshot(
         auto_force_init=_property_value(devicedata, "autoForceInit", 0) == 1,
         b_intrpt_range_det=_property_value(devicedata, "bIntrptRangeDet", 0) == 1,
         sand_level_percent=_to_int(sand.get("percent", 0)),
-        wifi_rssi=_to_int(network.get("WiFiRSSI", 0)),
+        wifi_rssi=_to_int(network.get("WiFi_RSSI", 0)),
         bucket_status=_to_int(_property_value(devicedata, "bucketStatus", 0)),
         room_of_bin=_to_int(_property_value(devicedata, "room_of_bin", 0)),
         sand_level_state=_to_int(sand.get("level", 0)),
