@@ -1,0 +1,132 @@
+{
+    "title": "Neakasa",
+    "config": {
+        "step": {
+            "user": {
+                "title": "Neakasa Configuration",
+                "description": "Les informations d'identification seront utilisées pour récupérer les données du serveur.",
+                "data": {
+                    "username": "Utilisateur",
+                    "password": "Mot de passe"
+                }
+            },
+            "reauth_confirm": {
+                "title": "Ré-authenticate Neakasa",
+                "description": "Vos identifiants Neakasa pour {username} ne sont plus valides. Saisissez de nouveaux identifiants pour rétablir l'accès.",
+                "data": {
+                    "username": "Utilisateur",
+                    "password": "Mot de passe"
+                }
+            },
+            "reconfigure": {
+                "title": "Reconfiguration de Neakasa",
+                "description": "Mettez à jour les identifiants de votre compte Neakasa..",
+                "data": {
+                    "username": "Utilisateur",
+                    "password": "Mot de passe"
+                }
+            }
+        },
+        "abort": {
+            "authentication": "Erreur lors de l'authentification.",
+            "connection": "Erreur lors de la connexion.",
+            "unknown": "Erreur inconnue"
+            "no_devices_found": "Aucune litière trouvée pour ce compte.",
+            "reauth_successful": "Ré-authentication réussie.",
+            "reconfigure_successful": "Reconfiguration réussie."
+        },
+        "error": {
+            "authentication": "Utilisateur ou mot de passe invalide.",
+            "connection": "Impossible de se connecter aux serveurs de Neakasa. Vérifiez votre réseau.",
+            "no_devices_found": "Aucune litière trouvée pour ce compte."
+        }
+    },
+    "entity": {
+        "button": {
+            "clean": {
+                "name": "Nettoyer"
+            },
+            "level": {
+                "name": "Niveller"
+            }
+        },
+        "binary_sensor": {
+            "bin_full": {
+                "name": "Poubelle pleine"
+            }
+        },
+        "sensor": {
+            "cat_sensor": {
+                "name": "Chat {name}"
+            },
+            "sand_percent": {
+                "name": "Niveau de litière"
+            },
+            "wifi_rssi": {
+                "name": "WiFi RSSI"
+            },
+            "stay_time": {
+                "name": "Temps d'utilisation"
+            },
+            "last_usage": {
+                "name": "Dernière utilisation"
+            },
+            "current_status": {
+                "name": "État de l'appareil",
+                "state": {
+                    "idle": "Inactive",
+                    "cleaning": "Nettoyage",
+                    "leveling": "Nivellement",
+                    "flipover": "À l'envers",
+                    "cat_present": "Chat présent",
+                    "paused": "En pause",
+                    "side_bin_locking_panels_missing": "Panneaux de verrouillage des bacs latéraux manquants",
+                    "cleaning_interrupted": "Nettoyage interrompu"
+                }
+            },
+            "sand_state": {
+                "name": "Litière",
+                "state": {
+                    "insufficient": "Insuffisante",
+                    "moderate": "Normale",
+                    "sufficient": "Suffisante",
+                    "overfilled": "En excédent"
+                }
+            },
+            "bin_state": {
+                "name": "Poubelle",
+                "state": {
+                    "normal": "Normale",
+                    "full": "Pleine",
+                    "missing": "Manquante"
+                }
+            }
+        },
+        "switch": {
+            "auto_clean": {
+                "name": "Nettoyage automatique"
+            },
+            "young_cat_mode": {
+                "name": "Mode chaton"
+            },
+            "child_lock": {
+                "name": "Sécurité enfant"
+            },
+            "auto_bury": {
+                "name": "Couverture automatique"
+            },
+            "auto_level": {
+                "name": "Mise à niveau automatique"
+            },
+            "silent_mode": {
+                "name": "Mode silencieux"
+            },
+            "auto_recovery": {
+                "name": "Restauration automatique"
+            },
+            "unstoppable_cycle": {
+                "name": "Cycle non arrêtable"
+            }
+        }
+    }
+}
