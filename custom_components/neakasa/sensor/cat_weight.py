@@ -68,11 +68,13 @@ class NeakasaCatWeightSensor(CoordinatorEntity[NeakasaCoordinator], SensorEntity
         return [r for r in snap.record_list if r.get("cat_id") == self._cat_id]
 
     @property
-    def native_value(self) -> float:
-        """Return the most recent weight measurement."""
+    def native_value(self) -> float | None:
+        """Return the latest weight, or None when there is no recent record."""
         records = self._records
         if not records:
-            return 0
+            # The cloud only returns recent records, so a cat that has not used the box
+            # lately has none; 0 kg would be recorded as a real measurement.
+            return None
         return records[0]["weight"]
 
     @property

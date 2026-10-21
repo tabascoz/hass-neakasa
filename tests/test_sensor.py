@@ -263,7 +263,7 @@ def test_cat_weight_no_records() -> None:
         cat_id="cat-1",
     )
     sensor.hass = MagicMock()
-    assert sensor.native_value == 0
+    assert sensor.native_value is None
     assert sensor.extra_state_attributes == {}
     assert sensor.translation_key == "cat_sensor"
     assert sensor.translation_placeholders == {"name": "Whiskers"}
@@ -294,7 +294,7 @@ def test_cat_weight_no_matching_cat() -> None:
         cat_id="cat-99",
     )
     sensor.hass = MagicMock()
-    assert sensor.native_value == 0
+    assert sensor.native_value is None
     assert sensor.extra_state_attributes == {}
 
 
@@ -307,7 +307,7 @@ def test_cat_weight_missing_snapshot() -> None:
         cat_id="cat-1",
     )
     sensor.hass = MagicMock()
-    assert sensor.native_value == 0
+    assert sensor.native_value is None
     assert sensor._records == []
 
 
