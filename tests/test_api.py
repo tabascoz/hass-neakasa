@@ -532,6 +532,32 @@ async def test_iot_request_generic_error(mock_iot_client) -> None:
         await api._iot_request("1.0.4", "/thing/properties/get", {})
 
 
+async def test_iot_request_identity_refresh_recovers(mock_iot_client) -> None:
+    api = _make_api()
+    api.connected = True
+    api._sid = "sid-1"
+    api._iot_token = "aged-token"
+    api.apiGatewayEndpoint = "api.example.com"
+    with (
+        patch.object(
+            api,
+            "_parse_iot_response",
+            side_effect=[
+                {"code": 500, "message": "identityId is blank"},
+                {"code": 200, "data": {"ok": 1}},
+            ],
+        ),
+        patch.object(
+            api, "_get_iot_token_by_sid", new=AsyncMock(return_value="fresh-token")
+        ) as refresh,
+    ):
+        result = await api._iot_request("1.0.5", "/thing/service/invoke", {})
+    assert result == {"ok": 1}
+    refresh.assert_awaited_once_with("sid-1")
+    assert api._iot_token == "fresh-token"
+    assert api.connected is True
+
+
 async def test_get_product_list() -> None:
     api = _make_api()
     with patch.object(

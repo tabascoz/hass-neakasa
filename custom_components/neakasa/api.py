@@ -35,6 +35,8 @@ class NeakasaAPI:
         self._language = language
         self._session = session
         self._encryption = APIEncryption()
+        self._sid: str = ""
+        self._iot_token: str = ""
         self.connected: bool = False
 
     async def connect(
@@ -313,27 +315,15 @@ class NeakasaAPI:
     async def _iot_request(
         self, api_ver: str, pathname: str, params: dict[str, Any]
     ) -> Any:
-        """Internal helper: build + send + parse an IoT Gateway request."""
+        """Send an IoT Gateway request, refreshing an aged token once."""
         if not self.connected:
             raise APIConnectionError("api not connected")
-        cfg = IoTConfig(
-            app_key=self._app_key,
-            app_secret=self._app_secret,
-            domain=self.apiGatewayEndpoint,
-        )
-        client = AliyunIoTClient(cfg, self._session)
-        body: dict[str, Any] = {
-            "id": AliyunIoTClient.generate_nonce(),
-            "version": "1.0",
-            "request": {
-                "apiVer": api_ver,
-                "language": self._language,
-                "iotToken": self._iot_token,
-            },
-            "params": params,
-        }
-        resp = await client.do_request(pathname, body)
-        data = self._parse_iot_response(resp, pathname)
+        data = await self._iot_request_once(api_ver, pathname, params)
+        if self._identity_is_blank(data):
+            # The gateway resolves the device through the token, so a blank
+            # identityId means the iotToken aged out -- refresh it and retry once.
+            await self._refresh_iot_token()
+            data = await self._iot_request_once(api_ver, pathname, params)
         if data["code"] != 200:
             error_msg = data.get("message", "unknown error")
             # Check for specific authentication errors
@@ -351,6 +341,43 @@ class NeakasaAPI:
             )
             raise APIConnectionError(f"Error in {pathname}: {error_msg}")
         return data["data"]
+
+    async def _iot_request_once(
+        self, api_ver: str, pathname: str, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Build and send a single IoT Gateway request."""
+        cfg = IoTConfig(
+            app_key=self._app_key,
+            app_secret=self._app_secret,
+            domain=self.apiGatewayEndpoint,
+        )
+        client = AliyunIoTClient(cfg, self._session)
+        body: dict[str, Any] = {
+            "id": AliyunIoTClient.generate_nonce(),
+            "version": "1.0",
+            "request": {
+                "apiVer": api_ver,
+                "language": self._language,
+                "iotToken": self._iot_token,
+            },
+            "params": params,
+        }
+        resp = await client.do_request(pathname, body)
+        return self._parse_iot_response(resp, pathname)
+
+    def _identity_is_blank(self, data: dict[str, Any]) -> bool:
+        """Return whether the gateway failed to resolve a device identity."""
+        return (
+            data.get("code") != 200
+            and "identityid is blank" in str(data.get("message", "")).lower()
+        )
+
+    async def _refresh_iot_token(self) -> None:
+        """Exchange the current session for a fresh IoT token."""
+        try:
+            self._iot_token = await self._get_iot_token_by_sid(self._sid)
+        except APIAuthError as err:
+            _LOGGER.warning("IoT token refresh rejected: %s", err)
 
     async def get_product_list(self) -> Any:
         """Fetch the product list for the account."""
