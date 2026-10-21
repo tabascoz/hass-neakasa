@@ -9,6 +9,9 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      releases: write
     steps:
       - name: Checkout the repository
         uses: actions/checkout@v4
