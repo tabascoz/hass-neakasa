@@ -17,19 +17,24 @@ The Neakasa Home Assistant Custom Integration allows you to integrate your Neaka
 
 ### Currently supported devices
 - Neakasa M1 (Cat Litter Box)
-- Neakasa Riko (Wet Meal Feeder) — read-only status
+- Neakasa Riko (Wet Meal Feeder) — read-write (beta, `v1.5.0-beta1`)
 
 #### Riko (wet meal feeder) features
 |Type|Name|Notes|
 |----|------|-----|
 |Sensor|Food level / Water level|ordinal hopper/tank state|
 |Sensor|Battery|% and level from `pwrStatus`|
+|Sensor|WiFi RSS|network signal strength in dB (closer to 0 = stronger); diagnostic — off by default|
 |Sensor|Device label|the friendly name set in the Neakasa app (all devices)|
 |Binary sensor|Cover missing|`bCoverAbsent`|
+|Button|Feed now|dispense one wet meal via `feedOnce` (`{food, water}`)|
+|Number|Food quantity|default portion per feed, 3–15 g (writes `defFdCfg.food`)|
+|Number|Water ratio|water-to-food ratio, 1–5 (writes `defFdCfg.water`)|
 
-> Riko controls that need a writable nested config (`defFdCfg`, `freshMgrCfg`,
-> `deepCleanCfg`) and the dispense action are intentionally not exposed yet —
-> their write schema/service identifiers are unconfirmed (see `docs/riko-protocol.md`).
+> The Feed now button uses the currently configured food/water defaults; setting
+> either number writes the device's `defFdCfg` via read-modify-write and preserves
+> `mixMin`. Other Riko controls (`freshMgrCfg`, `deepCleanCfg`, audio/display) are
+> not exposed yet — see `docs/riko-protocol.md`.
 
 ### Currently supported features
 #### Sensors:
@@ -67,6 +72,23 @@ The Neakasa Home Assistant Custom Integration allows you to integrate your Neaka
 |Unstoppable cycle|yes|
 
 ## Installation
+
+### Getting the Riko beta (`v1.5.0-beta1`)
+
+The Riko support ships as a pre-release. To try it before the next stable release:
+
+**Via HACS** — in Home Assistant, open HACS → *Integrations* → Neakasa → use the
+version selector to download `v1.5.0-beta1`, then restart Home Assistant.
+
+**Manually (zip)** — download this beta's asset and extract into your config dir:
+
+```bash
+wget https://github.com/tabascoz/hass-neakasa/releases/download/v1.5.0-beta1/neakasa.zip
+mkdir -p custom_components/neakasa && unzip neakasa.zip -d custom_components/neakasa && rm neakasa.zip
+```
+
+Then restart Home Assistant. The beta is opt-in — HACS keeps the latest *stable*
+(`v1.4.2`) as default until `v1.5.0` is released; pick the beta explicitly to test Riko now.
 
 ### HACS (recommended)
 
