@@ -52,10 +52,10 @@ FAKE_RIKO_PROPERTIES: dict = {
 def _riko_snapshot() -> object:
     return _build_pet_feeder_snapshot(
         "riko-001",
-        "WL03002G26270011577",
+        "SERIALFAKE0000000000000",
         FAKE_RIKO_PROPERTIES,
         "a1ccEqBcaUD",
-        "Catchief",
+        "TestLabel",
     )
 
 
@@ -72,7 +72,7 @@ def test_build_pet_feeder_reads_levels() -> None:
     assert snap.fresh_mgr_on is True
     assert snap.deep_clean_on is False
     assert snap.wifi_rssi == -43
-    assert snap.label == "Catchief"
+    assert snap.label == "TestLabel"
     assert snap.default_food_g == 5
     assert snap.default_water_ratio == 2
     assert snap.feed_cfg == {"mixMin": 1, "water": 2, "food": 5}
@@ -145,7 +145,7 @@ def test_label_native_value() -> None:
     sensor = NeakasaLabelSensor(
         _mock_coord(_riko_snapshot()), FAKE_DEVICE_INFO, "riko-001"
     )
-    assert sensor.native_value == "Catchief"
+    assert sensor.native_value == "TestLabel"
     assert sensor.translation_key == "device_label"
 
 
@@ -250,7 +250,7 @@ async def test_async_get_device_schema_reports_missing_keys(
 ) -> None:
     coordinator = _make_coordinator(hass, mock_config_entry)
     snap = _build_pet_feeder_snapshot(
-        "riko-1", "serial", FAKE_RIKO_PROPERTIES, "a1ccEqBcaUD", "Catchief"
+        "riko-1", "serial", FAKE_RIKO_PROPERTIES, "a1ccEqBcaUD", "TestLabel"
     )
     coordinator.data = {"riko-1": snap}
     client = AsyncMock()
