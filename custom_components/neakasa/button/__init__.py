@@ -39,9 +39,12 @@ async def async_setup_entry(
             _seen_iot_ids.add(iot_id)
             device_info = DeviceInfo(
                 name=snap.device_name,
+                model=snap.product_key or None,
                 manufacturer="Neakasa",
                 identifiers={(DOMAIN, iot_id)},
             )
+            if snap.category_key == "petFeeder":
+                continue
             entities.extend(
                 [
                     NeakasaCleanButton(coordinator, device_info, iot_id),

@@ -11,7 +11,7 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api_manager import clear_shared_api, force_reconnect_api, get_shared_api
-from .const import _LOGGER, DOMAIN
+from .const import _LOGGER, DOMAIN, SUPPORTED_CATEGORY_KEYS
 from .exceptions import (
     NeakasaApiClientAuthenticationError,
     NeakasaApiClientCommunicationError,
@@ -53,8 +53,19 @@ class NeakasaDeviceSnapshot:
     b_intrpt_range_det: bool
     stay_time: int
     last_use: int
+    label: str = ""
     cat_list: list[dict[str, Any]] = field(default_factory=list)
     record_list: list[dict[str, Any]] = field(default_factory=list)
+    # Riko (petFeeder) fields — unused by CatLitter devices.
+    food_level_state: int = 0
+    water_level_state: int = 0
+    battery_percent: int | None = None
+    battery_level: int | None = None
+    bowl_present: bool = False
+    cover_absent: bool = False
+    desiccant_days_left: int | None = None
+    fresh_mgr_on: bool = False
+    deep_clean_on: bool = False
 
 
 NeakasaPayload = dict[str, NeakasaDeviceSnapshot]
@@ -115,6 +126,7 @@ def _build_device_snapshot(
     *,
     category_key: str = "CatLitter",
     product_key: str = "",
+    label: str = "",
 ) -> NeakasaDeviceSnapshot:
     """Build a :class:`NeakasaDeviceSnapshot` without crashing on missing keys."""
     if not isinstance(devicedata, dict):
@@ -122,12 +134,18 @@ def _build_device_snapshot(
     if not isinstance(records, dict):
         records = {}
 
-    sand = _property_value(devicedata, "Sand", {})
-    if not isinstance(sand, dict):
-        sand = {}
     network = _property_value(devicedata, "NetWorkStatus", {})
     if not isinstance(network, dict):
         network = {}
+
+    if category_key == "petFeeder":
+        return _build_pet_feeder_snapshot(
+            iot_id, device_name, devicedata, product_key, label
+        )
+
+    sand = _property_value(devicedata, "Sand", {})
+    if not isinstance(sand, dict):
+        sand = {}
     cat_left_value = _property_value(devicedata, "catLeft", {})
     if not isinstance(cat_left_value, dict):
         cat_left_value = {}
@@ -174,6 +192,7 @@ def _build_device_snapshot(
         device_name=device_name,
         category_key=category_key,
         product_key=product_key,
+        label=label,
         bin_full=_property_value(devicedata, "binFullWaitReset", 0) == 1,
         clean_cfg=clean_cfg,
         young_cat_mode=_property_value(devicedata, "youngCatMode", 0) == 1,
@@ -192,6 +211,74 @@ def _build_device_snapshot(
         last_use=new_last_use,
         cat_list=_to_list(records.get("cat_list")),
         record_list=_to_list(records.get("record_list")),
+    )
+
+
+def _build_pet_feeder_snapshot(
+    iot_id: str,
+    device_name: str,
+    devicedata: dict[str, Any],
+    product_key: str,
+    label: str,
+) -> NeakasaDeviceSnapshot:
+    """Build a snapshot for a Riko wet-meal feeder (categoryKey ``petFeeder``)."""
+    network = _property_value(devicedata, "NetWorkStatus", {})
+    if not isinstance(network, dict):
+        network = {}
+    pwr = _property_value(devicedata, "pwrStatus", {})
+    if not isinstance(pwr, dict):
+        pwr = {}
+    bowl = _property_value(devicedata, "bowlStatus", {})
+    if not isinstance(bowl, dict):
+        bowl = {}
+    fresh_mgr = _property_value(devicedata, "freshMgrCfg", {})
+    if not isinstance(fresh_mgr, dict):
+        fresh_mgr = {}
+    deep_clean = _property_value(devicedata, "deepCleanCfg", {})
+    if not isinstance(deep_clean, dict):
+        deep_clean = {}
+    device_state = _property_value(devicedata, "deviceState", {})
+    if not isinstance(device_state, dict):
+        device_state = {}
+
+    battery_percent_raw = pwr.get("batPercentage")
+    desiccant_raw = _property_value(devicedata, "leftDrierDays")
+
+    return NeakasaDeviceSnapshot(
+        iot_id=iot_id,
+        device_name=device_name,
+        category_key="petFeeder",
+        product_key=product_key,
+        label=label,
+        bin_full=False,
+        clean_cfg={},
+        sand_level_state=0,
+        sand_level_percent=0,
+        bucket_status=_to_int(device_state.get("state", 0)),
+        room_of_bin=0,
+        young_cat_mode=False,
+        child_lock=_property_value(devicedata, "childLockOnOff", 0) == 1,
+        auto_bury=False,
+        auto_level=False,
+        silent_mode=False,
+        wifi_rssi=_to_int(network.get("WiFi_RSSI", 0)),
+        auto_force_init=False,
+        b_intrpt_range_det=False,
+        stay_time=0,
+        last_use=0,
+        food_level_state=_to_int(_property_value(devicedata, "foodLvl", 0)),
+        water_level_state=_to_int(_property_value(devicedata, "waterLvl", 0)),
+        battery_percent=(
+            None if battery_percent_raw is None else _to_int(battery_percent_raw)
+        ),
+        battery_level=(
+            None if pwr.get("batLevel") is None else _to_int(pwr.get("batLevel"))
+        ),
+        bowl_present=_to_int(bowl.get("bBowlIn", 0)) == 1,
+        cover_absent=_property_value(devicedata, "bCoverAbsent", 0) == 1,
+        desiccant_days_left=(None if desiccant_raw is None else _to_int(desiccant_raw)),
+        fresh_mgr_on=_to_int(fresh_mgr.get("bOnOff", 0)) == 1,
+        deep_clean_on=_to_int(deep_clean.get("bOnOff", 0)) == 1,
     )
 
 
@@ -219,20 +306,15 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
     # 3. Register the platform in ``__init__.py``
     # 4. Add translations keys to ``translations/en.json``
 
-    KNOWN_PRODUCT_TYPES: ClassVar[set[str]] = {
-        "CatLitter",
-        # "WashingMachine",   # future
-        # "CatFoodFeeder",    # future
-        # "CatWaterFountain", # future
-    }
+    KNOWN_PRODUCT_TYPES: ClassVar[frozenset[str]] = SUPPORTED_CATEGORY_KEYS
 
     _SERVICE_DISPATCH: ClassVar[dict[str, dict[str, str]]] = {
         "CatLitter": {
             "clean": "clean_now",
             "level": "sand_leveling",
         },
-        # "WashingMachine": {"start": "start_wash", "pause": "pause_wash"},
-        # "CatFoodFeeder": {"dispense": "dispense_food"},
+        # Riko service identifiers are not yet confirmed against the live device;
+        # add them here once a capture dump names the invoke identifier.
     }
 
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
@@ -317,6 +399,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                 self._device_meta[iot_id] = {
                     "category_key": cat_key,
                     "product_key": d.get("productKey", ""),
+                    "label": d.get("nickName", ""),
                 }
                 matched.append(d)
         return matched
@@ -373,8 +456,24 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
     async def _fetch_single_device(self, iot_id: str) -> NeakasaDeviceSnapshot:
         """Fetch properties and records for one device, building a snapshot."""
         devicedata = await self._get_properties(iot_id)
-        new_last_use = _get_last_use_date(devicedata)
+        meta = self._device_meta.get(iot_id, {})
+        category_key = meta.get("category_key", "CatLitter")
 
+        if category_key != "CatLitter":
+            # Only litter boxes expose cat/usage records; feeders do not.
+            device_name = await self._get_device_name(iot_id)
+            return _build_device_snapshot(
+                iot_id,
+                device_name,
+                devicedata,
+                {},
+                0,
+                category_key=category_key,
+                product_key=meta.get("product_key", ""),
+                label=meta.get("label", ""),
+            )
+
+        new_last_use = _get_last_use_date(devicedata)
         records_cache, _ = self._cache_for(iot_id)
         if self._last_use_dates.get(iot_id) != new_last_use:
             records_cache.mark_as_stale()
@@ -382,15 +481,15 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
 
         records = await self._get_records(iot_id)
         device_name = await self._get_device_name(iot_id)
-        meta = self._device_meta.get(iot_id, {})
         return _build_device_snapshot(
             iot_id,
             device_name,
             devicedata,
             records,
             new_last_use,
-            category_key=meta.get("category_key", "CatLitter"),
+            category_key=category_key,
             product_key=meta.get("product_key", ""),
+            label=meta.get("label", ""),
         )
 
     # ------------------------------------------------------------------

@@ -53,6 +53,9 @@
         "binary_sensor": {
             "bin_full": {
                 "name": "Abfalleimer voll"
+            },
+            "cover_absent": {
+                "name": "Abdeckung fehlt"
             }
         },
         "sensor": {
@@ -100,6 +103,18 @@
                     "full": "Bitte leeren",
                     "missing": "Nicht in Position"
                 }
+            },
+            "device_label": {
+                "name": "Gerät Label"
+            },
+            "food_level": {
+                "name": "Level Food"
+            },
+            "water_level": {
+                "name": "Level Water"
+            },
+            "battery": {
+                "name": "Akku"
             }
         },
         "switch": {

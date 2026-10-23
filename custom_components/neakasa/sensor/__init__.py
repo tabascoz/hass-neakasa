@@ -15,13 +15,17 @@ if TYPE_CHECKING:
     from ..data import NeakasaConfigEntry
 
 from ..const import DOMAIN
+from .battery import NeakasaBatterySensor
 from .bin_state import NeakasaBinStateSensor
 from .bucket_status import NeakasaBucketStatusSensor
 from .cat_weight import NeakasaCatWeightSensor
+from .food_level import NeakasaFoodLevelSensor
+from .label import NeakasaLabelSensor
 from .last_usage import NeakasaLastUsageSensor
 from .sand_level_state import NeakasaSandLevelStateSensor
 from .sand_percent import NeakasaSandPercentSensor
 from .stay_time import NeakasaStayTimeSensor
+from .water_level import NeakasaWaterLevelSensor
 from .wifi_rssi import NeakasaWifiRssiSensor
 
 
@@ -45,9 +49,21 @@ async def async_setup_entry(
             _seen_iot_ids.add(iot_id)
             device_info = DeviceInfo(
                 name=snap.device_name,
+                model=snap.product_key or None,
                 manufacturer="Neakasa",
                 identifiers={(DOMAIN, iot_id)},
             )
+            entities.append(NeakasaLabelSensor(coordinator, device_info, iot_id))
+            if snap.category_key == "petFeeder":
+                entities.extend(
+                    [
+                        NeakasaFoodLevelSensor(coordinator, device_info, iot_id),
+                        NeakasaWaterLevelSensor(coordinator, device_info, iot_id),
+                        NeakasaBatterySensor(coordinator, device_info, iot_id),
+                        NeakasaWifiRssiSensor(coordinator, device_info, iot_id),
+                    ]
+                )
+                continue
             entities.extend(
                 [
                     NeakasaSandPercentSensor(coordinator, device_info, iot_id),

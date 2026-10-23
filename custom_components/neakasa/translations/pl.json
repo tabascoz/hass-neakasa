@@ -53,6 +53,9 @@
         "binary_sensor": {
             "bin_full": {
                 "name": "Pojemnik pełen"
+            },
+            "cover_absent": {
+                "name": "Abda missing"
             }
         },
         "sensor": {
@@ -100,6 +103,18 @@
                     "full": "Pełny",
                     "missing": "Poza podstawą"
                 }
+            },
+            "device_label": {
+                "name": "Etyquette device"
+            },
+            "food_level": {
+                "name": "Level food"
+            },
+            "water_level": {
+                "name": "Level water"
+            },
+            "battery": {
+                "name": "Akku"
             }
         },
         "switch": {

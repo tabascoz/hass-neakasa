@@ -17,6 +17,19 @@ The Neakasa Home Assistant Custom Integration allows you to integrate your Neaka
 
 ### Currently supported devices
 - Neakasa M1 (Cat Litter Box)
+- Neakasa Riko (Wet Meal Feeder) — read-only status
+
+#### Riko (wet meal feeder) features
+|Type|Name|Notes|
+|----|------|-----|
+|Sensor|Food level / Water level|ordinal hopper/tank state|
+|Sensor|Battery|% and level from `pwrStatus`|
+|Sensor|Device label|the friendly name set in the Neakasa app (all devices)|
+|Binary sensor|Cover missing|`bCoverAbsent`|
+
+> Riko controls that need a writable nested config (`defFdCfg`, `freshMgrCfg`,
+> `deepCleanCfg`) and the dispense action are intentionally not exposed yet —
+> their write schema/service identifiers are unconfirmed (see `docs/riko-protocol.md`).
 
 ### Currently supported features
 #### Sensors:
