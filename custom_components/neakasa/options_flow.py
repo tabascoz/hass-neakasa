@@ -10,6 +10,9 @@ from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
 )
 
 
@@ -26,6 +29,11 @@ class NeakasaOptionsFlow(OptionsFlow):
 
         current_scan = self.config_entry.options.get("scan_interval", 60)
         current_lookback = self.config_entry.options.get("stats_lookback_days", 7)
+        current_probe = self.config_entry.options.get("debug_probe", "none")
+        current_identifier = self.config_entry.options.get(
+            "debug_invoke_identifier", ""
+        )
+        current_args = self.config_entry.options.get("debug_invoke_args_json", "{}")
 
         schema = vol.Schema(
             {
@@ -53,6 +61,26 @@ class NeakasaOptionsFlow(OptionsFlow):
                         mode=NumberSelectorMode.BOX,
                     ),
                 ),
+                vol.Required(
+                    "debug_probe",
+                    default=current_probe,
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            "none",
+                            "set_fresh_mgr_on",
+                            "set_fresh_mgr_off",
+                            "set_deep_clean_on",
+                            "set_deep_clean_off",
+                            "invoke_custom",
+                        ],
+                        mode=SelectSelectorMode.DROPDOWN,
+                    ),
+                ),
+                vol.Optional(
+                    "debug_invoke_identifier", default=current_identifier
+                ): str,
+                vol.Optional("debug_invoke_args_json", default=current_args): str,
             },
         )
 

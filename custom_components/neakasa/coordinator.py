@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -11,7 +12,15 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api_manager import clear_shared_api, force_reconnect_api, get_shared_api
-from .const import _LOGGER, DOMAIN
+from .const import (
+    _LOGGER,
+    DOMAIN,
+    FEED_FOOD_MAX_G,
+    FEED_FOOD_MIN_G,
+    FEED_WATER_RATIO_MAX,
+    FEED_WATER_RATIO_MIN,
+    SUPPORTED_CATEGORY_KEYS,
+)
 from .exceptions import (
     NeakasaApiClientAuthenticationError,
     NeakasaApiClientCommunicationError,
@@ -26,7 +35,59 @@ if TYPE_CHECKING:
 
     from .api_client import NeakasaApiClient
 
+CATLITTER_EXPECTED_KEYS: tuple[str, ...] = (
+    "binFullWaitReset",
+    "cleanCfg",
+    "youngCatMode",
+    "childLockOnOff",
+    "autoBury",
+    "autoLevel",
+    "silentMode",
+    "autoForceInit",
+    "bIntrptRangeDet",
+    "Sand",
+    "NetWorkStatus",
+    "bucketStatus",
+    "room_of_bin",
+    "catLeft",
+)
+
+PETFEEDER_EXPECTED_KEYS: tuple[str, ...] = (
+    "foodLvl",
+    "waterLvl",
+    "pwrStatus",
+    "bowlStatus",
+    "bCoverAbsent",
+    "leftDrierDays",
+    "deviceState",
+    "freshMgrCfg",
+    "deepCleanCfg",
+    "NetWorkStatus",
+)
+
+_missing_keys_logged: set[str] = set()
 _clean_cfg_warnings_logged: set[str] = set()
+
+
+def _log_missing_property_keys(
+    iot_id: str, devicedata: dict[str, Any], expected: tuple[str, ...]
+) -> list[str]:
+    """
+    Log (once per device) any *expected* wire keys absent from *devicedata*.
+
+    Returns the missing keys so callers can use them for diagnostics. A future
+    firmware or feature change is self-announcing instead of silently defaulting.
+    """
+    missing = [key for key in expected if key not in devicedata]
+    if missing and iot_id not in _missing_keys_logged:
+        _missing_keys_logged.add(iot_id)
+        _LOGGER.debug(
+            "Neakasa device %s missing keys %s (available: %s)",
+            iot_id,
+            missing,
+            list(devicedata.keys()),
+        )
+    return missing
 
 
 @dataclass
@@ -53,8 +114,22 @@ class NeakasaDeviceSnapshot:
     b_intrpt_range_det: bool
     stay_time: int
     last_use: int
+    label: str = ""
     cat_list: list[dict[str, Any]] = field(default_factory=list)
     record_list: list[dict[str, Any]] = field(default_factory=list)
+    # Riko (petFeeder) fields — unused by CatLitter devices.
+    food_level_state: int = 0
+    water_level_state: int = 0
+    battery_percent: int | None = None
+    battery_level: int | None = None
+    bowl_present: bool = False
+    cover_absent: bool = False
+    desiccant_days_left: int | None = None
+    fresh_mgr_on: bool = False
+    deep_clean_on: bool = False
+    default_food_g: int = 0
+    default_water_ratio: int = 0
+    feed_cfg: dict[str, Any] | None = None
 
 
 NeakasaPayload = dict[str, NeakasaDeviceSnapshot]
@@ -115,6 +190,7 @@ def _build_device_snapshot(
     *,
     category_key: str = "CatLitter",
     product_key: str = "",
+    label: str = "",
 ) -> NeakasaDeviceSnapshot:
     """Build a :class:`NeakasaDeviceSnapshot` without crashing on missing keys."""
     if not isinstance(devicedata, dict):
@@ -122,12 +198,18 @@ def _build_device_snapshot(
     if not isinstance(records, dict):
         records = {}
 
-    sand = _property_value(devicedata, "Sand", {})
-    if not isinstance(sand, dict):
-        sand = {}
     network = _property_value(devicedata, "NetWorkStatus", {})
     if not isinstance(network, dict):
         network = {}
+
+    if category_key == "petFeeder":
+        return _build_pet_feeder_snapshot(
+            iot_id, device_name, devicedata, product_key, label
+        )
+
+    sand = _property_value(devicedata, "Sand", {})
+    if not isinstance(sand, dict):
+        sand = {}
     cat_left_value = _property_value(devicedata, "catLeft", {})
     if not isinstance(cat_left_value, dict):
         cat_left_value = {}
@@ -135,32 +217,9 @@ def _build_device_snapshot(
     if not isinstance(clean_cfg, dict):
         clean_cfg = {}
 
-    expected_keys = (
-        "binFullWaitReset",
-        "cleanCfg",
-        "youngCatMode",
-        "childLockOnOff",
-        "autoBury",
-        "autoLevel",
-        "silentMode",
-        "autoForceInit",
-        "bIntrptRangeDet",
-        "Sand",
-        "NetWorkStatus",
-        "bucketStatus",
-        "room_of_bin",
-        "catLeft",
-    )
-    missing_keys = [key for key in expected_keys if key not in devicedata]
-    if missing_keys:
-        _LOGGER.debug(
-            "Neakasa device %s missing keys %s (available: %s)",
-            iot_id,
-            missing_keys,
-            list(devicedata.keys()),
-        )
+    _log_missing_property_keys(iot_id, devicedata, CATLITTER_EXPECTED_KEYS)
 
-    if "cleanCfg" in missing_keys and iot_id not in _clean_cfg_warnings_logged:
+    if "cleanCfg" not in devicedata and iot_id not in _clean_cfg_warnings_logged:
         _clean_cfg_warnings_logged.add(iot_id)
         _LOGGER.warning(
             "Neakasa device %s did not report the 'cleanCfg' property; "
@@ -174,6 +233,7 @@ def _build_device_snapshot(
         device_name=device_name,
         category_key=category_key,
         product_key=product_key,
+        label=label,
         bin_full=_property_value(devicedata, "binFullWaitReset", 0) == 1,
         clean_cfg=clean_cfg,
         young_cat_mode=_property_value(devicedata, "youngCatMode", 0) == 1,
@@ -192,6 +252,81 @@ def _build_device_snapshot(
         last_use=new_last_use,
         cat_list=_to_list(records.get("cat_list")),
         record_list=_to_list(records.get("record_list")),
+    )
+
+
+def _build_pet_feeder_snapshot(
+    iot_id: str,
+    device_name: str,
+    devicedata: dict[str, Any],
+    product_key: str,
+    label: str,
+) -> NeakasaDeviceSnapshot:
+    """Build a snapshot for a Riko wet-meal feeder (categoryKey ``petFeeder``)."""
+    _log_missing_property_keys(iot_id, devicedata, PETFEEDER_EXPECTED_KEYS)
+    network = _property_value(devicedata, "NetWorkStatus", {})
+    if not isinstance(network, dict):
+        network = {}
+    pwr = _property_value(devicedata, "pwrStatus", {})
+    if not isinstance(pwr, dict):
+        pwr = {}
+    bowl = _property_value(devicedata, "bowlStatus", {})
+    if not isinstance(bowl, dict):
+        bowl = {}
+    fresh_mgr = _property_value(devicedata, "freshMgrCfg", {})
+    if not isinstance(fresh_mgr, dict):
+        fresh_mgr = {}
+    deep_clean = _property_value(devicedata, "deepCleanCfg", {})
+    if not isinstance(deep_clean, dict):
+        deep_clean = {}
+    def_fd = _property_value(devicedata, "defFdCfg", {})
+    if not isinstance(def_fd, dict):
+        def_fd = {}
+    device_state = _property_value(devicedata, "deviceState", {})
+    if not isinstance(device_state, dict):
+        device_state = {}
+
+    battery_percent_raw = pwr.get("batPercentage")
+    desiccant_raw = _property_value(devicedata, "leftDrierDays")
+
+    return NeakasaDeviceSnapshot(
+        iot_id=iot_id,
+        device_name=device_name,
+        category_key="petFeeder",
+        product_key=product_key,
+        label=label,
+        bin_full=False,
+        clean_cfg={},
+        sand_level_state=0,
+        sand_level_percent=0,
+        bucket_status=_to_int(device_state.get("state", 0)),
+        room_of_bin=0,
+        young_cat_mode=False,
+        child_lock=_property_value(devicedata, "childLockOnOff", 0) == 1,
+        auto_bury=False,
+        auto_level=False,
+        silent_mode=False,
+        wifi_rssi=_to_int(network.get("WiFi_RSSI", 0)),
+        auto_force_init=False,
+        b_intrpt_range_det=False,
+        stay_time=0,
+        last_use=0,
+        food_level_state=_to_int(_property_value(devicedata, "foodLvl", 0)),
+        water_level_state=_to_int(_property_value(devicedata, "waterLvl", 0)),
+        battery_percent=(
+            None if battery_percent_raw is None else _to_int(battery_percent_raw)
+        ),
+        battery_level=(
+            None if pwr.get("batLevel") is None else _to_int(pwr.get("batLevel"))
+        ),
+        bowl_present=_to_int(bowl.get("bBowlIn", 0)) == 1,
+        cover_absent=_property_value(devicedata, "bCoverAbsent", 1) == 0,
+        desiccant_days_left=(None if desiccant_raw is None else _to_int(desiccant_raw)),
+        fresh_mgr_on=_to_int(fresh_mgr.get("bOnOff", 0)) == 1,
+        deep_clean_on=_to_int(deep_clean.get("bOnOff", 0)) == 1,
+        default_food_g=_to_int(def_fd.get("food", 0)),
+        default_water_ratio=_to_int(def_fd.get("water", 0)),
+        feed_cfg=dict(def_fd) if def_fd else None,
     )
 
 
@@ -219,20 +354,16 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
     # 3. Register the platform in ``__init__.py``
     # 4. Add translations keys to ``translations/en.json``
 
-    KNOWN_PRODUCT_TYPES: ClassVar[set[str]] = {
-        "CatLitter",
-        # "WashingMachine",   # future
-        # "CatFoodFeeder",    # future
-        # "CatWaterFountain", # future
-    }
+    KNOWN_PRODUCT_TYPES: ClassVar[frozenset[str]] = SUPPORTED_CATEGORY_KEYS
 
     _SERVICE_DISPATCH: ClassVar[dict[str, dict[str, str]]] = {
         "CatLitter": {
             "clean": "clean_now",
             "level": "sand_leveling",
         },
-        # "WashingMachine": {"start": "start_wash", "pause": "pause_wash"},
-        # "CatFoodFeeder": {"dispense": "dispense_food"},
+        "petFeeder": {
+            "feed": "feed_once",  # /thing/service/invoke identifier feedOnce
+        },
     }
 
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
@@ -276,6 +407,51 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         snap = self.device_snapshot(iot_id)
         return snap.category_key if snap else "unknown"
 
+    async def async_get_device_schema(self) -> dict[str, Any]:
+        """
+        Return a per-device wire schema for diagnostics/discovery.
+
+        Exposes the raw property keys each device reports and the command/service
+        schema from the product list, so missing Riko capabilities are visible in
+        a shareable diagnostics download rather than guessed.
+        """
+        client = await self._get_client()
+        products = await client.get_product_list()
+        product_keys = {
+            snap.product_key for snap in (self.data or {}).values() if snap.product_key
+        }
+        schema_by_product: dict[str, Any] = {}
+        if isinstance(products, list):
+            for entry in products:
+                if (
+                    not isinstance(entry, dict)
+                    or entry.get("productKey") not in product_keys
+                ):
+                    continue
+                schema_by_product[entry["productKey"]] = {
+                    "categoryKey": entry.get("categoryKey"),
+                    "productName": entry.get("name"),
+                }
+
+        devices: dict[str, Any] = {}
+        for iot_id, snap in (self.data or {}).items():
+            devicedata = await self._get_properties(iot_id)
+            if not isinstance(devicedata, dict):
+                devicedata = {}
+            expected = (
+                CATLITTER_EXPECTED_KEYS
+                if snap.category_key != "petFeeder"
+                else PETFEEDER_EXPECTED_KEYS
+            )
+            missing = [key for key in expected if key not in devicedata]
+            devices[iot_id] = {
+                "category_key": snap.category_key,
+                "product_key": snap.product_key,
+                "property_keys": sorted(devicedata),
+                "missing_expected_keys": missing,
+            }
+        return {"devices": devices, "products": schema_by_product}
+
     async def set_property(self, iot_id: str, key: str, value: Any) -> None:
         """Set a device property via the Aliyun IoT gateway."""
         client = await self._get_client()
@@ -297,6 +473,111 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                 msg = f"Unknown service: {service}"
                 raise ValueError(msg)
 
+    async def feed_once(self, iot_id: str, food_g: int, water_ratio: int) -> None:
+        """
+        Dispense one Riko wet meal with the given portion and water ratio.
+
+        Confirmed wire shape: ``/thing/service/invoke`` identifier ``feedOnce`` with
+        args ``{food, water}``. Validated against the product UI ranges (3-15 g food,
+        1-5 water-to-food ratio) before the network call.
+        """
+        self._validate_feed(food_g, water_ratio)
+        client = await self._get_client()
+        await client.invoke_service(
+            iot_id, "feedOnce", {"food": food_g, "water": water_ratio}
+        )
+
+    def _validate_feed(self, food_g: int, water_ratio: int) -> None:
+        """Raise ValueError if a feed portion/ratio is outside product bounds."""
+        if not FEED_FOOD_MIN_G <= food_g <= FEED_FOOD_MAX_G:
+            msg = (
+                f"Food portion out of range: {food_g}g "
+                f"(expected {FEED_FOOD_MIN_G}-{FEED_FOOD_MAX_G})"
+            )
+            raise ValueError(msg)
+        if not FEED_WATER_RATIO_MIN <= water_ratio <= FEED_WATER_RATIO_MAX:
+            msg = (
+                f"Water ratio out of range: {water_ratio} "
+                f"(expected {FEED_WATER_RATIO_MIN}-{FEED_WATER_RATIO_MAX})"
+            )
+            raise ValueError(msg)
+
+    async def set_feed_config(self, iot_id: str, food_g: int, water_ratio: int) -> None:
+        """
+        Write the Riko default feed portion/water ratio via read-modify-write.
+
+        ``defFdCfg`` is a nested config object; we merge new ``food``/``water`` into
+        the current value (preserving ``mixMin`` and any other keys), then write it
+        back through the gateway. Confirmed: this updates ``defFdCfg.value`` on the
+        live device.
+        """
+        self._validate_feed(food_g, water_ratio)
+        snap = self.data.get(iot_id) if self.data else None
+        current_mix_min = 1
+        if snap is not None and getattr(snap, "feed_cfg", None):
+            current_mix_min = _to_int(snap.feed_cfg.get("mixMin", 1))
+        payload = {"food": food_g, "water": water_ratio, "mixMin": current_mix_min}
+        client = await self._get_client()
+        await client.set_device_properties(iot_id, {"defFdCfg": payload})
+        if snap is not None:
+            snap.default_food_g = food_g
+            snap.default_water_ratio = water_ratio
+            snap.feed_cfg = payload
+            self.async_set_updated_data(self.data)
+
+    # ------------------------------------------------------------------
+    # Debug probe (opt-in via options flow; never affects normal polling)
+    # ------------------------------------------------------------------
+
+    _DEBUG_PROBES: ClassVar[dict[str, tuple[str, str]]] = {
+        "set_fresh_mgr_on": ("freshMgrCfg", "on"),
+        "set_fresh_mgr_off": ("freshMgrCfg", "off"),
+        "set_deep_clean_on": ("deepCleanCfg", "on"),
+        "set_deep_clean_off": ("deepCleanCfg", "off"),
+    }
+
+    async def _run_debug_probe(self, payload: NeakasaPayload) -> None:
+        """
+        Exercise a user-selected write action once and log the wire result.
+
+        Opt-in only (``debug_probe`` option); errors are swallowed so a
+        mis-guessed identifier can never break polling. Runs a single time per
+        selected probe rather than on every update.
+        """
+        probe = self.config_entry.options.get("debug_probe", "none")
+        if probe == "none" or not payload:
+            return
+        if getattr(self, "_debug_probe_done", None) == (probe, self._device_ids):
+            return
+
+        target_iot_id = next(iter(payload), "")
+        client = await self._get_client()
+        try:
+            match probe:
+                case "invoke_custom":
+                    identifier = str(
+                        self.config_entry.options.get("debug_invoke_identifier", "")
+                    )
+                    raw_args = self.config_entry.options.get(
+                        "debug_invoke_args_json", "{}"
+                    )
+                    args = json.loads(raw_args) if isinstance(raw_args, str) else {}
+                    _LOGGER.debug("Debug probe invoke: %s %s", identifier, args)
+                    await client.invoke_service(target_iot_id, identifier, args)
+                case _ if probe in self._DEBUG_PROBES:
+                    wire_key, mode = self._DEBUG_PROBES[probe]
+                    current = await client.get_device_properties(target_iot_id)
+                    cfg = dict(_property_value(current, wire_key, {}) or {})
+                    cfg["bOnOff"] = 1 if mode == "on" else 0
+                    _LOGGER.debug("Debug probe set %s=%s", wire_key, cfg)
+                    await client.set_device_properties(target_iot_id, {wire_key: cfg})
+                case _:
+                    return
+        except NeakasaApiClientError as err:
+            _LOGGER.warning("Debug probe '%s' failed (ignored): %s", probe, err)
+        else:
+            self._debug_probe_done = (probe, list(self._device_ids))
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -317,6 +598,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                 self._device_meta[iot_id] = {
                     "category_key": cat_key,
                     "product_key": d.get("productKey", ""),
+                    "label": d.get("nickName", ""),
                 }
                 matched.append(d)
         return matched
@@ -373,8 +655,24 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
     async def _fetch_single_device(self, iot_id: str) -> NeakasaDeviceSnapshot:
         """Fetch properties and records for one device, building a snapshot."""
         devicedata = await self._get_properties(iot_id)
-        new_last_use = _get_last_use_date(devicedata)
+        meta = self._device_meta.get(iot_id, {})
+        category_key = meta.get("category_key", "CatLitter")
 
+        if category_key != "CatLitter":
+            # Only litter boxes expose cat/usage records; feeders do not.
+            device_name = await self._get_device_name(iot_id)
+            return _build_device_snapshot(
+                iot_id,
+                device_name,
+                devicedata,
+                {},
+                0,
+                category_key=category_key,
+                product_key=meta.get("product_key", ""),
+                label=meta.get("label", ""),
+            )
+
+        new_last_use = _get_last_use_date(devicedata)
         records_cache, _ = self._cache_for(iot_id)
         if self._last_use_dates.get(iot_id) != new_last_use:
             records_cache.mark_as_stale()
@@ -382,15 +680,15 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
 
         records = await self._get_records(iot_id)
         device_name = await self._get_device_name(iot_id)
-        meta = self._device_meta.get(iot_id, {})
         return _build_device_snapshot(
             iot_id,
             device_name,
             devicedata,
             records,
             new_last_use,
-            category_key=meta.get("category_key", "CatLitter"),
+            category_key=category_key,
             product_key=meta.get("product_key", ""),
+            label=meta.get("label", ""),
         )
 
     # ------------------------------------------------------------------
@@ -444,6 +742,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                 payload[iot_id] = result
 
             _LOGGER.debug("Coordinator update complete: %d devices", len(payload))
+            await self._run_debug_probe(payload)
             return payload  # noqa: TRY300
 
         except NeakasaApiClientSessionExpiredError as err:

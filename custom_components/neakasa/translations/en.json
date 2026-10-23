@@ -31,14 +31,14 @@
             "authentication": "Error during authentication.",
             "unknown": "Unknown Error",
             "connection": "Error during connection.",
-            "no_devices_found": "No Neakasa CatLitter devices found on this account.",
+            "no_devices_found": "No supported Neakasa devices found on this account.",
             "reauth_successful": "Reauthentication successful.",
             "reconfigure_successful": "Reconfiguration successful."
         },
         "error": {
             "authentication": "Invalid username or password.",
             "connection": "Could not connect to Neakasa servers. Check your network.",
-            "no_devices_found": "No CatLitter devices found for this account."
+            "no_devices_found": "No supported Neakasa devices found for this account."
         }
     },
     "entity": {
@@ -48,11 +48,25 @@
             },
             "level": {
                 "name": "Level"
+            },
+            "feed_now": {
+                "name": "Feed now"
+            }
+        },
+        "number": {
+            "food_grams": {
+                "name": "Food quantity"
+            },
+            "water_ratio": {
+                "name": "Water ratio"
             }
         },
         "binary_sensor": {
             "bin_full": {
                 "name": "Garbage can full"
+            },
+            "cover_absent": {
+                "name": "Cover missing"
             }
         },
         "sensor": {
@@ -100,6 +114,18 @@
                     "full": "Garbage can full",
                     "missing": "Not in position"
                 }
+            },
+            "device_label": {
+                "name": "Device label"
+            },
+            "food_level": {
+                "name": "Food level"
+            },
+            "water_level": {
+                "name": "Water level"
+            },
+            "battery": {
+                "name": "Battery"
             }
         },
         "switch": {

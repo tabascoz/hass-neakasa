@@ -412,6 +412,7 @@ async def test_discover_devices_filters_known_products(
     assert coordinator._device_meta["iot-1"] == {
         "category_key": "CatLitter",
         "product_key": "pk1",
+        "label": "",
     }
 
 

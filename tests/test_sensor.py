@@ -9,6 +9,7 @@ from custom_components.neakasa.sensor import async_setup_entry
 from custom_components.neakasa.sensor.bin_state import NeakasaBinStateSensor
 from custom_components.neakasa.sensor.bucket_status import NeakasaBucketStatusSensor
 from custom_components.neakasa.sensor.cat_weight import NeakasaCatWeightSensor
+from custom_components.neakasa.sensor.label import NeakasaLabelSensor
 from custom_components.neakasa.sensor.last_usage import NeakasaLastUsageSensor
 from custom_components.neakasa.sensor.sand_level_state import (
     NeakasaSandLevelStateSensor,
@@ -450,8 +451,9 @@ async def test_sensor_async_setup_entry(hass) -> None:
 
     await async_setup_entry(hass, config_entry, collected.extend)
 
-    assert len(collected) == 8  # 7 base sensors + 1 cat sensor
+    assert len(collected) == 9  # 8 base sensors (incl. label) + 1 cat sensor
     assert any(isinstance(e, NeakasaCatWeightSensor) for e in collected)
+    assert any(isinstance(e, NeakasaLabelSensor) for e in collected)
 
     # Second discovery pass with a new device adds its entities only
     second_snap = _cat_weight_snap([])
@@ -459,8 +461,8 @@ async def test_sensor_async_setup_entry(hass) -> None:
     rediscover = coordinator.async_add_listener.call_args.args[0]
     before = len(collected)
     rediscover()
-    assert len(collected) == before + 7
+    assert len(collected) == before + 8
 
     # Third pass with unchanged data adds nothing
     rediscover()
-    assert len(collected) == before + 7
+    assert len(collected) == before + 8

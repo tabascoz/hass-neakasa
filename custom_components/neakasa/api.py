@@ -441,6 +441,12 @@ class NeakasaAPI:
         """Trigger sand leveling."""
         await self._invoke_service(iot_id, "sandLeveling", {"bStartLeveling": 1})
 
+    async def invoke_service(
+        self, iot_id: str, identifier: str, args: dict[str, Any]
+    ) -> None:
+        """Invoke an arbitrary device service by wire identifier."""
+        await self._invoke_service(iot_id, identifier, args)
+
     # ------------------------------------------------------------------
     # Neakasa web API (pure aiohttp — no Aliyun SDK)
     # ------------------------------------------------------------------

@@ -11,7 +11,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import NeakasaAPI
 from .api_client import NeakasaApiClient
-from .const import _LOGGER, DOMAIN
+from .const import _LOGGER, DOMAIN, SUPPORTED_CATEGORY_KEYS
 from .exceptions import (
     NeakasaApiClientAuthenticationError,
     NeakasaApiClientCommunicationError,
@@ -33,8 +33,10 @@ async def _validate_credentials(
         await api.connect(username, password)
         client = NeakasaApiClient(api)
         devices = await client.get_devices()
-        cat_devices = [d for d in devices if d.get("categoryKey") == "CatLitter"]
-        if not cat_devices:
+        supported = [
+            d for d in devices if d.get("categoryKey") in SUPPORTED_CATEGORY_KEYS
+        ]
+        if not supported:
             return None, "no_devices_found"
         return client, None  # noqa: TRY300
     except NeakasaApiClientAuthenticationError:

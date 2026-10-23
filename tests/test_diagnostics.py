@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.components.diagnostics import REDACTED
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
@@ -32,6 +32,9 @@ def _make_entry() -> MagicMock:
     coordinator.username = "user@example.com"
     coordinator.device_ids = ["iot-001"]
     coordinator.data = {}
+    coordinator.async_get_device_schema = AsyncMock(
+        return_value={"devices": {}, "products": {}}
+    )
     entry.runtime_data.coordinator = coordinator
     return entry
 
@@ -49,6 +52,7 @@ async def test_async_get_config_entry_diagnostics() -> None:
     assert result["coordinator"]["username"] == REDACTED
     assert result["coordinator"]["device_ids"] == REDACTED
     assert result["coordinator"]["data_device_count"] == 0
+    assert result["schema"] == {"devices": {}, "products": {}}
 
 
 async def test_async_get_config_entry_diagnostics_no_data() -> None:

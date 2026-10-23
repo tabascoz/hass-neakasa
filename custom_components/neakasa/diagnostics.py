@@ -38,6 +38,7 @@ async def async_get_config_entry_diagnostics(
                 "device_ids": coordinator.device_ids,
                 "data_device_count": len(coordinator.data) if coordinator.data else 0,
             },
+            "schema": await coordinator.async_get_device_schema(),
         },
         TO_REDACT,
     )
