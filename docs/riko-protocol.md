@@ -62,6 +62,10 @@ Every property is wrapped as `{"time": <ms>, "value": …}` like CatLitter.
 - `feedNow`, `doFeed`, `startFeed`, `manualFeed` → "service not found" (not real commands).
 - `feedCtrl` exists but is a different (auto-feed control) command, times out with these args — not used for manual feed.
 
+## Default feed config write path (implemented)
+
+The Feed Now button dispenses using the device's current `defFdCfg` defaults. Two HA **number** entities (food grams 3–15, water ratio 1–5) set those defaults via read-modify-write of the nested `defFdCfg` object (`coordinator.set_feed_config`, preserving `mixMin`). Confirmed on live device that writing `{"defFdCfg": {food, water, mixMin}}` through `/thing/properties/set` updates the value.
+
 ## Naming note
 
 The current `NeakasaCoordinator._get_device_name()` returns wire `deviceName`.

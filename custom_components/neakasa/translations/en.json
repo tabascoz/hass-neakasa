@@ -53,6 +53,14 @@
                 "name": "Feed now"
             }
         },
+        "number": {
+            "food_grams": {
+                "name": "Food quantity"
+            },
+            "water_ratio": {
+                "name": "Water ratio"
+            }
+        },
         "binary_sensor": {
             "bin_full": {
                 "name": "Garbage can full"

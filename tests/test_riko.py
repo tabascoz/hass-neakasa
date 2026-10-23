@@ -45,6 +45,7 @@ FAKE_RIKO_PROPERTIES: dict = {
     "freshMgrCfg": {"value": {"monitorTime": 4, "leftOverTTH": 20, "bOnOff": 1}},
     "deepCleanCfg": {"value": {"bOnOff": 0, "cleanState": 0}},
     "childLockOnOff": {"value": 0},
+    "defFdCfg": {"value": {"mixMin": 1, "water": 2, "food": 5}},
     "NetWorkStatus": {"value": {"WiFi_RSSI": -43, "WiFi_Name": "MIAU"}},
 }
 
@@ -73,6 +74,9 @@ def test_build_pet_feeder_reads_levels() -> None:
     assert snap.deep_clean_on is False
     assert snap.wifi_rssi == -43
     assert snap.label == "Catchief"
+    assert snap.default_food_g == 5
+    assert snap.default_water_ratio == 2
+    assert snap.feed_cfg == {"mixMin": 1, "water": 2, "food": 5}
 
 
 def test_build_pet_feeder_missing_optional_keys() -> None:
@@ -284,3 +288,25 @@ async def test_feed_once_validates_and_invokes() -> None:
         await coordinator.feed_once("riko-1", food_g=20, water_ratio=2)
     with pytest.raises(ValueError):
         await coordinator.feed_once("riko-1", food_g=5, water_ratio=9)
+
+
+async def test_set_feed_config_preserves_mixmin(
+    hass: HomeAssistant, mock_config_entry: MagicMock
+) -> None:
+    """Writing new food/water preserves the existing mixMin and updates snapshot."""
+    coordinator = _make_coordinator(hass, mock_config_entry)
+    snap = _riko_snapshot()
+    coordinator.data = {"riko-1": snap}
+    client = AsyncMock()
+    client.set_device_properties = AsyncMock()
+    coordinator._get_client = AsyncMock(return_value=client)
+
+    await coordinator.set_feed_config("riko-1", food_g=8, water_ratio=3)
+    client.set_device_properties.assert_awaited_once_with(
+        "riko-1", {"defFdCfg": {"food": 8, "water": 3, "mixMin": 1}}
+    )
+    assert snap.default_food_g == 8
+    assert snap.default_water_ratio == 3
+
+    with pytest.raises(ValueError):
+        await coordinator.set_feed_config("riko-1", food_g=0, water_ratio=3)

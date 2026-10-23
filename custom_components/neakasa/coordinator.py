@@ -12,7 +12,15 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api_manager import clear_shared_api, force_reconnect_api, get_shared_api
-from .const import _LOGGER, DOMAIN, SUPPORTED_CATEGORY_KEYS
+from .const import (
+    _LOGGER,
+    DOMAIN,
+    FEED_FOOD_MAX_G,
+    FEED_FOOD_MIN_G,
+    FEED_WATER_RATIO_MAX,
+    FEED_WATER_RATIO_MIN,
+    SUPPORTED_CATEGORY_KEYS,
+)
 from .exceptions import (
     NeakasaApiClientAuthenticationError,
     NeakasaApiClientCommunicationError,
@@ -121,6 +129,7 @@ class NeakasaDeviceSnapshot:
     deep_clean_on: bool = False
     default_food_g: int = 0
     default_water_ratio: int = 0
+    feed_cfg: dict[str, Any] | None = None
 
 
 NeakasaPayload = dict[str, NeakasaDeviceSnapshot]
@@ -317,6 +326,7 @@ def _build_pet_feeder_snapshot(
         deep_clean_on=_to_int(deep_clean.get("bOnOff", 0)) == 1,
         default_food_g=_to_int(def_fd.get("food", 0)),
         default_water_ratio=_to_int(def_fd.get("water", 0)),
+        feed_cfg=dict(def_fd) if def_fd else None,
     )
 
 
@@ -470,14 +480,40 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         args ``{food, water}``. Validated against the product UI ranges (3–15 g food,
         1–5 water-to-food ratio) before the network call.
         """
-        if not 3 <= food_g <= 15:
-            msg = f"Food portion out of range: {food_g}g (expected 3-15)"
-            raise ValueError(msg)
-        if not 1 <= water_ratio <= 5:
-            msg = f"Water ratio out of range: {water_ratio} (expected 1-5)"
-            raise ValueError(msg)
+        self._validate_feed(food_g, water_ratio)
         client = await self._get_client()
         await client.invoke_service(iot_id, "feedOnce", {"food": food_g, "water": water_ratio})
+
+    def _validate_feed(self, food_g: int, water_ratio: int) -> None:
+        """Raise ValueError if a feed portion/ratio is outside product bounds."""
+        if not FEED_FOOD_MIN_G <= food_g <= FEED_FOOD_MAX_G:
+            msg = f"Food portion out of range: {food_g}g (expected {FEED_FOOD_MIN_G}-{FEED_FOOD_MAX_G})"
+            raise ValueError(msg)
+        if not FEED_WATER_RATIO_MIN <= water_ratio <= FEED_WATER_RATIO_MAX:
+            msg = f"Water ratio out of range: {water_ratio} (expected {FEED_WATER_RATIO_MIN}-{FEED_WATER_RATIO_MAX})"
+            raise ValueError(msg)
+
+    async def set_feed_config(self, iot_id: str, food_g: int, water_ratio: int) -> None:
+        """Write the Riko default feed portion/water ratio via read-modify-write.
+
+        ``defFdCfg`` is a nested config object; we merge new ``food``/``water`` into
+        the current value (preserving ``mixMin`` and any other keys), then write it
+        back through the gateway. Confirmed: this updates ``defFdCfg.value`` on the
+        live device.
+        """
+        self._validate_feed(food_g, water_ratio)
+        snap = self.data.get(iot_id) if self.data else None
+        current_mix_min = 1
+        if snap is not None and getattr(snap, "feed_cfg", None):
+            current_mix_min = _to_int(snap.feed_cfg.get("mixMin", 1))
+        payload = {"food": food_g, "water": water_ratio, "mixMin": current_mix_min}
+        client = await self._get_client()
+        await client.set_device_properties(iot_id, {"defFdCfg": payload})
+        if snap is not None:
+            snap.default_food_g = food_g
+            snap.default_water_ratio = water_ratio
+            snap.feed_cfg = payload
+            self.async_set_updated_data(self.data)
 
     # ------------------------------------------------------------------
     # Debug probe (opt-in via options flow; never affects normal polling)
