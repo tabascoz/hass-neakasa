@@ -1,6 +1,6 @@
 # Neakasa Riko — wet meal feeder wire protocol
 
-Captured live from account `tabascoz@gmail.com` on branch `riko-wet-feeder`.
+Captured live from a personal account on branch `riko-wet-feeder` (identifiers below are anonymized).
 Source of truth: `/uc/listBindingByAccount`, `/thing/productInfo/getByAppKey`
 and `/thing/properties/get` over the Aliyun IoT gateway (`app_key=32715650`).
 
@@ -16,12 +16,12 @@ M1 litter box — only its `categoryKey`, `productKey` and property set differ.
 | `productName` | `Riko` |
 | `productKey` | `a1ccEqBcaUD` |
 | `netType` | `NET_WIFI` (same IoT gateway pattern as CatLitter) |
-| `deviceName` (wire) | `WL03002G26270011577` — machine serial, **not** user-facing |
-| `nickName` | `Catchief` — the user-facing label lives here, not in `deviceName` |
+| `deviceName` (wire) | `WL…SERIAL` — machine serial, **not** user-facing |
+| `nickName` | `PETLABEL` — the user-facing label lives here, not in `deviceName` |
 
-> Contrast: the M1's wire `deviceName` is `JQ01909G25430010947` with
-> `nickName` `Caixinha`. The existing `_get_device_name()` reads `deviceName`,
-> so for Riko it would surface the serial. See `docs/riko-protocol.md` §Naming.
+> Contrast: the M1's wire `deviceName` is a machine serial with its own `nickName`.
+> The existing `_get_device_name()` reads `deviceName`, so for Riko it would surface
+> the serial. See §Naming.
 
 ## Property set (`/thing/properties/get`)
 
@@ -54,7 +54,7 @@ Every property is wrapped as `{"time": <ms>, "value": …}` like CatLitter.
 | `displayCfg` | `{displayParam, displayType, bDisplayIfIdle}` | front display config |
 | `childLockOnOff` | int 0/1 | child lock — same key as CatLitter → reuse switch |
 
-## Confirmed write mechanism (live-tested against Riko iotId 4TQDtRLglc…)
+## Confirmed write mechanism (live-tested against a real Riko)
 
 `/thing/service/invoke`, **identifier `feedOnce`**, args `{food: <grams>, water: <ratio>}`.
 - Verified: `feedOnce {food:5, water:2}` → gateway OK; `defFdCfg` updated to `{food:5,water:2,mixMin:1}` and `bowlStatus.curWeight` rose 67→139 g (a meal was dispensed).
@@ -70,4 +70,4 @@ The Feed Now button dispenses using the device's current `defFdCfg` defaults. Tw
 
 The current `NeakasaCoordinator._get_device_name()` returns wire `deviceName`.
 For Riko that is the machine serial. Prefer `nickName` when present so HA shows
-"Catchief". Decide whether to change this globally or per-product.
+the user-facing label. Decide whether to change this globally or per-product.
