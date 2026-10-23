@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -26,7 +27,59 @@ if TYPE_CHECKING:
 
     from .api_client import NeakasaApiClient
 
+CATLITTER_EXPECTED_KEYS: tuple[str, ...] = (
+    "binFullWaitReset",
+    "cleanCfg",
+    "youngCatMode",
+    "childLockOnOff",
+    "autoBury",
+    "autoLevel",
+    "silentMode",
+    "autoForceInit",
+    "bIntrptRangeDet",
+    "Sand",
+    "NetWorkStatus",
+    "bucketStatus",
+    "room_of_bin",
+    "catLeft",
+)
+
+PETFEEDER_EXPECTED_KEYS: tuple[str, ...] = (
+    "foodLvl",
+    "waterLvl",
+    "pwrStatus",
+    "bowlStatus",
+    "bCoverAbsent",
+    "leftDrierDays",
+    "deviceState",
+    "freshMgrCfg",
+    "deepCleanCfg",
+    "NetWorkStatus",
+)
+
+_missing_keys_logged: set[str] = set()
 _clean_cfg_warnings_logged: set[str] = set()
+
+
+def _log_missing_property_keys(
+    iot_id: str, devicedata: dict[str, Any], expected: tuple[str, ...]
+) -> list[str]:
+    """
+    Log (once per device) any *expected* wire keys absent from *devicedata*.
+
+    Returns the missing keys so callers can use them for diagnostics. A future
+    firmware or feature change is self-announcing instead of silently defaulting.
+    """
+    missing = [key for key in expected if key not in devicedata]
+    if missing and iot_id not in _missing_keys_logged:
+        _missing_keys_logged.add(iot_id)
+        _LOGGER.debug(
+            "Neakasa device %s missing keys %s (available: %s)",
+            iot_id,
+            missing,
+            list(devicedata.keys()),
+        )
+    return missing
 
 
 @dataclass
@@ -153,32 +206,9 @@ def _build_device_snapshot(
     if not isinstance(clean_cfg, dict):
         clean_cfg = {}
 
-    expected_keys = (
-        "binFullWaitReset",
-        "cleanCfg",
-        "youngCatMode",
-        "childLockOnOff",
-        "autoBury",
-        "autoLevel",
-        "silentMode",
-        "autoForceInit",
-        "bIntrptRangeDet",
-        "Sand",
-        "NetWorkStatus",
-        "bucketStatus",
-        "room_of_bin",
-        "catLeft",
-    )
-    missing_keys = [key for key in expected_keys if key not in devicedata]
-    if missing_keys:
-        _LOGGER.debug(
-            "Neakasa device %s missing keys %s (available: %s)",
-            iot_id,
-            missing_keys,
-            list(devicedata.keys()),
-        )
+    _log_missing_property_keys(iot_id, devicedata, CATLITTER_EXPECTED_KEYS)
 
-    if "cleanCfg" in missing_keys and iot_id not in _clean_cfg_warnings_logged:
+    if "cleanCfg" not in devicedata and iot_id not in _clean_cfg_warnings_logged:
         _clean_cfg_warnings_logged.add(iot_id)
         _LOGGER.warning(
             "Neakasa device %s did not report the 'cleanCfg' property; "
@@ -222,6 +252,7 @@ def _build_pet_feeder_snapshot(
     label: str,
 ) -> NeakasaDeviceSnapshot:
     """Build a snapshot for a Riko wet-meal feeder (categoryKey ``petFeeder``)."""
+    _log_missing_property_keys(iot_id, devicedata, PETFEEDER_EXPECTED_KEYS)
     network = _property_value(devicedata, "NetWorkStatus", {})
     if not isinstance(network, dict):
         network = {}
@@ -358,6 +389,51 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         snap = self.device_snapshot(iot_id)
         return snap.category_key if snap else "unknown"
 
+    async def async_get_device_schema(self) -> dict[str, Any]:
+        """
+        Return a per-device wire schema for diagnostics/discovery.
+
+        Exposes the raw property keys each device reports and the command/service
+        schema from the product list, so missing Riko capabilities are visible in
+        a shareable diagnostics download rather than guessed.
+        """
+        client = await self._get_client()
+        products = await client.get_product_list()
+        product_keys = {
+            snap.product_key for snap in (self.data or {}).values() if snap.product_key
+        }
+        schema_by_product: dict[str, Any] = {}
+        if isinstance(products, list):
+            for entry in products:
+                if (
+                    not isinstance(entry, dict)
+                    or entry.get("productKey") not in product_keys
+                ):
+                    continue
+                schema_by_product[entry["productKey"]] = {
+                    "categoryKey": entry.get("categoryKey"),
+                    "productName": entry.get("name"),
+                }
+
+        devices: dict[str, Any] = {}
+        for iot_id, snap in (self.data or {}).items():
+            devicedata = await self._get_properties(iot_id)
+            if not isinstance(devicedata, dict):
+                devicedata = {}
+            expected = (
+                CATLITTER_EXPECTED_KEYS
+                if snap.category_key != "petFeeder"
+                else PETFEEDER_EXPECTED_KEYS
+            )
+            missing = [key for key in expected if key not in devicedata]
+            devices[iot_id] = {
+                "category_key": snap.category_key,
+                "product_key": snap.product_key,
+                "property_keys": sorted(devicedata),
+                "missing_expected_keys": missing,
+            }
+        return {"devices": devices, "products": schema_by_product}
+
     async def set_property(self, iot_id: str, key: str, value: Any) -> None:
         """Set a device property via the Aliyun IoT gateway."""
         client = await self._get_client()
@@ -378,6 +454,59 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             case _:
                 msg = f"Unknown service: {service}"
                 raise ValueError(msg)
+
+    # ------------------------------------------------------------------
+    # Debug probe (opt-in via options flow; never affects normal polling)
+    # ------------------------------------------------------------------
+
+    _DEBUG_PROBES: ClassVar[dict[str, tuple[str, str]]] = {
+        "set_fresh_mgr_on": ("freshMgrCfg", "on"),
+        "set_fresh_mgr_off": ("freshMgrCfg", "off"),
+        "set_deep_clean_on": ("deepCleanCfg", "on"),
+        "set_deep_clean_off": ("deepCleanCfg", "off"),
+    }
+
+    async def _run_debug_probe(self, payload: NeakasaPayload) -> None:
+        """
+        Exercise a user-selected write action once and log the wire result.
+
+        Opt-in only (``debug_probe`` option); errors are swallowed so a
+        mis-guessed identifier can never break polling. Runs a single time per
+        selected probe rather than on every update.
+        """
+        probe = self.config_entry.options.get("debug_probe", "none")
+        if probe == "none" or not payload:
+            return
+        if getattr(self, "_debug_probe_done", None) == (probe, self._device_ids):
+            return
+
+        target_iot_id = next(iter(payload), "")
+        client = await self._get_client()
+        try:
+            match probe:
+                case "invoke_custom":
+                    identifier = str(
+                        self.config_entry.options.get("debug_invoke_identifier", "")
+                    )
+                    raw_args = self.config_entry.options.get(
+                        "debug_invoke_args_json", "{}"
+                    )
+                    args = json.loads(raw_args) if isinstance(raw_args, str) else {}
+                    _LOGGER.debug("Debug probe invoke: %s %s", identifier, args)
+                    await client.invoke_service(target_iot_id, identifier, args)
+                case _ if probe in self._DEBUG_PROBES:
+                    wire_key, mode = self._DEBUG_PROBES[probe]
+                    current = await client.get_device_properties(target_iot_id)
+                    cfg = dict(_property_value(current, wire_key, {}) or {})
+                    cfg["bOnOff"] = 1 if mode == "on" else 0
+                    _LOGGER.debug("Debug probe set %s=%s", wire_key, cfg)
+                    await client.set_device_properties(target_iot_id, {wire_key: cfg})
+                case _:
+                    return
+        except NeakasaApiClientError as err:
+            _LOGGER.warning("Debug probe '%s' failed (ignored): %s", probe, err)
+        else:
+            self._debug_probe_done = (probe, list(self._device_ids))
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -543,6 +672,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                 payload[iot_id] = result
 
             _LOGGER.debug("Coordinator update complete: %d devices", len(payload))
+            await self._run_debug_probe(payload)
             return payload  # noqa: TRY300
 
         except NeakasaApiClientSessionExpiredError as err:

@@ -106,3 +106,15 @@ class NeakasaApiClient:
         """Fetch statistics, translating errors."""
         async with _translate_errors():
             return await self._api.get_statistics(device_name)
+
+    async def invoke_service(
+        self, iot_id: str, identifier: str, args: dict[str, Any]
+    ) -> None:
+        """Invoke an arbitrary device service by wire identifier."""
+        async with _translate_errors():
+            await self._api.invoke_service(iot_id, identifier, args)
+
+    async def get_product_list(self) -> Any:
+        """Fetch the account's product schema (commands/properties)."""
+        async with _translate_errors():
+            return await self._api.get_product_list()
