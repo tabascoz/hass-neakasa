@@ -474,27 +474,37 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                 raise ValueError(msg)
 
     async def feed_once(self, iot_id: str, food_g: int, water_ratio: int) -> None:
-        """Dispense one Riko wet meal with the given portion and water ratio.
+        """
+        Dispense one Riko wet meal with the given portion and water ratio.
 
         Confirmed wire shape: ``/thing/service/invoke`` identifier ``feedOnce`` with
-        args ``{food, water}``. Validated against the product UI ranges (3–15 g food,
-        1–5 water-to-food ratio) before the network call.
+        args ``{food, water}``. Validated against the product UI ranges (3-15 g food,
+        1-5 water-to-food ratio) before the network call.
         """
         self._validate_feed(food_g, water_ratio)
         client = await self._get_client()
-        await client.invoke_service(iot_id, "feedOnce", {"food": food_g, "water": water_ratio})
+        await client.invoke_service(
+            iot_id, "feedOnce", {"food": food_g, "water": water_ratio}
+        )
 
     def _validate_feed(self, food_g: int, water_ratio: int) -> None:
         """Raise ValueError if a feed portion/ratio is outside product bounds."""
         if not FEED_FOOD_MIN_G <= food_g <= FEED_FOOD_MAX_G:
-            msg = f"Food portion out of range: {food_g}g (expected {FEED_FOOD_MIN_G}-{FEED_FOOD_MAX_G})"
+            msg = (
+                f"Food portion out of range: {food_g}g "
+                f"(expected {FEED_FOOD_MIN_G}-{FEED_FOOD_MAX_G})"
+            )
             raise ValueError(msg)
         if not FEED_WATER_RATIO_MIN <= water_ratio <= FEED_WATER_RATIO_MAX:
-            msg = f"Water ratio out of range: {water_ratio} (expected {FEED_WATER_RATIO_MIN}-{FEED_WATER_RATIO_MAX})"
+            msg = (
+                f"Water ratio out of range: {water_ratio} "
+                f"(expected {FEED_WATER_RATIO_MIN}-{FEED_WATER_RATIO_MAX})"
+            )
             raise ValueError(msg)
 
     async def set_feed_config(self, iot_id: str, food_g: int, water_ratio: int) -> None:
-        """Write the Riko default feed portion/water ratio via read-modify-write.
+        """
+        Write the Riko default feed portion/water ratio via read-modify-write.
 
         ``defFdCfg`` is a nested config object; we merge new ``food``/``water`` into
         the current value (preserving ``mixMin`` and any other keys), then write it

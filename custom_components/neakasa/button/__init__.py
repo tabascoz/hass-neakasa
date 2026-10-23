@@ -45,9 +45,7 @@ async def async_setup_entry(
                 identifiers={(DOMAIN, iot_id)},
             )
             if snap.category_key == "petFeeder":
-                entities.append(
-                    NeakasaFeedNowButton(coordinator, device_info, iot_id)
-                )
+                entities.append(NeakasaFeedNowButton(coordinator, device_info, iot_id))
                 continue
             entities.extend(
                 [

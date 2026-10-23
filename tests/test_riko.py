@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import copy
-
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from homeassistant.core import HomeAssistant
 
 from custom_components.neakasa.binary_sensor.cover_absent import (
@@ -284,9 +283,9 @@ async def test_feed_once_validates_and_invokes() -> None:
         "riko-1", "feedOnce", {"food": 5, "water": 2}
     )
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Food portion out of range"):
         await coordinator.feed_once("riko-1", food_g=20, water_ratio=2)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Water ratio out of range"):
         await coordinator.feed_once("riko-1", food_g=5, water_ratio=9)
 
 
@@ -308,5 +307,5 @@ async def test_set_feed_config_preserves_mixmin(
     assert snap.default_food_g == 8
     assert snap.default_water_ratio == 3
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Food portion out of range"):
         await coordinator.set_feed_config("riko-1", food_g=0, water_ratio=3)

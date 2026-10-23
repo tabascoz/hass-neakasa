@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 class NeakasaFoodGramsNumber(CoordinatorEntity[NeakasaCoordinator], NumberEntity):
-    """Default wet-food portion per feeding, in grams (3–15)."""
+    """Default wet-food portion per feeding, in grams (3-15)."""
 
     _attr_should_poll = False
     _attr_has_entity_name = True

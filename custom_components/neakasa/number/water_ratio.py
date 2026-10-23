@@ -1,4 +1,4 @@
-"""Number to set the Riko water-to-food ratio for feeding (1–5)."""
+"""Number to set the Riko water-to-food ratio for feeding (1-5)."""
 
 from __future__ import annotations
 
