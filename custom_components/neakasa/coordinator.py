@@ -306,7 +306,7 @@ def _build_pet_feeder_snapshot(
             None if pwr.get("batLevel") is None else _to_int(pwr.get("batLevel"))
         ),
         bowl_present=_to_int(bowl.get("bBowlIn", 0)) == 1,
-        cover_absent=_property_value(devicedata, "bCoverAbsent", 0) == 1,
+        cover_absent=_property_value(devicedata, "bCoverAbsent", 1) == 0,
         desiccant_days_left=(None if desiccant_raw is None else _to_int(desiccant_raw)),
         fresh_mgr_on=_to_int(fresh_mgr.get("bOnOff", 0)) == 1,
         deep_clean_on=_to_int(deep_clean.get("bOnOff", 0)) == 1,

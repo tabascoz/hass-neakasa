@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
-from homeassistant.const import PERCENTAGE, EntityCategory
+from homeassistant.const import PERCENTAGE
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -23,7 +23,6 @@ class NeakasaBatterySensor(CoordinatorEntity[NeakasaCoordinator], SensorEntity):
     _attr_translation_key = "battery"
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_entity_category = EntityCategory.CONFIG
     _attr_icon = "mdi:battery"
 
     def __init__(

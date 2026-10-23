@@ -65,7 +65,7 @@ def test_build_pet_feeder_reads_levels() -> None:
     assert snap.battery_percent == 90
     assert snap.battery_level == 4
     assert snap.bowl_present is True
-    assert snap.cover_absent is True
+    assert snap.cover_absent is False
     assert snap.desiccant_days_left == 40
     assert snap.fresh_mgr_on is True
     assert snap.deep_clean_on is False
@@ -150,14 +150,25 @@ def test_label_none_when_unset() -> None:
     assert sensor.native_value is None
 
 
-def test_cover_absent_on() -> None:
+def test_cover_absent_when_missing() -> None:
+    props = dict(FAKE_RIKO_PROPERTIES)
+    props["bCoverAbsent"] = {"value": 0}
+    snap = _build_pet_feeder_snapshot("riko-001", "s", props, "pk", "")
     entity = NeakasaCoverAbsentBinarySensor(
-        _mock_coord(_riko_snapshot()), FAKE_DEVICE_INFO, "riko-001"
+        _mock_coord(snap), FAKE_DEVICE_INFO, "riko-001"
     )
     entity.hass = MagicMock()
     assert entity.is_on is True
     assert entity.state == "on"
     assert entity.translation_key == "cover_absent"
+
+
+def test_cover_absent_off_when_present() -> None:
+    entity = NeakasaCoverAbsentBinarySensor(
+        _mock_coord(_riko_snapshot()), FAKE_DEVICE_INFO, "riko-001"
+    )
+    entity.hass = MagicMock()
+    assert entity.is_on is False
 
 
 def test_cover_absent_off_without_snapshot() -> None:

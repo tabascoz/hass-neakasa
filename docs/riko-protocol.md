@@ -34,7 +34,7 @@ Every property is wrapped as `{"time": <ms>, "value": …}` like CatLitter.
 | `waterLvl` | int enum (observed `3`) | water tank level state |
 | `pwrStatus` | `{batPercentage, batLevel, batVoltage, batTemp, pwrType, batStatus}` | battery; `batPercentage`=90, `batLevel`=4, `batVoltage`=12209 (mV×?), `batStatus`=2 |
 | `bowlStatus` | `{bowlGram, curWeight, bBowlIn}` | bowl weight in grams; `bBowlIn`=1 bowl present |
-| `bCoverAbsent` | int 0/1 | lid/cover missing flag |
+| `bCoverAbsent` | int 0/1 | cover/lid state — **inverted**: `1` = cover present/OK, `0` = absent (verified against device with cover in place) |
 | `deviceState` | `{state, param}` | operating state machine (observed 0/0) |
 | `drierEffeDays` / `leftDrierDays` | int days (observed 40) | desiccant pack effective / remaining days |
 | `drierResetTs` | str unix-seconds | last desiccant reset |

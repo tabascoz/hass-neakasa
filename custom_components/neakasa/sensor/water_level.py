@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from homeassistant.components.sensor import SensorEntity
-from homeassistant.const import EntityCategory
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -22,7 +21,6 @@ class NeakasaWaterLevelSensor(CoordinatorEntity[NeakasaCoordinator], SensorEntit
     _attr_has_entity_name = True
     _attr_translation_key = "water_level"
     _attr_icon = "mdi:water"
-    _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(
         self,
