@@ -48,6 +48,9 @@
             },
             "level": {
                 "name": "Wypoziomuj"
+            },
+            "feed_now": {
+                "name": "Feeding now"
             }
         },
         "binary_sensor": {

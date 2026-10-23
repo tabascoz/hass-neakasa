@@ -54,17 +54,13 @@ Every property is wrapped as `{"time": <ms>, "value": …}` like CatLitter.
 | `displayCfg` | `{displayParam, displayType, bDisplayIfIdle}` | front display config |
 | `childLockOnOff` | int 0/1 | child lock — same key as CatLitter → reuse switch |
 
-## Not yet captured (needs a service invoke / app dump)
+## Confirmed write mechanism (live-tested against Riko iotId 4TQDtRLglc…)
 
-- **Service identifiers** for `/thing/service/invoke`: dispense-one-meal, start
-  deep-clean, reset desiccant. `get_product_list()` returned only the account's
-  products' high-level schema (no command list here); confirm via an Android
-  capture dump or by trying candidate identifiers against `productKey=a1ccEqBcaUD`.
-- **Feeding schedule / meal history**: no per-meal record endpoint seen in
-  properties. CatLitter uses web paths `/catbox/record` and
-  `/catbox/toilet/statistics`; Riko likely has analogous `baseurl + /feeder/...`
-  or `/petFeeder/...` paths — must be captured from the app (baseurl here is
-  `https://euapi.neakasapet.com/api`).
+`/thing/service/invoke`, **identifier `feedOnce`**, args `{food: <grams>, water: <ratio>}`.
+- Verified: `feedOnce {food:5, water:2}` → gateway OK; `defFdCfg` updated to `{food:5,water:2,mixMin:1}` and `bowlStatus.curWeight` rose 67→139 g (a meal was dispensed).
+- Ranges per product UI: **food 3–15 g**, **water ratio 1–5** (1:1–1:5 food/water).
+- `feedNow`, `doFeed`, `startFeed`, `manualFeed` → "service not found" (not real commands).
+- `feedCtrl` exists but is a different (auto-feed control) command, times out with these args — not used for manual feed.
 
 ## Naming note
 

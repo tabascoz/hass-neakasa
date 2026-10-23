@@ -48,6 +48,9 @@
             },
             "level": {
                 "name": "Glätten"
+            },
+            "feed_now": {
+                "name": "Feeding now"
             }
         },
         "binary_sensor": {

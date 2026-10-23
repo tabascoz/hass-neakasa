@@ -119,6 +119,8 @@ class NeakasaDeviceSnapshot:
     desiccant_days_left: int | None = None
     fresh_mgr_on: bool = False
     deep_clean_on: bool = False
+    default_food_g: int = 0
+    default_water_ratio: int = 0
 
 
 NeakasaPayload = dict[str, NeakasaDeviceSnapshot]
@@ -268,6 +270,9 @@ def _build_pet_feeder_snapshot(
     deep_clean = _property_value(devicedata, "deepCleanCfg", {})
     if not isinstance(deep_clean, dict):
         deep_clean = {}
+    def_fd = _property_value(devicedata, "defFdCfg", {})
+    if not isinstance(def_fd, dict):
+        def_fd = {}
     device_state = _property_value(devicedata, "deviceState", {})
     if not isinstance(device_state, dict):
         device_state = {}
@@ -310,6 +315,8 @@ def _build_pet_feeder_snapshot(
         desiccant_days_left=(None if desiccant_raw is None else _to_int(desiccant_raw)),
         fresh_mgr_on=_to_int(fresh_mgr.get("bOnOff", 0)) == 1,
         deep_clean_on=_to_int(deep_clean.get("bOnOff", 0)) == 1,
+        default_food_g=_to_int(def_fd.get("food", 0)),
+        default_water_ratio=_to_int(def_fd.get("water", 0)),
     )
 
 
@@ -344,8 +351,9 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             "clean": "clean_now",
             "level": "sand_leveling",
         },
-        # Riko service identifiers are not yet confirmed against the live device;
-        # add them here once a capture dump names the invoke identifier.
+        "petFeeder": {
+            "feed": "feed_once",  # /thing/service/invoke identifier feedOnce
+        },
     }
 
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
@@ -454,6 +462,22 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             case _:
                 msg = f"Unknown service: {service}"
                 raise ValueError(msg)
+
+    async def feed_once(self, iot_id: str, food_g: int, water_ratio: int) -> None:
+        """Dispense one Riko wet meal with the given portion and water ratio.
+
+        Confirmed wire shape: ``/thing/service/invoke`` identifier ``feedOnce`` with
+        args ``{food, water}``. Validated against the product UI ranges (3–15 g food,
+        1–5 water-to-food ratio) before the network call.
+        """
+        if not 3 <= food_g <= 15:
+            msg = f"Food portion out of range: {food_g}g (expected 3-15)"
+            raise ValueError(msg)
+        if not 1 <= water_ratio <= 5:
+            msg = f"Water ratio out of range: {water_ratio} (expected 1-5)"
+            raise ValueError(msg)
+        client = await self._get_client()
+        await client.invoke_service(iot_id, "feedOnce", {"food": food_g, "water": water_ratio})
 
     # ------------------------------------------------------------------
     # Debug probe (opt-in via options flow; never affects normal polling)

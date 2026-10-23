@@ -48,6 +48,9 @@
             },
             "level": {
                 "name": "Level"
+            },
+            "feed_now": {
+                "name": "Feed now"
             }
         },
         "binary_sensor": {

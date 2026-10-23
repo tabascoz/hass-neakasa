@@ -48,6 +48,9 @@
             },
             "level": {
                 "name": "Niveller"
+            },
+            "feed_now": {
+                "name": "Feeding now"
             }
         },
         "binary_sensor": {

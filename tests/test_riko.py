@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import copy
+
+import pytest
 from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.core import HomeAssistant
@@ -261,3 +263,24 @@ async def test_async_get_device_schema_reports_missing_keys(
     entry = schema["devices"]["riko-1"]
     assert entry["category_key"] == "petFeeder"
     assert entry["missing_expected_keys"] == ["waterLvl"]
+
+
+async def test_feed_once_validates_and_invokes() -> None:
+    """Feed Now calls feedOnce with food/water, rejecting out-of-range inputs."""
+    from unittest.mock import AsyncMock
+
+    from custom_components.neakasa.coordinator import NeakasaCoordinator
+
+    coordinator = NeakasaCoordinator.__new__(NeakasaCoordinator)
+    client = AsyncMock()
+    coordinator._get_client = AsyncMock(return_value=client)
+
+    await coordinator.feed_once("riko-1", food_g=5, water_ratio=2)
+    client.invoke_service.assert_awaited_once_with(
+        "riko-1", "feedOnce", {"food": 5, "water": 2}
+    )
+
+    with pytest.raises(ValueError):
+        await coordinator.feed_once("riko-1", food_g=20, water_ratio=2)
+    with pytest.raises(ValueError):
+        await coordinator.feed_once("riko-1", food_g=5, water_ratio=9)
