@@ -9,13 +9,14 @@ on:
 # stops at its first failure, so a broken build or upload is visible in the
 # run log rather than only as a failed job.
 
+# There is no permissions block here on purpose: `releases` is not a key the
+# workflow schema accepts, and an invalid file made the job never start. The
+# release access comes from the repository token instead.
+
 jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      releases: write
     steps:
       - name: Checkout the repository
         uses: actions/checkout@v4
