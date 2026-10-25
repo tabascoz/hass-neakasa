@@ -14,6 +14,8 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .api_manager import clear_shared_api, force_reconnect_api, get_shared_api
 from .const import (
     _LOGGER,
+    DEFAULT_FEED_FOOD_G,
+    DEFAULT_FEED_WATER_RATIO,
     DOMAIN,
     FEED_FOOD_MAX_G,
     FEED_FOOD_MIN_G,
@@ -127,8 +129,8 @@ class NeakasaDeviceSnapshot:
     desiccant_days_left: int | None = None
     fresh_mgr_on: bool = False
     deep_clean_on: bool = False
-    default_food_g: int = 0
-    default_water_ratio: int = 0
+    default_food_g: int | None = None
+    default_water_ratio: int | None = None
     feed_cfg: dict[str, Any] | None = None
 
 
@@ -179,6 +181,22 @@ def _get_last_use_date(devicedata: Any) -> int:
     if not isinstance(cat_left, dict):
         return 0
     return cat_left.get("time", 0)
+
+
+def _configured_feed_defaults(def_fd: dict[str, Any]) -> tuple[int | None, int | None]:
+    """
+    Map a wire ``defFdCfg`` (water stored in grams) to a portion and a ratio.
+
+    Returns ``None`` for both when the machine reports no configured defaults.
+    """
+    food_g = _to_int(def_fd.get("food", 0))
+    water_g = _to_int(def_fd.get("water", 0))
+    if not FEED_FOOD_MIN_G <= food_g <= FEED_FOOD_MAX_G or water_g <= 0:
+        return None, None
+    ratio = max(
+        FEED_WATER_RATIO_MIN, min(FEED_WATER_RATIO_MAX, round(water_g / food_g))
+    )
+    return food_g, ratio
 
 
 def _build_device_snapshot(
@@ -288,6 +306,7 @@ def _build_pet_feeder_snapshot(
 
     battery_percent_raw = pwr.get("batPercentage")
     desiccant_raw = _property_value(devicedata, "leftDrierDays")
+    default_food_g, default_water_ratio = _configured_feed_defaults(def_fd)
 
     return NeakasaDeviceSnapshot(
         iot_id=iot_id,
@@ -324,8 +343,8 @@ def _build_pet_feeder_snapshot(
         desiccant_days_left=(None if desiccant_raw is None else _to_int(desiccant_raw)),
         fresh_mgr_on=_to_int(fresh_mgr.get("bOnOff", 0)) == 1,
         deep_clean_on=_to_int(deep_clean.get("bOnOff", 0)) == 1,
-        default_food_g=_to_int(def_fd.get("food", 0)),
-        default_water_ratio=_to_int(def_fd.get("water", 0)),
+        default_food_g=default_food_g,
+        default_water_ratio=default_water_ratio,
         feed_cfg=dict(def_fd) if def_fd else None,
     )
 
@@ -378,6 +397,9 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         self._device_names: dict[str, str] = {}
         self._device_meta: dict[str, dict[str, str]] = {}
         self._device_ids: list[str] = []
+        self._pending_feed: dict[str, dict[str, int | None]] = {}
+        self._feed_keep_as_new_defaults: dict[str, bool] = {}
+        self._last_feed: dict[str, dict[str, Any]] = {}
 
         scan_interval = config_entry.options.get("scan_interval", 60)
         super().__init__(
@@ -450,6 +472,15 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                 "property_keys": sorted(devicedata),
                 "missing_expected_keys": missing,
             }
+            if snap.category_key == "petFeeder":
+                devices[iot_id]["feed"] = {
+                    "defFdCfg": _property_value(devicedata, "defFdCfg", {}),
+                    "default_food_g": snap.default_food_g,
+                    "default_water_ratio": snap.default_water_ratio,
+                    "pending_feed": self._pending_feed.get(iot_id, {}),
+                    "keep_as_new_defaults": self.feed_keep_as_new_defaults(iot_id),
+                    "last_feed": self._last_feed.get(iot_id, {}),
+                }
         return {"devices": devices, "products": schema_by_product}
 
     async def set_property(self, iot_id: str, key: str, value: Any) -> None:
@@ -473,19 +504,116 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                 msg = f"Unknown service: {service}"
                 raise ValueError(msg)
 
-    async def feed_once(self, iot_id: str, food_g: int, water_ratio: int) -> None:
-        """
-        Dispense one Riko wet meal with the given portion and water ratio.
-
-        Confirmed wire shape: ``/thing/service/invoke`` identifier ``feedOnce`` with
-        args ``{food, water}``. Validated against the product UI ranges (3-15 g food,
-        1-5 water-to-food ratio) before the network call.
-        """
-        self._validate_feed(food_g, water_ratio)
-        client = await self._get_client()
-        await client.invoke_service(
-            iot_id, "feedOnce", {"food": food_g, "water": water_ratio}
+    def feed_values(self, iot_id: str) -> tuple[int, int]:
+        """Return the portion (g) and water ratio the next feed would use."""
+        pending = self._pending_feed.get(iot_id, {})
+        snap = self.device_snapshot(iot_id)
+        food_g = pending.get("food_g")
+        if food_g is None and snap is not None:
+            food_g = snap.default_food_g
+        water_ratio = pending.get("water_ratio")
+        if water_ratio is None and snap is not None:
+            water_ratio = snap.default_water_ratio
+        return (
+            food_g if food_g is not None else DEFAULT_FEED_FOOD_G,
+            water_ratio if water_ratio is not None else DEFAULT_FEED_WATER_RATIO,
         )
+
+    def set_pending_feed(
+        self,
+        iot_id: str,
+        *,
+        food_g: int | None = None,
+        water_ratio: int | None = None,
+    ) -> None:
+        """Remember amounts for the next feed; the machine itself is not written."""
+        pending = self._pending_feed.setdefault(iot_id, {})
+        if food_g is not None:
+            pending["food_g"] = food_g
+        if water_ratio is not None:
+            pending["water_ratio"] = water_ratio
+        if self.data and iot_id in self.data:
+            self.async_set_updated_data(self.data)
+
+    def feed_keep_as_new_defaults(self, iot_id: str) -> bool:
+        """
+        Return whether a feed for *iot_id* stores the amounts it used.
+
+        The per-device setting wins; the account option only seeds it, so devices
+        that were never toggled behave as they did before.
+        """
+        stored = self._feed_keep_as_new_defaults.get(iot_id)
+        if stored is not None:
+            return stored
+        return bool(self.config_entry.options.get("feed_keep_as_new_defaults", False))
+
+    def last_feed(self, iot_id: str) -> dict[str, Any]:
+        """Return the amounts the last feed for *iot_id* used, if any."""
+        return dict(self._last_feed.get(iot_id, {}))
+
+    def set_feed_keep_as_new_defaults(self, iot_id: str, *, value: bool) -> None:
+        """Choose whether a feed for *iot_id* stores the amounts it used."""
+        self._feed_keep_as_new_defaults[iot_id] = value
+        if self.data and iot_id in self.data:
+            self.async_set_updated_data(self.data)
+
+    async def feed_once(
+        self,
+        iot_id: str,
+        food_g: int | None = None,
+        water_ratio: int | None = None,
+        *,
+        save_as_default: bool | None = None,
+    ) -> None:
+        """
+        Dispense one Riko wet meal.
+
+        Observed wire shape: ``/thing/service/invoke`` identifier ``feedOnce`` with
+        args ``{food: grams of food, water: grams of water, bSaveAsDef: 0|1}`` — the
+        water argument is an amount of water, so the selected ratio is applied to the
+        portion. Sending the ratio index instead made the machine keep adding water
+        until it reported clogged water sprays. Omitted amounts fall back to the
+        pending ones, then to the machine's stored defaults. ``bSaveAsDef`` asks the
+        machine to keep the amounts it used; whether that flag is sent comes from
+        the per-device switch ``feed_keep_as_new_defaults``, seeded from the
+        account option of the same name. When storing, ``defFdCfg`` is written too.
+        """
+        fallback_food, fallback_ratio = self.feed_values(iot_id)
+        food_g = food_g if food_g is not None else fallback_food
+        water_ratio = water_ratio if water_ratio is not None else fallback_ratio
+        self._validate_feed(food_g, water_ratio)
+        keep = (
+            save_as_default
+            if save_as_default is not None
+            else self.feed_keep_as_new_defaults(iot_id)
+        )
+        args = {
+            "food": food_g,
+            "water": food_g * water_ratio,
+            "bSaveAsDef": 1 if keep else 0,
+        }
+        client = await self._get_client()
+        _LOGGER.debug("Riko feedOnce %s: %s", iot_id, args)
+        await client.invoke_service(iot_id, "feedOnce", args)
+        self._last_feed[iot_id] = {"args": dict(args), "stored_defaults": keep}
+        self._pending_feed.pop(iot_id, None)
+        if keep:
+            try:
+                await self.set_feed_config(
+                    iot_id, food_g=food_g, water_ratio=water_ratio
+                )
+                _LOGGER.debug(
+                    "Riko stored defaults %s: food %d g, water %d g",
+                    iot_id,
+                    food_g,
+                    food_g * water_ratio,
+                )
+            except NeakasaApiClientError as err:
+                _LOGGER.warning(
+                    "Failed to store the fed amounts as new defaults: %s", err
+                )
+        elif self.data and iot_id in self.data:
+            self.async_set_updated_data(self.data)
 
     def _validate_feed(self, food_g: int, water_ratio: int) -> None:
         """Raise ValueError if a feed portion/ratio is outside product bounds."""
@@ -504,19 +632,24 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
 
     async def set_feed_config(self, iot_id: str, food_g: int, water_ratio: int) -> None:
         """
-        Write the Riko default feed portion/water ratio via read-modify-write.
+        Write the Riko feed defaults (portion and water ratio) to the machine.
 
-        ``defFdCfg`` is a nested config object; we merge new ``food``/``water`` into
-        the current value (preserving ``mixMin`` and any other keys), then write it
-        back through the gateway. Confirmed: this updates ``defFdCfg.value`` on the
-        live device.
+        ``defFdCfg`` is a nested config object; new ``food``/``water`` are merged
+        into the current value, preserving ``mixMin`` and any other keys. ``water``
+        is written as an amount of water in grams (portion times ratio), which is the
+        unit the machine stores. Confirmed through ``/thing/properties/set`` on a
+        real Riko.
         """
         self._validate_feed(food_g, water_ratio)
         snap = self.data.get(iot_id) if self.data else None
         current_mix_min = 1
         if snap is not None and getattr(snap, "feed_cfg", None):
             current_mix_min = _to_int(snap.feed_cfg.get("mixMin", 1))
-        payload = {"food": food_g, "water": water_ratio, "mixMin": current_mix_min}
+        payload = {
+            "food": food_g,
+            "water": food_g * water_ratio,
+            "mixMin": current_mix_min,
+        }
         client = await self._get_client()
         await client.set_device_properties(iot_id, {"defFdCfg": payload})
         if snap is not None:

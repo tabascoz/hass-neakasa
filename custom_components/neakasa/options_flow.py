@@ -34,6 +34,9 @@ class NeakasaOptionsFlow(OptionsFlow):
             "debug_invoke_identifier", ""
         )
         current_args = self.config_entry.options.get("debug_invoke_args_json", "{}")
+        current_keep_defaults = self.config_entry.options.get(
+            "feed_keep_as_new_defaults", False
+        )
 
         schema = vol.Schema(
             {
@@ -61,6 +64,10 @@ class NeakasaOptionsFlow(OptionsFlow):
                         mode=NumberSelectorMode.BOX,
                     ),
                 ),
+                vol.Required(
+                    "feed_keep_as_new_defaults",
+                    default=current_keep_defaults,
+                ): bool,
                 vol.Required(
                     "debug_probe",
                     default=current_probe,

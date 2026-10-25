@@ -27,6 +27,7 @@ async def test_options_flow_show_form(hass: HomeAssistant) -> None:
     assert "scan_interval" in schema
     assert "stats_lookback_days" in schema
     assert "debug_probe" in schema
+    assert "feed_keep_as_new_defaults" in schema
 
 
 async def test_options_flow_uses_existing_options(hass: HomeAssistant) -> None:
@@ -38,6 +39,7 @@ async def test_options_flow_uses_existing_options(hass: HomeAssistant) -> None:
         options={
             "scan_interval": 120,
             "stats_lookback_days": 14,
+            "feed_keep_as_new_defaults": False,
             "debug_probe": "set_fresh_mgr_on",
             "debug_invoke_identifier": "",
             "debug_invoke_args_json": "{}",
@@ -53,6 +55,7 @@ async def test_options_flow_uses_existing_options(hass: HomeAssistant) -> None:
         {
             "scan_interval": 150,
             "stats_lookback_days": 21,
+            "feed_keep_as_new_defaults": True,
             "debug_probe": "invoke_custom",
             "debug_invoke_identifier": "feedNow",
             "debug_invoke_args_json": '{"bStartFeed":1}',
@@ -62,6 +65,7 @@ async def test_options_flow_uses_existing_options(hass: HomeAssistant) -> None:
     assert result2["data"] == {
         "scan_interval": 150,
         "stats_lookback_days": 21,
+        "feed_keep_as_new_defaults": True,
         "debug_probe": "invoke_custom",
         "debug_invoke_identifier": "feedNow",
         "debug_invoke_args_json": '{"bStartFeed":1}',

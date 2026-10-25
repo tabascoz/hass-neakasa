@@ -12,6 +12,9 @@ from custom_components.neakasa.switch.auto_clean import NeakasaAutoCleanSwitch
 from custom_components.neakasa.switch.auto_level import NeakasaAutoLevelSwitch
 from custom_components.neakasa.switch.auto_recovery import NeakasaAutoRecoverySwitch
 from custom_components.neakasa.switch.child_lock import NeakasaChildLockSwitch
+from custom_components.neakasa.switch.feed_keep_defaults import (
+    NeakasaFeedKeepDefaultsSwitch,
+)
 from custom_components.neakasa.switch.silent_mode import NeakasaSilentModeSwitch
 from custom_components.neakasa.switch.unstoppable_cycle import (
     NeakasaUnstoppableCycleSwitch,
@@ -484,3 +487,70 @@ async def test_switch_async_setup_entry(hass: HomeAssistant) -> None:
 
     rediscover()
     assert len(collected) == 16
+
+
+# ---------------------------------------------------------------------------
+# Riko feed defaults switch (integration-local setting, no wire key)
+# ---------------------------------------------------------------------------
+
+
+def _pet_feeder_snapshot() -> MagicMock:
+    """Minimum the platform needs to recognise a Riko device."""
+    snap = MagicMock()
+    snap.category_key = "petFeeder"
+    snap.device_name = "Riko"
+    snap.product_key = "a1ccEqBcaUD"
+    return snap
+
+
+async def test_feed_keep_defaults_seeded_off() -> None:
+    """Without a toggle the state comes from the account option (off)."""
+    coord = MagicMock()
+    coord.feed_keep_as_new_defaults.return_value = False
+    switch = NeakasaFeedKeepDefaultsSwitch(coord, FAKE_DEVICE_INFO, "riko-001")
+    switch.hass = MagicMock()
+    assert switch.is_on is False
+    assert switch.state == "off"
+    assert switch.translation_key == "feed_keep_as_new_defaults"
+    assert switch.unique_id == "riko-001-feed_keep_as_new_defaults"
+
+
+async def test_feed_keep_defaults_turn_on() -> None:
+    """Turning the switch on stores the amounts a feed uses."""
+    coord = MagicMock()
+    coord.set_feed_keep_as_new_defaults = MagicMock()
+    switch = NeakasaFeedKeepDefaultsSwitch(coord, FAKE_DEVICE_INFO, "riko-001")
+    switch.hass = MagicMock()
+    await switch.async_turn_on()
+    coord.set_feed_keep_as_new_defaults.assert_called_once_with("riko-001", value=True)
+
+
+async def test_feed_keep_defaults_turn_off() -> None:
+    """Turning it off keeps the machine's defaults untouched."""
+    coord = MagicMock()
+    coord.set_feed_keep_as_new_defaults = MagicMock()
+    switch = NeakasaFeedKeepDefaultsSwitch(coord, FAKE_DEVICE_INFO, "riko-001")
+    switch.hass = MagicMock()
+    await switch.async_turn_off()
+    coord.set_feed_keep_as_new_defaults.assert_called_once_with("riko-001", value=False)
+
+
+async def test_feed_keep_defaults_async_setup_entry(hass: HomeAssistant) -> None:
+    """A Riko gets this switch only; cat devices keep their eight switches."""
+    from custom_components.neakasa.const import DOMAIN
+    from custom_components.neakasa.switch import async_setup_entry as switch_setup
+
+    coordinator = MagicMock()
+    coordinator.data = {"riko-001": _pet_feeder_snapshot()}
+    coordinator.async_add_listener = MagicMock()
+
+    config_entry = MagicMock()
+    config_entry.runtime_data.coordinator = coordinator
+    config_entry.async_on_unload = MagicMock()
+    config_entry.domain = DOMAIN
+
+    collected: list = []
+    await switch_setup(hass, config_entry, collected.extend)
+
+    assert len(collected) == 1
+    assert isinstance(collected[0], NeakasaFeedKeepDefaultsSwitch)

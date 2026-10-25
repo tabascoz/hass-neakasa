@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -11,6 +11,7 @@ from homeassistant.core import HomeAssistant
 from custom_components.neakasa.binary_sensor.cover_absent import (
     NeakasaCoverAbsentBinarySensor,
 )
+from custom_components.neakasa.button.feed_now import NeakasaFeedNowButton
 from custom_components.neakasa.coordinator import (
     NeakasaCoordinator,
     _build_pet_feeder_snapshot,
@@ -18,6 +19,8 @@ from custom_components.neakasa.coordinator import (
 from custom_components.neakasa.exceptions import (
     NeakasaApiClientCommunicationError,
 )
+from custom_components.neakasa.number.food_grams import NeakasaFoodGramsNumber
+from custom_components.neakasa.number.water_ratio import NeakasaWaterRatioNumber
 from custom_components.neakasa.sensor.battery import NeakasaBatterySensor
 from custom_components.neakasa.sensor.food_level import NeakasaFoodLevelSensor
 from custom_components.neakasa.sensor.label import NeakasaLabelSensor
@@ -44,7 +47,7 @@ FAKE_RIKO_PROPERTIES: dict = {
     "freshMgrCfg": {"value": {"monitorTime": 4, "leftOverTTH": 20, "bOnOff": 1}},
     "deepCleanCfg": {"value": {"bOnOff": 0, "cleanState": 0}},
     "childLockOnOff": {"value": 0},
-    "defFdCfg": {"value": {"mixMin": 1, "water": 2, "food": 5}},
+    "defFdCfg": {"value": {"mixMin": 1, "water": 15, "food": 5}},
     "NetWorkStatus": {"value": {"WiFi_RSSI": -43, "WiFi_Name": "MIAU"}},
 }
 
@@ -74,8 +77,8 @@ def test_build_pet_feeder_reads_levels() -> None:
     assert snap.wifi_rssi == -43
     assert snap.label == "TestLabel"
     assert snap.default_food_g == 5
-    assert snap.default_water_ratio == 2
-    assert snap.feed_cfg == {"mixMin": 1, "water": 2, "food": 5}
+    assert snap.default_water_ratio == 3
+    assert snap.feed_cfg == {"mixMin": 1, "water": 15, "food": 5}
 
 
 def test_build_pet_feeder_missing_optional_keys() -> None:
@@ -95,6 +98,18 @@ def test_build_pet_feeder_empty_properties() -> None:
     assert snap.category_key == "petFeeder"
     assert snap.food_level_state == 0
     assert snap.cover_absent is False
+    assert snap.default_food_g is None
+    assert snap.default_water_ratio is None
+
+
+def test_build_pet_feeder_unconfigured_defaults() -> None:
+    """A machine that never stored a default meal reports neither amount."""
+    props = copy.deepcopy(FAKE_RIKO_PROPERTIES)
+    props["defFdCfg"] = {"value": {"mixMin": 1, "water": 0, "food": 0}}
+    snap = _build_pet_feeder_snapshot("riko-001", "s", props, "pk", "")
+    assert snap.feed_cfg == {"mixMin": 1, "water": 0, "food": 0}
+    assert snap.default_food_g is None
+    assert snap.default_water_ratio is None
 
 
 # ---------------------------------------------------------------------------
@@ -268,44 +283,256 @@ async def test_async_get_device_schema_reports_missing_keys(
     assert entry["missing_expected_keys"] == ["waterLvl"]
 
 
-async def test_feed_once_validates_and_invokes() -> None:
-    """Feed Now calls feedOnce with food/water, rejecting out-of-range inputs."""
-    from unittest.mock import AsyncMock
-
-    from custom_components.neakasa.coordinator import NeakasaCoordinator
-
-    coordinator = NeakasaCoordinator.__new__(NeakasaCoordinator)
+async def test_feed_once_sends_water_grams(
+    hass: HomeAssistant, mock_config_entry: MagicMock
+) -> None:
+    """A feed sends the water amount in grams and keeps the machine's defaults."""
+    coordinator = _make_coordinator(hass, mock_config_entry)
     client = AsyncMock()
     coordinator._get_client = AsyncMock(return_value=client)
 
     await coordinator.feed_once("riko-1", food_g=5, water_ratio=2)
     client.invoke_service.assert_awaited_once_with(
-        "riko-1", "feedOnce", {"food": 5, "water": 2}
+        "riko-1",
+        "feedOnce",
+        {"food": 5, "water": 10, "bSaveAsDef": 0},
     )
+    client.set_device_properties.assert_not_called()
 
     with pytest.raises(ValueError, match="Food portion out of range"):
         await coordinator.feed_once("riko-1", food_g=20, water_ratio=2)
     with pytest.raises(ValueError, match="Water ratio out of range"):
         await coordinator.feed_once("riko-1", food_g=5, water_ratio=9)
+    client.invoke_service.assert_awaited_once_with(
+        "riko-1",
+        "feedOnce",
+        {"food": 5, "water": 10, "bSaveAsDef": 0},
+    )
+
+
+async def test_feed_once_logs_and_records_the_last_feed(
+    hass: HomeAssistant, mock_config_entry: MagicMock
+) -> None:
+    """The exact payload is logged and remembered for diagnostics."""
+    coordinator = _make_coordinator(hass, mock_config_entry)
+    client = AsyncMock()
+    coordinator._get_client = AsyncMock(return_value=client)
+
+    with patch("custom_components.neakasa.coordinator._LOGGER") as logger:
+        await coordinator.feed_once("riko-1", food_g=6, water_ratio=2)
+
+    logger.debug.assert_any_call(
+        "Riko feedOnce %s: %s",
+        "riko-1",
+        {"food": 6, "water": 12, "bSaveAsDef": 0},
+    )
+    assert coordinator.last_feed("riko-1") == {
+        "args": {"food": 6, "water": 12, "bSaveAsDef": 0},
+        "stored_defaults": False,
+    }
+
+
+async def test_feed_once_falls_back_to_device_defaults(
+    hass: HomeAssistant, mock_config_entry: MagicMock
+) -> None:
+    """No amounts given: the machine's stored defaults are fed."""
+    coordinator = _make_coordinator(hass, mock_config_entry)
+    coordinator.data = {"riko-1": _riko_snapshot()}
+    client = AsyncMock()
+    coordinator._get_client = AsyncMock(return_value=client)
+
+    await coordinator.feed_once("riko-1")
+    client.invoke_service.assert_awaited_once_with(
+        "riko-1",
+        "feedOnce",
+        {"food": 5, "water": 15, "bSaveAsDef": 0},
+    )
+
+
+async def test_feed_once_uses_pending_amounts(
+    hass: HomeAssistant, mock_config_entry: MagicMock
+) -> None:
+    """Staged amounts win, then they are cleared so the defaults show again."""
+    coordinator = _make_coordinator(hass, mock_config_entry)
+    coordinator.data = {"riko-1": _riko_snapshot()}
+    coordinator.set_pending_feed("riko-1", food_g=9, water_ratio=2)
+    client = AsyncMock()
+    coordinator._get_client = AsyncMock(return_value=client)
+
+    await coordinator.feed_once("riko-1")
+    client.invoke_service.assert_awaited_once_with(
+        "riko-1",
+        "feedOnce",
+        {"food": 9, "water": 18, "bSaveAsDef": 0},
+    )
+    assert coordinator.feed_values("riko-1") == (5, 3)
+
+
+async def test_feed_once_keeps_new_defaults(
+    hass: HomeAssistant, mock_config_entry: MagicMock
+) -> None:
+    """With the option on the fed amounts become the machine's defaults."""
+    coordinator = _make_coordinator(hass, mock_config_entry)
+    coordinator.config_entry.options = {
+        "scan_interval": 60,
+        "feed_keep_as_new_defaults": True,
+    }
+    client = AsyncMock()
+    coordinator._get_client = AsyncMock(return_value=client)
+
+    await coordinator.feed_once("riko-1", food_g=5, water_ratio=3)
+    client.invoke_service.assert_awaited_once_with(
+        "riko-1",
+        "feedOnce",
+        {"food": 5, "water": 15, "bSaveAsDef": 1},
+    )
+    client.set_device_properties.assert_awaited_once_with(
+        "riko-1", {"defFdCfg": {"food": 5, "water": 15, "mixMin": 1}}
+    )
+
+
+async def test_feed_once_toggled_per_device(
+    hass: HomeAssistant, mock_config_entry: MagicMock
+) -> None:
+    """The per-device setting wins over the account option."""
+    coordinator = _make_coordinator(hass, mock_config_entry)
+    coordinator.config_entry.options = {
+        "scan_interval": 60,
+        "feed_keep_as_new_defaults": False,
+    }
+    coordinator.set_feed_keep_as_new_defaults("riko-1", value=True)
+    client = AsyncMock()
+    coordinator._get_client = AsyncMock(return_value=client)
+
+    await coordinator.feed_once("riko-1", food_g=5, water_ratio=3)
+    client.invoke_service.assert_awaited_once_with(
+        "riko-1",
+        "feedOnce",
+        {"food": 5, "water": 15, "bSaveAsDef": 1},
+    )
+    client.set_device_properties.assert_awaited_once_with(
+        "riko-1", {"defFdCfg": {"food": 5, "water": 15, "mixMin": 1}}
+    )
+    assert coordinator.feed_keep_as_new_defaults("riko-1") is True
+    assert coordinator.last_feed("riko-1") == {
+        "args": {"food": 5, "water": 15, "bSaveAsDef": 1},
+        "stored_defaults": True,
+    }
+
+
+async def test_feed_once_toggled_per_device_off(
+    hass: HomeAssistant, mock_config_entry: MagicMock
+) -> None:
+    """A device toggled off stays off even when the option is on."""
+    coordinator = _make_coordinator(hass, mock_config_entry)
+    coordinator.config_entry.options = {
+        "scan_interval": 60,
+        "feed_keep_as_new_defaults": True,
+    }
+    coordinator.set_feed_keep_as_new_defaults("riko-1", value=False)
+    client = AsyncMock()
+    coordinator._get_client = AsyncMock(return_value=client)
+
+    await coordinator.feed_once("riko-1", food_g=5, water_ratio=3)
+    client.invoke_service.assert_awaited_once_with(
+        "riko-1",
+        "feedOnce",
+        {"food": 5, "water": 15, "bSaveAsDef": 0},
+    )
+    client.set_device_properties.assert_not_called()
+    assert coordinator.feed_keep_as_new_defaults("riko-1") is False
+
+
+async def test_feed_once_override_per_call(
+    hass: HomeAssistant, mock_config_entry: MagicMock
+) -> None:
+    """An explicit flag wins over the account-wide option."""
+    coordinator = _make_coordinator(hass, mock_config_entry)
+    coordinator.config_entry.options = {
+        "scan_interval": 60,
+        "feed_keep_as_new_defaults": True,
+    }
+    client = AsyncMock()
+    coordinator._get_client = AsyncMock(return_value=client)
+
+    await coordinator.feed_once("riko-1", save_as_default=False)
+    client.invoke_service.assert_awaited_once_with(
+        "riko-1",
+        "feedOnce",
+        {"food": 5, "water": 5, "bSaveAsDef": 0},
+    )
+    client.set_device_properties.assert_not_called()
 
 
 async def test_set_feed_config_preserves_mixmin(
     hass: HomeAssistant, mock_config_entry: MagicMock
 ) -> None:
-    """Writing new food/water preserves the existing mixMin and updates snapshot."""
+    """Writing new defaults stores water grams and preserves the existing mixMin."""
     coordinator = _make_coordinator(hass, mock_config_entry)
     snap = _riko_snapshot()
     coordinator.data = {"riko-1": snap}
     client = AsyncMock()
-    client.set_device_properties = AsyncMock()
     coordinator._get_client = AsyncMock(return_value=client)
 
     await coordinator.set_feed_config("riko-1", food_g=8, water_ratio=3)
     client.set_device_properties.assert_awaited_once_with(
-        "riko-1", {"defFdCfg": {"food": 8, "water": 3, "mixMin": 1}}
+        "riko-1", {"defFdCfg": {"food": 8, "water": 24, "mixMin": 1}}
     )
     assert snap.default_food_g == 8
     assert snap.default_water_ratio == 3
 
     with pytest.raises(ValueError, match="Food portion out of range"):
         await coordinator.set_feed_config("riko-1", food_g=0, water_ratio=3)
+
+
+async def test_feed_now_button_presses_without_own_amounts() -> None:
+    """Feed now asks the coordinator to feed; it never picks amounts itself."""
+    coord = MagicMock()
+    coord.feed_once = AsyncMock()
+    button = NeakasaFeedNowButton(coord, FAKE_DEVICE_INFO, "riko-001")
+    button.hass = MagicMock()
+    assert button.translation_key == "feed_now"
+    assert button.unique_id == "riko-001-feed_now"
+
+    await button.async_press()
+    coord.feed_once.assert_awaited_once_with("riko-001")
+
+
+async def test_editing_the_numbers_stages_without_writing_the_machine() -> None:
+    """Each number stages the next feed; neither writes defFdCfg by itself."""
+    food_coord = MagicMock()
+    food_coord.feed_values.return_value = (5, 3)
+    food = NeakasaFoodGramsNumber(food_coord, FAKE_DEVICE_INFO, "riko-001")
+    food.hass = MagicMock()
+    food.async_write_ha_state = MagicMock()
+    await food.async_set_native_value(9.0)
+    food_coord.set_pending_feed.assert_called_once_with("riko-001", food_g=9)
+    food_coord.async_update_setup_entry_data.assert_not_called()
+    food_coord.async_update_setup_completion_data.assert_not_called()
+
+    ratio_coord = MagicMock()
+    ratio_coord.feed_values.return_value = (10, 3)
+    ratio = NeakasaWaterRatioNumber(ratio_coord, FAKE_DEVICE_INFO, "riko-001")
+    ratio.hass = MagicMock()
+    ratio.async_write_ha_state = MagicMock()
+    await ratio.async_set_native_value(4.0)
+    ratio_coord.set_pending_feed.assert_called_once_with("riko-001", water_ratio=4)
+    ratio_coord.async_update_setup_entry_data.assert_not_called()
+    ratio_coord.async_update_setup_completion_data.assert_not_called()
+
+
+async def test_numbers_show_the_amounts_a_feed_would_use() -> None:
+    """Both numbers display the effective amounts, not what is staged or stored."""
+    coord = MagicMock()
+    coord.feed_values.return_value = (9, 2)
+    food = NeakasaFoodGramsNumber(coord, FAKE_DEVICE_INFO, "riko-001")
+    food.hass = MagicMock()
+    food.async_write_ha_state = MagicMock()
+    food._handle_coordinator_update()
+    assert food._attr_native_value == 9.0
+
+    ratio = NeakasaWaterRatioNumber(coord, FAKE_DEVICE_INFO, "riko-001")
+    ratio.hass = MagicMock()
+    ratio.async_write_ha_state = MagicMock()
+    ratio._handle_coordinator_update()
+    assert ratio._attr_native_value == 2.0

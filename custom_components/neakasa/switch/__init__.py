@@ -20,6 +20,7 @@ from .auto_clean import NeakasaAutoCleanSwitch
 from .auto_level import NeakasaAutoLevelSwitch
 from .auto_recovery import NeakasaAutoRecoverySwitch
 from .child_lock import NeakasaChildLockSwitch
+from .feed_keep_defaults import NeakasaFeedKeepDefaultsSwitch
 from .silent_mode import NeakasaSilentModeSwitch
 from .unstoppable_cycle import NeakasaUnstoppableCycleSwitch
 from .young_cat_mode import NeakasaYoungCatModeSwitch
@@ -49,7 +50,11 @@ async def async_setup_entry(
                 manufacturer="Neakasa",
                 identifiers={(DOMAIN, iot_id)},
             )
+            # Riko gets the feeding switch only; cat devices keep their switches.
             if snap.category_key == "petFeeder":
+                entities.append(
+                    NeakasaFeedKeepDefaultsSwitch(coordinator, device_info, iot_id)
+                )
                 continue
             entities.extend(
                 [

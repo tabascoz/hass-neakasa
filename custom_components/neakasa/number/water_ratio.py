@@ -1,4 +1,4 @@
-"""Number to set the Riko water-to-food ratio for feeding (1-5)."""
+"""Number to set the water-to-food ratio used by the next Riko feed."""
 
 from __future__ import annotations
 
@@ -9,14 +9,14 @@ from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from ..const import FEED_WATER_RATIO_MAX, FEED_WATER_RATIO_MIN
-from ..coordinator import NeakasaCoordinator, NeakasaDeviceSnapshot
+from ..coordinator import NeakasaCoordinator
 
 if TYPE_CHECKING:
     from homeassistant.helpers.device_registry import DeviceInfo
 
 
 class NeakasaWaterRatioNumber(CoordinatorEntity[NeakasaCoordinator], NumberEntity):
-    """Water-to-food ratio per feeding (1 = 1:1, 5 = 1:5)."""
+    """Water-to-food ratio (1:1 to 1:5) the next Feed now will use."""
 
     _attr_should_poll = False
     _attr_has_entity_name = True
@@ -40,11 +40,9 @@ class NeakasaWaterRatioNumber(CoordinatorEntity[NeakasaCoordinator], NumberEntit
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        snap = self.coordinator.device_snapshot(self._iot_id)
-        if snap is not None:
-            self._attr_native_value = float(
-                snap.default_water_ratio or FEED_WATER_RATIO_MIN
-            )
+        """Show the ratio the next Feed now would use."""
+        _food_g, water_ratio = self.coordinator.feed_values(self._iot_id)
+        self._attr_native_value = float(water_ratio)
         self.async_write_ha_state()
 
     async def async_update(self) -> None:
@@ -58,17 +56,6 @@ class NeakasaWaterRatioNumber(CoordinatorEntity[NeakasaCoordinator], NumberEntit
         await super().async_added_to_hass()
         self._handle_coordinator_update()
 
-    @property
-    def _snap(self) -> NeakasaDeviceSnapshot | None:
-        return self.coordinator.device_snapshot(self._iot_id)
-
     async def async_set_native_value(self, value: float) -> None:
-        """Write a new water ratio, preserving the current food portion."""
-        snap = self._snap
-        if snap is None:
-            return
-        await self.coordinator.set_feed_config(
-            self._iot_id,
-            food_g=snap.default_food_g or 5,
-            water_ratio=int(value),
-        )
+        """Use a new water ratio for the next feed; the machine is not written."""
+        self.coordinator.set_pending_feed(self._iot_id, water_ratio=int(value))

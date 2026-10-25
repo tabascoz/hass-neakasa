@@ -152,6 +152,9 @@
             },
             "unstoppable_cycle": {
                 "name": "Unstoppable cycle"
+            },
+            "feed_keep_as_new_defaults": {
+                "name": "Save feed as default"
             }
         }
     }

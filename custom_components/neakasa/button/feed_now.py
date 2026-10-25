@@ -8,7 +8,7 @@ from homeassistant.components.button import ButtonEntity
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from ..coordinator import NeakasaCoordinator, NeakasaDeviceSnapshot
+from ..coordinator import NeakasaCoordinator
 
 if TYPE_CHECKING:
     from homeassistant.helpers.device_registry import DeviceInfo
@@ -49,17 +49,6 @@ class NeakasaFeedNowButton(CoordinatorEntity[NeakasaCoordinator], ButtonEntity):
         await super().async_added_to_hass()
         self._handle_coordinator_update()
 
-    @property
-    def _snap(self) -> NeakasaDeviceSnapshot | None:
-        return self.coordinator.device_snapshot(self._iot_id)
-
     async def async_press(self) -> None:
-        """Dispense one meal with the currently configured food/water values."""
-        snap = self._snap
-        if snap is None:
-            return
-        await self.coordinator.feed_once(
-            self._iot_id,
-            food_g=snap.default_food_g or 5,
-            water_ratio=snap.default_water_ratio or 1,
-        )
+        """Dispense one meal with the pending amounts or the machine's defaults."""
+        await self.coordinator.feed_once(self._iot_id)
