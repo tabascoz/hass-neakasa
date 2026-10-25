@@ -17,7 +17,7 @@ The Neakasa Home Assistant Custom Integration allows you to integrate your Neaka
 
 ### Currently supported devices
 - Neakasa M1 (Cat Litter Box)
-- Neakasa Riko (Wet Meal Feeder) — read-write (beta, `v1.5.0-beta1`)
+- Neakasa Riko (Wet Meal Feeder) — read-write (beta, `v1.5.0-beta2`)
 
 #### Riko (wet meal feeder) features
 |Type|Name|Notes|
@@ -27,14 +27,17 @@ The Neakasa Home Assistant Custom Integration allows you to integrate your Neaka
 |Sensor|WiFi RSS|network signal strength in dB (closer to 0 = stronger); diagnostic — off by default|
 |Sensor|Device label|the friendly name set in the Neakasa app (all devices)|
 |Binary sensor|Cover missing|`bCoverAbsent`|
-|Button|Feed now|dispense one wet meal via `feedOnce` (`{food, water}`)|
-|Number|Food quantity|default portion per feed, 3–15 g (writes `defFdCfg.food`)|
-|Number|Water ratio|water-to-food ratio, 1–5 (writes `defFdCfg.water`)|
+|Button|Feed now|dispense one wet meal via `feedOnce` (`{food, water, bSaveAsDef}`)|
+|Number|Food quantity|portion used by the next Feed now, 3–15 g|
+|Number|Water ratio|water-to-food ratio used by the next Feed now, 1–5 (water amount = portion × ratio)|
+|Switch|Save feed as default|whether a Feed now stores the amounts it used on the machine; default off|
 
-> The Feed now button uses the currently configured food/water defaults; setting
-> either number writes the device's `defFdCfg` via read-modify-write and preserves
-> `mixMin`. Other Riko controls (`freshMgrCfg`, `deepCleanCfg`, audio/display) are
-> not exposed yet — see `docs/riko-protocol.md`.
+> On setup the integration reads the machine's own `defFdCfg` and shows it (the water
+> amount in grams is turned back into the ratio). Editing a number only stages the next
+> feed; the machine is never written by itself. The **Save feed as default**
+> switch on the Riko decides whether a Feed now stores the amounts it used; it starts
+> off and the account option `feed_keep_as_new_defaults` only seeds that default. Other Riko controls (`freshMgrCfg`,
+> `deepCleanCfg`, audio/display) are not exposed yet — see `docs/riko-protocol.md`.
 
 ### Currently supported features
 #### Sensors:
@@ -73,22 +76,28 @@ The Neakasa Home Assistant Custom Integration allows you to integrate your Neaka
 
 ## Installation
 
-### Getting the Riko beta (`v1.5.0-beta1`)
+### Getting the Riko beta (`v1.5.0-beta2`)
 
 The Riko support ships as a pre-release. To try it before the next stable release:
 
 **Via HACS** — in Home Assistant, open HACS → *Integrations* → Neakasa → use the
-version selector to download `v1.5.0-beta1`, then restart Home Assistant.
+version selector to download `v1.5.0-beta2`, then restart Home Assistant.
 
 **Manually (zip)** — download this beta's asset and extract into your config dir:
 
 ```bash
-wget https://github.com/tabascoz/hass-neakasa/releases/download/v1.5.0-beta1/neakasa.zip
+wget https://github.com/tabascoz/hass-neakasa/releases/download/v1.5.0-beta2/neakasa.zip
 mkdir -p custom_components/neakasa && unzip neakasa.zip -d custom_components/neakasa && rm neakasa.zip
 ```
 
 Then restart Home Assistant. The beta is opt-in — HACS keeps the latest *stable*
 (`v1.4.2`) as default until `v1.5.0` is released; pick the beta explicitly to test Riko now.
+
+**Beta notes** — `v1.5.0-beta1` sent the water amount as a ratio index, which made the
+machine keep adding water and report an error of clogged water sprays. `v1.5.0-beta2`
+sends the amount in grams, the way the official app does, and adds the account option
+`feed_keep_as_new_defaults` for storing the amounts a feed used as the machine's
+defaults.
 
 ### HACS (recommended)
 
@@ -154,6 +163,20 @@ restart Home Assistant.
 
 From the Home Assistant front page go to `Configuration` and then select `Devices & Services` from the list.
 Use the `Add Integration` button in the bottom right to add a new integration called `Neakasa`.
+
+### Riko feeding controls
+
+The Food quantity and Water ratio numbers set the amounts used by the **next** Feed now; they
+never write the machine on their own. The **Save feed as default** switch, listed with
+the Riko's other entities, decides whether a feed stores the amounts it used on the machine. It
+starts off; the account option `feed_keep_as_new_defaults` only seeds that starting value and
+lives in the options dialog of the account card (Devices & Services → Integrations → the Neakasa
+card, whose title is the account or a device serial → `⋮` → Configure settings).
+
+To see what a feed sent, open the integration's Diagnostics — per device it reports `defFdCfg`,
+the parsed defaults, `pending_feed`, `keep_as_new_defaults` and `last_feed` — or enable
+`custom_components.neakasa: debug` in the logging configuration and read the log line
+`Riko feedOnce …`.
 
 ## Troubleshooting Tips / Known Issues
 
