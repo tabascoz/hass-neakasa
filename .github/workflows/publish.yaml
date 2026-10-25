@@ -5,6 +5,10 @@ on:
     types:
       - published
 
+# The release that was just cut gets the integration zip it needs. Each step
+# stops at its first failure, so a broken build or upload is visible in the
+# run log rather than only as a failed job.
+
 jobs:
   release:
     name: Release
@@ -15,29 +19,41 @@ jobs:
     steps:
       - name: Checkout the repository
         uses: actions/checkout@v4
-      - name: Get integration information
+      - name: Find the integration
         id: information
-        run: |
-          name=$(find custom_components/ -type d -maxdepth 1 | tail -n 1 | cut -d "/" -f2)
-          echo "name=$name" >> $GITHUB_OUTPUT
-      - name: Adjust version number
-        if: ${{ github.event_name == 'release' }}
         shell: bash
         run: |
-          version="${{ github.event.release.tag_name }}"
-          # Strip leading 'v' if present (e.g. 'v1.3.1' -> '1.3.1')
-          version="${version#v}"
-          manifest="${{ github.workspace }}/custom_components/${{ steps.information.outputs.name }}/manifest.json"
-          jq --arg ver "$version" '.version=$ver' "$manifest" > "${manifest}.tmp" \
-            && mv "${manifest}.tmp" "$manifest"
+          set -euo pipefail
+          count=$(find custom_components -mindepth 1 -maxdepth 1 -type d | wc -l)
+          if [ "$count" -ne 1 ]; then
+            echo "expected exactly one integration directory, found $count"
+            exit 1
+          fi
+          find custom_components -mindepth 1 -maxdepth 1 -type d -printf "name=%f\n" >> "$GITHUB_OUTPUT"
+      - name: Stamp the manifest with the release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.release.tag_name }}"
+          version="${tag#v}"
+          manifest="custom_components/${{ steps.information.outputs.name }}/manifest.json"
+          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$version\"/" "$manifest"
+          grep -q "\"version\": \"$version\"" "$manifest"
       - name: Create zip file for the integration
         shell: bash
         run: |
-          cd "${{ github.workspace }}/custom_components/${{ steps.information.outputs.name }}"
-          zip ${{ steps.information.outputs.name }}.zip -r ./
+          set -euo pipefail
+          name="${{ steps.information.outputs.name }}"
+          cd "custom_components/${name}"
+          rm -f "${name}.zip"
+          zip -r -X "${name}.zip" .
+          test -f "${name}.zip"
       - name: Upload the zipfile as a release asset
-        uses: softprops/action-gh-release@v2
-        if: ${{ github.event_name == 'release' }}
-        with:
-          files: ${{ github.workspace }}/custom_components/${{ steps.information.outputs.name }}/${{ steps.information.outputs.name }}.zip
-          tag_name: ${{ github.event.release.tag_name }}
+        shell: bash
+        env:
+          GH_TOKEN: ${GITHUB_TOKEN}
+        run: |
+          set -euo pipefail
+          name="${{ steps.information.outputs.name }}"
+          tag="${{ github.event.release.tag_name }}"
+          gh release upload "$tag" "custom_components/${name}/${name}.zip" --clobber
