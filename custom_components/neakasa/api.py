@@ -379,6 +379,15 @@ class NeakasaAPI:
         except APIAuthError as err:
             _LOGGER.warning("IoT token refresh rejected: %s", err)
 
+    async def refresh_session(self) -> None:
+        """Exchange the current session for a fresh IoT token, keeping errors.
+
+        One call instead of the six a full re-login needs, so a recovered
+        session does not stack new sessions on the account. Raises where
+        :meth:`_refresh_iot_token` would log, so callers can fall back.
+        """
+        self._iot_token = await self._get_iot_token_by_sid(self._sid)
+
     async def get_product_list(self) -> Any:
         """Fetch the product list for the account."""
         return await self._iot_request(

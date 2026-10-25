@@ -1,9 +1,11 @@
-# The mobile apps reconnecting on their own
+# The Home Assistant clients losing their websocket connection
 
-Symptom: with this integration enabled the Home Assistant mobile apps (iOS and
-Android) drop their connection about once a minute and go back to the login page.
-It predates the Riko work and happens with the inherited code only, so it is not a
-feeding issue.
+Symptom this documents: Home Assistant's own clients (its apps and the browser
+tabs on the tablets) drop their websocket connection and re-authenticate. The
+Neakasa app's "device offline, please log in" looks the same to you but comes
+from the cloud account's sessions, not from this queue — that is documented
+separately in [cloud-session-churn.md](cloud-session-churn.md). Both were
+reported at the same time, so both are measured on this branch together.
 
 ## What is happening
 
@@ -56,8 +58,13 @@ Cloud polling at one minute for 33 entities is what keeps the queue at the limit
   values this integration stages locally (pending amounts, the store-as-default
   switch, the last stored feed), so a real change or a user action still writes.
 - An unknown model keeps writing, so entities report being unavailable.
-- The scan interval is left at its default on this branch, so the only changed
-  variable is the number of reports per scan. This keeps the measurement clean.
+- The guard logs one line per state it reports so the residual can be counted
+  with a journal grep; that line is a measuring aid, removed if the branch is kept.
+- The branch does not change the scan interval. The entry's `scan_interval`
+  option was raised to 300 s on the production box by hand, which divides both
+  this queue and the cloud session churn by five; it is shared with
+  [cloud-session-churn.md](cloud-session-churn.md) and the code here stays the
+  other variable.
 
 ## Measured before
 

@@ -16,6 +16,9 @@ if TYPE_CHECKING:
 
 _shared_clients: dict[str, NeakasaApiClient] = {}
 _shared_locks: dict[str, asyncio.Lock] = {}
+# Creating the per-credentials lock must itself be serialised, otherwise two
+# concurrent first-setup paths each get their own lock and authenticate twice.
+_shared_registry_lock = asyncio.Lock()
 
 
 async def get_shared_api(
@@ -23,9 +26,9 @@ async def get_shared_api(
 ) -> NeakasaApiClient:
     """Get or create a shared API client for the given credentials."""
     credentials_key = f"{username}:{password}"
-    if credentials_key not in _shared_locks:
-        _shared_locks[credentials_key] = asyncio.Lock()
-    async with _shared_locks[credentials_key]:
+    async with _shared_registry_lock:
+        lock = _shared_locks.setdefault(credentials_key, asyncio.Lock())
+    async with lock:
         if credentials_key in _shared_clients:
             client = _shared_clients[credentials_key]
             if client.connected:
@@ -52,10 +55,14 @@ async def get_shared_api(
 
 
 def clear_shared_api(username: str, password: str) -> None:
-    """Clear the shared API client for the given credentials."""
+    """
+    Clear the shared API client for the given credentials.
+
+    The per-credentials lock is kept so concurrent callers cannot each start
+    their own authentication afterwards.
+    """
     credentials_key = f"{username}:{password}"
     _shared_clients.pop(credentials_key, None)
-    _shared_locks.pop(credentials_key, None)
 
 
 async def force_reconnect_api(

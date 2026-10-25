@@ -72,6 +72,11 @@ class NeakasaApiClient:
         """Delegate connect call without translation (used during initial setup)."""
         await self._api.connect(username, password)
 
+    async def refresh_session(self) -> None:
+        """Renew the IoT session token without a full re-login, translating errors."""
+        async with _translate_errors():
+            await self._api.refresh_session()
+
     async def get_devices(self, page_no: int = 1, page_size: int = 20) -> Any:
         """Fetch devices, translating errors."""
         async with _translate_errors():

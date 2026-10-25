@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -36,6 +37,14 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
     from .api_client import NeakasaApiClient
+
+# The account's device list changes rarely; refetching it on every scan is a
+# large part of the cloud traffic, which is what makes the Neakasa app lose
+# its own session. One entry keeps it cached for this long.
+DEVICE_LIST_REFRESH_MINUTES = 10
+# A full re-login mints a new session for the account, so it is done at most
+# once per window; renewing the IoT token (one call) is tried first.
+FULL_REAUTH_COOLDOWN_SECONDS = 600
 
 CATLITTER_EXPECTED_KEYS: tuple[str, ...] = (
     "binFullWaitReset",
@@ -397,6 +406,12 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         self._device_names: dict[str, str] = {}
         self._device_meta: dict[str, dict[str, str]] = {}
         self._device_ids: list[str] = []
+        self._account_devices: list[dict[str, Any]] = []
+        self._devices_cache = ValueCacher(
+            refresh_after=timedelta(minutes=DEVICE_LIST_REFRESH_MINUTES),
+            discard_after=None,
+        )
+        self._last_full_auth: float | None = None
         self._pending_feed: dict[str, dict[str, int | None]] = {}
         self._feed_keep_as_new_defaults: dict[str, bool] = {}
         self._last_feed: dict[str, dict[str, Any]] = {}
@@ -460,7 +475,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
 
         devices: dict[str, Any] = {}
         for iot_id, snap in (self.data or {}).items():
-            devicedata = await self._get_properties(iot_id)
+            devicedata = await self._get_properties(iot_id, client)
             if not isinstance(devicedata, dict):
                 devicedata = {}
             expected = (
@@ -781,10 +796,23 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         """Return the shared API client for this coordinator's credentials."""
         return await get_shared_api(self.hass, self.username, self.password)
 
-    async def _discover_devices(self) -> list[dict[str, Any]]:
-        """Fetch all known Neakasa devices for the account."""
-        client = await self._get_client()
-        all_devices = await client.get_devices()
+    async def _discover_devices(
+        self, client: NeakasaApiClient | None = None
+    ) -> list[dict[str, Any]]:
+        """Return the account's devices, refetched at most every 10 minutes."""
+
+        async def fetch() -> list[dict[str, Any]]:
+            return await self._fetch_account_devices(client)
+
+        return await self._devices_cache.get_or_update(fetch)
+
+    async def _fetch_account_devices(
+        self, client: NeakasaApiClient | None = None
+    ) -> list[dict[str, Any]]:
+        """Fetch the account device list and register the supported ones."""
+        api_client = client if client is not None else await self._get_client()
+        all_devices = await api_client.get_devices()
+        self._account_devices = all_devices
         matched: list[dict[str, Any]] = []
         for d in all_devices:
             cat_key: str = d.get("categoryKey", "")
@@ -797,6 +825,10 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                 }
                 matched.append(d)
         return matched
+
+    def force_refresh_devices(self) -> None:
+        """Drop the cached device list so the next scan refetches it."""
+        self._devices_cache.mark_as_stale()
 
     def _cache_for(self, iot_id: str) -> tuple[ValueCacher, ValueCacher]:
         """Return (records_cache, properties_cache) for *iot_id*."""
@@ -813,11 +845,17 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         return self._records_caches[iot_id], self._properties_caches[iot_id]
 
     async def _get_device_name(self, iot_id: str) -> str:
-        """Resolve a user-facing device name from its IOT ID."""
+        """Resolve a user-facing device name, preferring the fetched device list."""
         if iot_id in self._device_names:
             return self._device_names[iot_id]
+        for d in self._account_devices:
+            if d.get("iotId") == iot_id:
+                name = d.get("deviceName") or iot_id
+                self._device_names[iot_id] = name
+                return name
         client = await self._get_client()
         devices = await client.get_devices()
+        self._account_devices = devices
         for d in devices:
             if d.get("iotId") == iot_id:
                 name = d.get("deviceName") or iot_id
@@ -826,30 +864,36 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         self._device_names[iot_id] = iot_id
         return iot_id
 
-    async def _get_records(self, iot_id: str) -> Any:
-        """Fetch cached usage records for *iot_id*."""
+    async def _get_records(
+        self, iot_id: str, client: NeakasaApiClient | None = None
+    ) -> Any:
+        """Fetch cached usage records for *iot_id*, reusing *client* when given."""
         records_cache, _ = self._cache_for(iot_id)
 
         async def fetch() -> Any:
             device_name = await self._get_device_name(iot_id)
-            client = await self._get_client()
-            return await client.get_records(device_name)
+            api_client = client if client is not None else await self._get_client()
+            return await api_client.get_records(device_name)
 
         return await records_cache.get_or_update(fetch)
 
-    async def _get_properties(self, iot_id: str) -> Any:
-        """Fetch cached device properties for *iot_id*."""
+    async def _get_properties(
+        self, iot_id: str, client: NeakasaApiClient | None = None
+    ) -> Any:
+        """Fetch device properties for *iot_id*, reusing *client* when given."""
         _, props_cache = self._cache_for(iot_id)
 
         async def fetch() -> Any:
-            client = await self._get_client()
-            return await client.get_device_properties(iot_id)
+            api_client = client if client is not None else await self._get_client()
+            return await api_client.get_device_properties(iot_id)
 
         return await props_cache.get_or_update(fetch)
 
-    async def _fetch_single_device(self, iot_id: str) -> NeakasaDeviceSnapshot:
+    async def _fetch_single_device(
+        self, iot_id: str, client: NeakasaApiClient | None = None
+    ) -> NeakasaDeviceSnapshot:
         """Fetch properties and records for one device, building a snapshot."""
-        devicedata = await self._get_properties(iot_id)
+        devicedata = await self._get_properties(iot_id, client)
         meta = self._device_meta.get(iot_id, {})
         category_key = meta.get("category_key", "CatLitter")
 
@@ -874,7 +918,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             records_cache.mark_as_stale()
         self._last_use_dates[iot_id] = new_last_use
 
-        records = await self._get_records(iot_id)
+        records = await self._get_records(iot_id, client)
         device_name = await self._get_device_name(iot_id)
         self._mark_state_changed(iot_id, devicedata, records)
         return _build_device_snapshot(
@@ -892,29 +936,75 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
     # Reconnection helpers
     # ------------------------------------------------------------------
 
-    async def _reconnect_and_retry(self) -> NeakasaPayload:
+    async def _renew_cloud_session(self) -> bool:
         """
-        Clear the cached API client and retry the update.
+        Renew the shared client's IoT token instead of signing in again.
 
-        Used by session-expiry, auth, and identityId recovery paths.
-        Raises :class:`UpdateFailed` if reconnection itself fails.
+        One call rather than the six a full re-login needs, and it adds no
+        session to the account. Returns whether the renewal worked.
         """
+        try:
+            client = await self._get_client()
+            await client.refresh_session()
+        except NeakasaApiClientError as err:
+            _LOGGER.debug("Cloud session renewal failed: %s", err)
+            return False
+        _LOGGER.debug("Renewed the cloud session without a full re-auth")
+        return True
+
+    async def _force_full_reauth(self, reason: str) -> bool:
+        """
+        Sign in from scratch, at most once per cooldown window.
+
+        A full re-login mints a new session for the account, so the Neakasa
+        app's own session is pushed out repeatedly when it happens often.
+        Raises :class:`UpdateFailed` when re-authentication itself fails.
+        Returns whether a re-authentication was performed.
+        """
+        now = time.monotonic()
+        if self._last_full_auth is not None:
+            elapsed = now - self._last_full_auth
+            if elapsed < FULL_REAUTH_COOLDOWN_SECONDS:
+                _LOGGER.debug(
+                    "Not signing in again (%s): last full re-auth was %.0fs ago",
+                    reason,
+                    elapsed,
+                )
+                return False
+        self._last_full_auth = now
         try:
             await force_reconnect_api(self.hass, self.username, self.password)
         except NeakasaApiClientError as reconnect_err:
             msg = "Reconnection failed"
             raise UpdateFailed(msg) from reconnect_err
-        else:
+        return True
+
+    async def _reconnect_and_retry(
+        self, reason: str = "session expired"
+    ) -> NeakasaPayload:
+        """
+        Recover from a session/auth failure, then retry the update.
+
+        Token renewal is preferred; a full re-auth is bounded by the cooldown
+        and the scan is reported as failed when recovery is not possible.
+        """
+        self.force_refresh_devices()
+        if await self._renew_cloud_session():
             return await self.async_update_data()
+        if not await self._force_full_reauth(reason):
+            msg = f"Cloud session unusable and re-auth cooling down: {reason}"
+            raise UpdateFailed(msg)
+        return await self.async_update_data()
 
     async def _reconnect_clear_and_retry(self) -> NeakasaPayload:
         """
         Fully clear the shared API and retry from scratch.
 
-        Used for identityId-blank errors where a partial reconnect is insufficient.
+        Used for identityId-blank errors where a partial reconnect is
+        insufficient.
         """
         clear_shared_api(self.username, self.password)
-        return await self._reconnect_and_retry()
+        return await self._reconnect_and_retry("identityId is blank")
 
     # ------------------------------------------------------------------
     # Main update loop
@@ -923,11 +1013,15 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
     async def async_update_data(self) -> NeakasaPayload:
         """Fetch fresh data from all CatLitter devices on the account."""
         try:
-            devices = await self._discover_devices()
+            client = await self._get_client()
+            devices = await self._discover_devices(client)
             self._device_ids = [d["iotId"] for d in devices]
 
             snapshots = await asyncio.gather(
-                *(self._fetch_single_device(iot_id) for iot_id in self._device_ids),
+                *(
+                    self._fetch_single_device(iot_id, client)
+                    for iot_id in self._device_ids
+                ),
                 return_exceptions=True,
             )
 
@@ -945,7 +1039,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         except NeakasaApiClientSessionExpiredError as err:
             _LOGGER.warning("Session expired, reconnecting silently: %s", err)
             try:
-                payload = await self._reconnect_and_retry()
+                payload = await self._reconnect_and_retry("session expired")
             except Exception as exc:
                 _LOGGER.warning("Reconnect+retry FAILED after session expiry: %s", exc)
                 raise
@@ -959,7 +1053,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         except NeakasaApiClientAuthenticationError as err:
             _LOGGER.warning("Authentication error, attempting reconnect: %s", err)
             try:
-                return await self._reconnect_and_retry()
+                return await self._reconnect_and_retry("authentication error")
             except UpdateFailed:
                 _LOGGER.info(
                     "Starting reauth flow for entry %s", self.config_entry.entry_id
