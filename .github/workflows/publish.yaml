@@ -52,7 +52,7 @@ jobs:
       - name: Upload the zipfile as a release asset
         shell: bash
         env:
-          GH_TOKEN: ${GITHUB_TOKEN}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           name="${{ steps.information.outputs.name }}"
