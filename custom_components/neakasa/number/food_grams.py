@@ -8,6 +8,7 @@ from homeassistant.components.number import NumberEntity
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from ..base_entity import write_state_if_changed
 from ..const import FEED_FOOD_MAX_G, FEED_FOOD_MIN_G
 from ..coordinator import NeakasaCoordinator
 
@@ -44,7 +45,7 @@ class NeakasaFoodGramsNumber(CoordinatorEntity[NeakasaCoordinator], NumberEntity
         """Show the portion the next Feed now would use."""
         food_g, _ratio = self.coordinator.feed_values(self._iot_id)
         self._attr_native_value = float(food_g)
-        self.async_write_ha_state()
+        write_state_if_changed(self, self._iot_id)
 
     async def async_update(self) -> None:
         """Update entity state from coordinator data."""

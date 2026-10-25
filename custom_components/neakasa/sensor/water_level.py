@@ -8,6 +8,7 @@ from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from ..base_entity import write_state_if_changed
 from ..coordinator import NeakasaCoordinator, NeakasaDeviceSnapshot
 
 if TYPE_CHECKING:
@@ -36,7 +37,7 @@ class NeakasaWaterLevelSensor(CoordinatorEntity[NeakasaCoordinator], SensorEntit
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        self.async_write_ha_state()
+        write_state_if_changed(self, self._iot_id)
 
     async def async_update(self) -> None:
         """Update entity state from coordinator data."""

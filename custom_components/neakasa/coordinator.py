@@ -400,6 +400,9 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         self._pending_feed: dict[str, dict[str, int | None]] = {}
         self._feed_keep_as_new_defaults: dict[str, bool] = {}
         self._last_feed: dict[str, dict[str, Any]] = {}
+        self._state_base: dict[str, str] = {}
+        self._state_fingerprints: dict[str, Any] = {}
+        self._state_manual_bumps: dict[str, int] = {}
 
         scan_interval = config_entry.options.get("scan_interval", 60)
         super().__init__(
@@ -490,6 +493,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         await client.set_device_properties(iot_id, {wire_key: value})
         if self.data and iot_id in self.data:
             setattr(self.data[iot_id], key, value)
+            self._mark_state_changed(iot_id)
             self.async_set_updated_data(self.data)
 
     async def invoke_service(self, iot_id: str, service: str) -> None:
@@ -533,6 +537,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         if water_ratio is not None:
             pending["water_ratio"] = water_ratio
         if self.data and iot_id in self.data:
+            self._mark_state_changed(iot_id)
             self.async_set_updated_data(self.data)
 
     def feed_keep_as_new_defaults(self, iot_id: str) -> bool:
@@ -551,10 +556,65 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         """Return the amounts the last feed for *iot_id* used, if any."""
         return dict(self._last_feed.get(iot_id, {}))
 
+    def state_fingerprint(self, iot_id: str) -> Any:
+        """
+        Return the stamp that changes whenever the model for *iot_id* changes.
+
+        Entities pass it to ``write_state_if_changed`` to skip reporting a state
+        that cannot differ: a scan which rebuilt the same model leaves the stamp
+        equal, so nothing is pushed to Home Assistant for it. Any user action
+        which writes the model or stages values refreshes the stamp instead, so
+        those changes are always reported. An unknown model returns None, which
+        leaves entities reporting their unavailable state.
+        """
+        if self.device_snapshot(iot_id) is None:
+            return None
+        return self._state_fingerprints.get(iot_id)
+
+    def _mark_state_changed(
+        self,
+        iot_id: str,
+        props: Any = None,
+        records: Any = None,
+    ) -> None:
+        """
+        Refresh the stamp for *iot_id*.
+
+        With *props* given, the stamp is taken from the wire payload just read, so
+        a payload equal to the previous one gives an equal stamp. Without *props*,
+        a user action changed the model directly and the stamp moves by a counter.
+        """
+        if props is not None:
+            self._state_base[iot_id] = json.dumps(
+                {"props": props, "records": records},
+                sort_keys=True,
+                default=str,
+            )
+        else:
+            bumps = self._state_manual_bumps
+            bumps[iot_id] = bump = bumps.get(iot_id, 0) + 1
+            base = self._state_base.get(iot_id, "")
+            self._state_base[iot_id] = f"{base} manual:{bump}"
+        self._state_fingerprints[iot_id] = hash(
+            (
+                self._state_base[iot_id],
+                json.dumps(
+                    {
+                        "pending": self._pending_feed.get(iot_id),
+                        "keep": self._feed_keep_as_new_defaults.get(iot_id),
+                        "last": self._last_feed.get(iot_id),
+                    },
+                    sort_keys=True,
+                    default=str,
+                ),
+            )
+        )
+
     def set_feed_keep_as_new_defaults(self, iot_id: str, *, value: bool) -> None:
         """Choose whether a feed for *iot_id* stores the amounts it used."""
         self._feed_keep_as_new_defaults[iot_id] = value
         if self.data and iot_id in self.data:
+            self._mark_state_changed(iot_id)
             self.async_set_updated_data(self.data)
 
     async def feed_once(
@@ -613,6 +673,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                     "Failed to store the fed amounts as new defaults: %s", err
                 )
         elif self.data and iot_id in self.data:
+            self._mark_state_changed(iot_id)
             self.async_set_updated_data(self.data)
 
     def _validate_feed(self, food_g: int, water_ratio: int) -> None:
@@ -656,6 +717,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             snap.default_food_g = food_g
             snap.default_water_ratio = water_ratio
             snap.feed_cfg = payload
+            self._mark_state_changed(iot_id)
             self.async_set_updated_data(self.data)
 
     # ------------------------------------------------------------------
@@ -794,6 +856,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         if category_key != "CatLitter":
             # Only litter boxes expose cat/usage records; feeders do not.
             device_name = await self._get_device_name(iot_id)
+            self._mark_state_changed(iot_id, devicedata, {})
             return _build_device_snapshot(
                 iot_id,
                 device_name,
@@ -813,6 +876,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
 
         records = await self._get_records(iot_id)
         device_name = await self._get_device_name(iot_id)
+        self._mark_state_changed(iot_id, devicedata, records)
         return _build_device_snapshot(
             iot_id,
             device_name,
