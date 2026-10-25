@@ -64,6 +64,10 @@ into roughly seven cloud requests a minute.
 
 ## Counting it
 
+On this branch the counters are logged at INFO so the greps work without
+enabling debug logging. They are measuring aids: drop them (back to debug) if
+the branch is kept.
+
 ```bash
 # full sign-ins (each mints a session): expect a handful per hour, not per minute
 journalctl -u homeassistant --since "-1 hour" | grep -c \

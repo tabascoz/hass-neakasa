@@ -15,5 +15,5 @@ def write_state_if_changed(entity: Any, iot_id: str) -> None:
     if stamp is not None and stamp == getattr(entity, "_last_state_stamp", _UNCHANGED):
         return
     entity._last_state_stamp = stamp  # noqa: SLF001 - stored per entity instance
-    _LOGGER.debug("Reported state for %s", getattr(entity, "entity_id", iot_id))
+    _LOGGER.info("Reported state for %s", getattr(entity, "entity_id", iot_id))
     entity.async_write_ha_state()
