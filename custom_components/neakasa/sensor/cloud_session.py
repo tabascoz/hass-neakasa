@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -27,6 +27,7 @@ class NeakasaCloudSessionStatusSensor(
     _attr_has_entity_name = True
     _attr_translation_key = "cloud_session_status"
     _attr_icon = "mdi:key"
+    _attr_device_class = SensorDeviceClass.ENUM
 
     def __init__(
         self,

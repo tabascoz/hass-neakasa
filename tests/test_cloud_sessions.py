@@ -7,6 +7,7 @@ import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
@@ -20,8 +21,10 @@ from custom_components.neakasa.api_manager import (
 )
 from custom_components.neakasa.button.refresh_data import NeakasaRefreshDataButton
 from custom_components.neakasa.coordinator import (
+    CLOUD_SESSION_OWNERS,
     SESSION_OWNER_ELSEWHERE,
     SESSION_OWNER_OURS,
+    SESSION_OWNER_UNKNOWN,
     NeakasaCoordinator,
 )
 from custom_components.neakasa.exceptions import (
@@ -529,3 +532,13 @@ async def test_the_always_policy_returns_control_on_the_next_scan(
         reconnect.assert_awaited_once()
     assert client.get_devices.call_count == 3
     assert coordinator.records_refused is False
+
+
+def test_the_account_sensor_is_declared_as_an_enum_status() -> None:
+    """HA rejects a sensor offering options that is not declared as enum."""
+    stub = MagicMock()
+    stub.cloud_session_owner = SESSION_OWNER_UNKNOWN
+    sensor = NeakasaCloudSessionStatusSensor(stub, MagicMock())
+    assert sensor.device_class is SensorDeviceClass.ENUM
+    assert list(sensor.options) == list(CLOUD_SESSION_OWNERS)
+    assert sensor.native_value == SESSION_OWNER_UNKNOWN
