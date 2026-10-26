@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from custom_components.neakasa.log_redact import account_label, redact_text
+from custom_components.neakasa.log_redact import (
+    account_label,
+    device_label,
+    entry_label,
+    redact_text,
+)
 
 _LOGIN_BODY = (
     '{"code":0,"data":{"login_token":"abcdefghij0123456789KLMNOPQRST",'
@@ -63,3 +68,42 @@ def test_a_cloud_phrase_is_left_whole() -> None:
 def test_an_opaque_value_is_dropped_without_a_label() -> None:
     """A signed header or session token has no name to keep, only length."""
     assert redact_text("sid=abcdefghij0123456789KLMNOP") == "sid=[redacted]"
+
+
+def test_a_machine_is_logged_as_one_word_per_machine() -> None:
+    """Which machine a call touched stays; its serial does not."""
+    label = device_label("4TQDtRLglcQJ5goDNlug000000")
+    assert label.startswith("dev-")
+    assert "4TQD" not in label
+    assert device_label("4TQDtRLglcQJ5goDNlug000000") == label
+    assert device_label("EUZLwdsC7Kr8D6I3v0Km000000") != label
+
+
+def test_a_wire_name_keeps_its_machine_label() -> None:
+    """The same machine stays one word however it is named in a line."""
+    assert device_label(" WL03002G26270011577 ") == device_label("wl03002g26270011577")
+
+
+def test_an_entry_is_logged_as_one_word_per_entry() -> None:
+    """Home Assistant prints the name we give it, so the id stays masked."""
+    label = entry_label("01M0YRP208AK3WEBZ8DXJN2D7B")
+    assert label.startswith("entry-")
+    assert "01M0YRP" not in label
+    assert entry_label("01M0YRP208AK3WEBZ8DXJN2D7B") != entry_label(
+        "02N0YRP208AK3WEBZ8DXJN2D7B"
+    )
+
+
+def test_the_three_kinds_never_look_alike() -> None:
+    """An account, a machine and an entry are distinguishable in the log."""
+    assert account_label("x").startswith("acct-")
+    assert device_label("x").startswith("dev-")
+    assert entry_label("x").startswith("entry-")
+
+
+def test_a_quoted_iot_id_becomes_the_machine_label() -> None:
+    """A rejection that names a machine still says which one."""
+    redacted = redact_text('{"iotId":"4TQDtRLglcQJ5goDNlug000000","code":0}')
+    assert "4TQD" not in redacted
+    assert device_label("4TQDtRLglcQJ5goDNlug000000") in redacted
+    assert '"code":0' in redacted

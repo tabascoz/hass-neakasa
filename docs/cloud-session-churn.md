@@ -222,3 +222,30 @@ rather than spelling the account out next to it. What stays in the log is what
 makes the measurement countable: iotIds, device names, cloud paths, the
 presentation and write lines and the `Login fields:` names - none of which
 belongs to the account.
+
+A later commit in the same branch stopped naming the machines as well, because
+naming them turned out to be as personal as naming the account: 159 journal lines
+since 14:00 on 2026-10-26 carried one of the five identifiers this unit uses - the
+two iotIds, the two wire `deviceName`s (which on both units are the machine
+serials `JQ01909G25430010947` and `WL03002G26270011577`) and the config entry id
+that the account device and the update-manager name now carry. `log_redact.py`
+answers with `device_label` (`dev-` plus the same hash) and `entry_label`
+(`entry-` plus it), and applies them where the identifier enters the line: the
+`Cloud write:` and `Account presentation:` shapes inside
+`api.py:_describe_write`/`_describe_presentation`, the properties read in
+`api.py:get_device_properties`, the two Riko feed lines and the failed fetch in
+coordinator.py, the missing-property and `cleanCfg` warnings, the reauth line,
+the two migration lines in `__init__.py`, the state-write guard's fallback in
+`base_entity.py` and - what makes Home Assistant's own line clean - the name
+given to `DataUpdateCoordinator`. `redact_text` gained one rule as well: an
+`iotId` quoted inside a cloud error becomes that machine's label rather than the
+`[redacted]` the opaque rule would give it, so a rejection still says which
+machine it was about.
+
+What the two masks keep is the reading. A feed, a write and a presentation still
+name one word per machine, and an entry still owns one word, so the counts the
+instrument exists for - presentations per hour, which machine a refusal was about,
+which entry a reauth belongs to - are answerable from the journal with no serial,
+no iotId and no entry id in it. The identifiers themselves stay in the
+diagnostics endpoint (`device_ids` is in its `TO_REDACT`) and in the protocol
+notes, where they are the point of the document.

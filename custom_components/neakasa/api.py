@@ -15,7 +15,7 @@ from aiohttp import ClientError
 from .api_encryption import APIEncryption
 from .const import _LOGGER
 from .iot_gateway import AliyunIoTClient, IoTConfig, IoTResponse
-from .log_redact import redact_text
+from .log_redact import device_label, redact_text
 
 if TYPE_CHECKING:
     from aiohttp import ClientSession
@@ -79,12 +79,12 @@ def _describe_presentation(pathname: str, params: dict[str, Any]) -> str:
     device = params.get("device_name")
     if device is None:
         return pathname
-    return f"{pathname} device={device}"
+    return f"{pathname} device={device_label(str(device))}"
 
 
 def _describe_write(pathname: str, params: dict[str, Any]) -> str:
     """Return one line naming an accepted write, the device and the payload."""
-    target = str(params.get("iotId", ""))
+    target = device_label(str(params.get("iotId", "")))
     if pathname == "/thing/service/invoke":
         identifier = params.get("identifier", "")
         args = params.get("args", {})
@@ -514,7 +514,7 @@ class NeakasaAPI:
 
     async def get_device_properties(self, iot_id: str) -> Any:
         """Fetch live device properties from Aliyun IoT."""
-        _LOGGER.debug("Getting device properties for iotId: %s", iot_id)
+        _LOGGER.debug("Getting device properties for iotId: %s", device_label(iot_id))
         _LOGGER.debug(
             "API connected: %s, iotToken present: %s",
             self.connected,

@@ -20,15 +20,18 @@ From `journalctl -u homeassistant` on 2026-10-26:
 ```
 
 That line named the account by its login, an email, on that date; the branch
-being built replaces the login with `log_redact.account_label` and the update
-manager's name with the config entry's id, so the excerpt is written as the
-journal will read once this build runs on the unit - the line itself has not
-been observed redacted yet. The labels used in these files are what that
-function returns for the two accounts on this unit: `acct-09489a31` is the
-account the entry was set up with first, `acct-71874e3b` the second one
-reconfigured in at 17:55. A label is a hash of the login, so it is one thing
-per account forever: the sign-in count and the two-account comparison below
-stay readable with no login in the log.
+being built replaces the login with `log_redact.account_label` and names a
+machine and a config entry by `log_redact.device_label` and
+`log_redact.entry_label`, so the excerpts are written as the journal will read
+once this build runs on the unit - none of these lines has been observed
+redacted yet. The labels used in these files are what those functions return for
+the things on this unit: `acct-09489a31` is the account the entry was set up
+with first, `acct-71874e3b` the second one reconfigured in at 17:55, `dev-27e0ade6`
+is the iotId `4TQDtRLglcQJ5goDNlug000000` named in the write line below, and
+`entry-5cecee74` is the config entry. A label is a hash, so it is one thing per
+account, per machine and per entry forever: the sign-in counts, the write lines
+and the two-account comparison below stay readable with no login, no serial and
+no entry id in the log.
 
 A sign-in is followed 2-3 seconds later by the app losing its session. That is
 the only single-sign-in event in the log for that period, so the reading is
@@ -49,7 +52,7 @@ the instrumented build adds are the measurement, not a behaviour change:
 
 ```text
 Account session minted #1 for acct-09489a31: cause=coordinator asked for a client (nothing cached for these credentials yet)
-Cloud write: /thing/service/invoke iotId=4TQDtRLglcQJ5goDNlug000000 identifier=cleanNow args={'bStartClean': 1}
+Cloud write: /thing/service/invoke iotId=dev-27e0ade6 identifier=cleanNow args={'bStartClean': 1}
 ```
 
 ## Second instrument: the accepted account calls

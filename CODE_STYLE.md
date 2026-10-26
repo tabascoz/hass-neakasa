@@ -116,9 +116,10 @@ Until full strict typing is achieved:
   - `error` / `exception` — unrecoverable; pair `exception` with caught exceptions.
 - Never log secrets (`token`, `password`, `key`, full headers).
 - Never log the account identity either: name an account with
-  `log_redact.account_label` (a hash label, so one account stays one word), and
-  pass any value that quotes the cloud (`message=`, `Body:`, a response body)
-  through `log_redact.redact_text`.
+  `log_redact.account_label`, a machine with `log_redact.device_label` and a
+  config entry with `log_redact.entry_label` (all three are hash labels, so one
+  thing stays one word), and pass any value that quotes the cloud (`message=`,
+  `Body:`, a response body) through `log_redact.redact_text`.
 
 ## Error messages
 

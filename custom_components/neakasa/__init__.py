@@ -21,6 +21,7 @@ from .api_manager import clear_shared_api
 from .const import _LOGGER, DOMAIN
 from .coordinator import NeakasaCoordinator
 from .data import NeakasaConfigEntry, NeakasaData
+from .log_redact import entry_label
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -108,7 +109,10 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
     ``username`` + ``password`` and uses ``account:{username}`` as the unique_id.
     """
     if config_entry.version == 1:
-        _LOGGER.debug("Migrating config entry %s from V1 to V2", config_entry.entry_id)
+        _LOGGER.debug(
+            "Migrating config entry %s from V1 to V2",
+            entry_label(config_entry.entry_id),
+        )
 
         username = config_entry.data[CONF_USERNAME]
         password = config_entry.data[CONF_PASSWORD]
@@ -125,7 +129,9 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
             unique_id=new_unique_id,
             version=2,
         )
-        _LOGGER.debug("Migrated config entry %s to V2", config_entry.entry_id)
+        _LOGGER.debug(
+            "Migrated config entry %s to V2", entry_label(config_entry.entry_id)
+        )
     return True
 
 

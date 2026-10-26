@@ -19,6 +19,7 @@ from custom_components.neakasa.coordinator import (
 from custom_components.neakasa.exceptions import (
     NeakasaApiClientCommunicationError,
 )
+from custom_components.neakasa.log_redact import device_label
 from custom_components.neakasa.number.food_grams import NeakasaFoodGramsNumber
 from custom_components.neakasa.number.water_ratio import NeakasaWaterRatioNumber
 from custom_components.neakasa.sensor.battery import NeakasaBatterySensor
@@ -323,7 +324,7 @@ async def test_feed_once_logs_and_records_the_last_feed(
 
     logger.debug.assert_any_call(
         "Riko feedOnce %s: %s",
-        "riko-1",
+        device_label("riko-1"),
         {"food": 6, "water": 12, "bSaveAsDef": 0},
     )
     assert coordinator.last_feed("riko-1") == {

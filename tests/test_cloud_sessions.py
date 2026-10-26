@@ -29,6 +29,7 @@ from custom_components.neakasa.coordinator import (
 from custom_components.neakasa.exceptions import (
     NeakasaApiClientSessionExpiredError,
 )
+from custom_components.neakasa.log_redact import device_label, entry_label
 from custom_components.neakasa.sensor.cloud_session import (
     NeakasaCloudSessionStatusSensor,
 )
@@ -291,13 +292,15 @@ def test_write_lines_name_the_call_and_the_device() -> None:
         "identifier": "cleanNow",
         "iotId": "iot-1",
     }
+    masked = device_label("iot-1")
     assert _describe_write("/thing/service/invoke", service) == (
-        "/thing/service/invoke iotId=iot-1 identifier=cleanNow args={'bStartClean': 1}"
+        f"/thing/service/invoke iotId={masked} identifier=cleanNow "
+        "args={'bStartClean': 1}"
     )
 
     properties = {"items": {"autoClean": 1}, "iotId": "iot-1"}
     assert _describe_write("/thing/properties/set", properties) == (
-        "/thing/properties/set iotId=iot-1 items={'autoClean': 1}"
+        f"/thing/properties/set iotId={masked} items={{'autoClean': 1}}"
     )
 
 
@@ -520,7 +523,21 @@ def test_presentation_lines_name_the_call_and_the_device() -> None:
     )
     params = {"device_name": "T1 Plus", "bind_status": 2}
     assert _describe_presentation("/catbox/record", params) == (
-        "/catbox/record device=T1 Plus"
+        f"/catbox/record device={device_label('T1 Plus')}"
+    )
+
+
+def test_the_instrument_names_machines_by_their_labels() -> None:
+    """Which machine a call touched stays, its identifier does not."""
+    write = _describe_write(
+        "/thing/service/invoke",
+        {"iotId": "iot-001", "identifier": "cleanNow", "args": {"bStartClean": 1}},
+    )
+    assert device_label("iot-001") in write
+    assert "iot-001" not in write
+    assert "identifier=cleanNow" in write
+    assert device_label("T1 Plus") in _describe_presentation(
+        "/catbox/record", {"device_name": "T1 Plus"}
     )
 
 
@@ -559,3 +576,15 @@ async def test_the_account_sensor_publishes_the_evidence(
     assert "iot-001" in await coordinator.async_update_data()
     assert sensor.native_value == SESSION_OWNER_HOME_ASSISTANT
     assert set(sensor.extra_state_attributes) == set(coordinator.session_evidence)
+
+
+async def test_the_update_manager_is_named_without_the_entry_id(
+    hass: HomeAssistant,
+    mock_config_entry: MagicMock,
+) -> None:
+    """Home Assistant prints this name, so the entry's id stays masked."""
+    client = _scanning_client()
+    coordinator = _coordinator(hass, mock_config_entry, client)
+
+    assert entry_label(mock_config_entry.entry_id) in coordinator.name
+    assert mock_config_entry.entry_id not in coordinator.name

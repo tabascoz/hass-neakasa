@@ -30,6 +30,7 @@ from .exceptions import (
     NeakasaApiClientError,
     NeakasaApiClientSessionExpiredError,
 )
+from .log_redact import device_label, entry_label
 from .value_cacher import ValueCacher
 
 if TYPE_CHECKING:
@@ -136,7 +137,7 @@ def _log_missing_property_keys(
         _missing_keys_logged.add(iot_id)
         _LOGGER.debug(
             "Neakasa device %s missing keys %s (available: %s)",
-            iot_id,
+            device_label(iot_id),
             missing,
             list(devicedata.keys()),
         )
@@ -293,7 +294,7 @@ def _build_device_snapshot(
         _LOGGER.warning(
             "Neakasa device %s did not report the 'cleanCfg' property; "
             "the auto-clean switch will be unavailable. Available properties: %s",
-            iot_id,
+            device_label(iot_id),
             list(devicedata.keys()),
         )
 
@@ -479,7 +480,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         super().__init__(
             hass,
             _LOGGER,
-            name=f"{DOMAIN} ({config_entry.entry_id})",
+            name=f"{DOMAIN} ({entry_label(config_entry.entry_id)})",
             update_method=self.async_update_data,
             update_interval=timedelta(seconds=scan_interval),
             config_entry=config_entry,
@@ -730,7 +731,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             "bSaveAsDef": 1 if keep else 0,
         }
         client = await self._get_client()
-        _LOGGER.debug("Riko feedOnce %s: %s", iot_id, args)
+        _LOGGER.debug("Riko feedOnce %s: %s", device_label(iot_id), args)
         await client.invoke_service(iot_id, "feedOnce", args)
         self._last_feed[iot_id] = {"args": dict(args), "stored_defaults": keep}
         self._pending_feed.pop(iot_id, None)
@@ -741,7 +742,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                 )
                 _LOGGER.debug(
                     "Riko stored defaults %s: food %d g, water %d g",
-                    iot_id,
+                    device_label(iot_id),
                     food_g,
                     food_g * water_ratio,
                 )
@@ -1313,7 +1314,9 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             session_failures: list[BaseException] = []
             for iot_id, result in zip(self._device_ids, snapshots, strict=False):
                 if isinstance(result, BaseException):
-                    _LOGGER.error("Failed to fetch device %s: %s", iot_id, result)
+                    _LOGGER.error(
+                        "Failed to fetch device %s: %s", device_label(iot_id), result
+                    )
                     if isinstance(result, NeakasaApiClientSessionExpiredError):
                         session_failures.append(result)
                     continue
@@ -1339,7 +1342,8 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                 return await self._reconnect_and_retry("authentication error", err)
             except UpdateFailed:
                 _LOGGER.info(
-                    "Starting reauth flow for entry %s", self.config_entry.entry_id
+                    "Starting reauth flow for entry %s",
+                    entry_label(self.config_entry.entry_id),
                 )
                 self.hass.async_create_task(
                     self.config_entry.async_start_reauth(self.hass)

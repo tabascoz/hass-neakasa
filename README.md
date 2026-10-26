@@ -110,15 +110,18 @@ exchange - is what moves the session. Feeding is unchanged from beta2: the numbe
 still only stage a feed, the machine is written by a Feed now alone.
 
 Two more things `v1.5.0-beta3` cleans up. The integration no longer writes the
-account's name into the log: the account appears as `acct-<hash>`, a stable label,
-so the sign-in count and any comparison between two accounts stay readable while the
-login itself never reaches the journal, and the text the cloud returns in an error is
-redacted before it is logged. And a device that the config entry no longer describes
-is forgotten when the entry is set up again, so configuring the entry with other
-credentials leaves one account device in the UI rather than one per set-up. The two
+account's or its machines' names into the log: the account appears as
+`acct-<hash>`, a machine as `dev-<hash>` and a config entry as `entry-<hash>` -
+stable labels, so the sign-in counts and any comparison between two accounts or
+two machines stay readable while no login, machine serial, iotId or entry id
+reaches the journal, including in Home Assistant's own line about the update
+manager; and the text the cloud returns in an error is redacted before it is
+logged. And a device that the config entry no longer describes is forgotten when
+the entry is set up again, so configuring the entry with other credentials leaves
+one account device in the UI rather than one per set-up. The two
 temporary debug buttons on the feeder (**Debug token churn**, **Debug invalidate
-token**) and the `debug_probe` option are still there to measure the token paths and
-will be dropped before `v1.5.0` ships.
+token**) and the `debug_probe` option are still there to measure the token paths
+and will be dropped before `v1.5.0` ships.
 
 ### HACS (recommended)
 
