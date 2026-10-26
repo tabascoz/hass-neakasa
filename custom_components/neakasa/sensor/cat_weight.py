@@ -10,7 +10,7 @@ from homeassistant.const import UnitOfMass
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from ..base_entity import account_records_refused, write_state_if_changed
+from ..base_entity import write_state_if_changed
 from ..coordinator import NeakasaCoordinator, NeakasaDeviceSnapshot
 
 if TYPE_CHECKING:
@@ -80,19 +80,12 @@ class NeakasaCatWeightSensor(CoordinatorEntity[NeakasaCoordinator], SensorEntity
 
     @property
     def extra_state_attributes(self) -> dict:
-        """Return the cat's state, saying when the records behind it are old."""
-        attributes: dict = {}
-        if account_records_refused(self):
-            attributes["stale"] = True
-            attributes["stale_reason"] = "the account session is held elsewhere"
+        """Return additional state attributes for the cat."""
         records = self._records
         if not records:
-            return attributes
+            return {}
         last = records[0]
-        attributes.update(
-            {
-                "start_time": datetime.fromtimestamp(last["start_time"], tz=UTC),
-                "end_time": datetime.fromtimestamp(last["end_time"], tz=UTC),
-            }
-        )
-        return attributes
+        return {
+            "start_time": datetime.fromtimestamp(last["start_time"], tz=UTC),
+            "end_time": datetime.fromtimestamp(last["end_time"], tz=UTC),
+        }
