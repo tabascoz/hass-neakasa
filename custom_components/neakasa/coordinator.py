@@ -53,6 +53,22 @@ _TOKEN_INVALID_PHRASES: tuple[str, ...] = ("tokeninvalid", "token is abnormal")
 # Consecutive recoveries inside one update, so a persistently rejected token
 # cannot keep asking for sessions.
 MAX_SESSION_RECOVERY_ATTEMPTS = 2
+# Presenting the account to the cloud is what moves the session, whether the
+# request is accepted or refused: measured on 2026-10-26, every scan that asked
+# /uc/listBindingByAccount left the mobile app needing a sign-in a minute later
+# and 12 scans in a row served refused records while reporting success, with no
+# attempt to get the session back. A refusal opens this window, during which the
+# account is not presented again and what we hold is served with a reason.
+ACCOUNT_SESSION_RETRY_AFTER_MINUTES = 30
+# What the account sensor reports: which client the session belongs to.
+SESSION_OWNER_OURS = "ours"
+SESSION_OWNER_ELSEWHERE = "foreign"
+SESSION_OWNER_UNKNOWN = "unknown"
+CLOUD_SESSION_OWNERS: tuple[str, ...] = (
+    SESSION_OWNER_UNKNOWN,
+    SESSION_OWNER_OURS,
+    SESSION_OWNER_ELSEWHERE,
+)
 
 CATLITTER_EXPECTED_KEYS: tuple[str, ...] = (
     "binFullWaitReset",
@@ -427,6 +443,11 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         self._state_base: dict[str, str] = {}
         self._state_fingerprints: dict[str, Any] = {}
         self._state_manual_bumps: dict[str, int] = {}
+        # Which client the account session belongs to, as last observed: we only
+        # learn it by presenting the account, so it stays unknown until a scan
+        # has asked.
+        self._session_owner = SESSION_OWNER_UNKNOWN
+        self._account_refused_at: float | None = None
 
         scan_interval = config_entry.options.get("scan_interval", 60)
         super().__init__(
@@ -857,12 +878,42 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
     async def _fetch_account_devices(
         self, client: NeakasaApiClient | None = None
     ) -> list[dict[str, Any]]:
-        """Fetch the account device list and register the supported ones."""
+        """
+        Fetch the account device list and register the supported ones.
+
+        Presenting the account is what moves the session away from whoever else
+        owns it, so while another client does - which we learn from a refusal -
+        the list is not asked for again and the last one we were given is served.
+        A refusal with nothing held yet still goes to the recovery path, because
+        there is nothing to serve.
+        """
+        if self._account_refused_recently() and self._account_devices:
+            _LOGGER.debug(
+                "Not asking the account for its devices: another client owns "
+                "the session"
+            )
+            return self._match_supported_devices(self._account_devices)
         api_client = client if client is not None else await self._get_client()
-        all_devices = await api_client.get_devices()
+        try:
+            all_devices = await api_client.get_devices()
+        except NeakasaApiClientSessionExpiredError as err:
+            self._note_account_refused("device list", err)
+            if not self._account_devices:
+                raise
+            return self._match_supported_devices(self._account_devices)
+        # An accepted presentation is us holding the session: the state is ours
+        # and any window a refusal opened is over.
+        self._session_owner = SESSION_OWNER_OURS
+        self._account_refused_at = None
         self._account_devices = all_devices
+        return self._match_supported_devices(all_devices)
+
+    def _match_supported_devices(
+        self, devices: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Register the supported devices of *devices* and return them."""
         matched: list[dict[str, Any]] = []
-        for d in all_devices:
+        for d in devices:
             cat_key: str = d.get("categoryKey", "")
             if cat_key in self.KNOWN_PRODUCT_TYPES:
                 iot_id: str = d.get("iotId", "")
@@ -915,13 +966,38 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
     async def _get_records(
         self, iot_id: str, client: NeakasaApiClient | None = None
     ) -> Any:
-        """Fetch cached usage records for *iot_id*, reusing *client* when given."""
+        """
+        Fetch cached usage records for *iot_id*, reusing *client* when given.
+
+        /catbox/record is signed with the account session, so asking it is what
+        moves the session: while another client owns it the records are not asked
+        for at all and what we hold is served, with the update reporting the
+        reason. A refusal with nothing held goes on as an error instead.
+        """
         records_cache, _ = self._cache_for(iot_id)
+        if self._account_refused_recently():
+            held = records_cache.value_if_not_discarded()
+            if held is not None:
+                _LOGGER.debug(
+                    "Not asking the account for records: another client owns "
+                    "the session"
+                )
+                return held
 
         async def fetch() -> Any:
             device_name = await self._get_device_name(iot_id)
             api_client = client if client is not None else await self._get_client()
-            return await api_client.get_records(device_name)
+            try:
+                records = await api_client.get_records(device_name)
+            except NeakasaApiClientSessionExpiredError as err:
+                self._note_account_refused("records", err)
+                held = records_cache.value_if_not_discarded()
+                if held is None:
+                    raise
+                return held
+            self._session_owner = SESSION_OWNER_OURS
+            self._account_refused_at = None
+            return records
 
         return await records_cache.get_or_update(fetch)
 
@@ -963,7 +1039,13 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         new_last_use = _get_last_use_date(devicedata)
         records_cache, _ = self._cache_for(iot_id)
         if self._last_use_dates.get(iot_id) != new_last_use:
-            records_cache.mark_as_stale()
+            if self._account_refused_recently():
+                _LOGGER.debug(
+                    "Not re-reading the records of %s: another client owns the session",
+                    iot_id,
+                )
+            else:
+                records_cache.mark_as_stale()
         self._last_use_dates[iot_id] = new_last_use
 
         records = await self._get_records(iot_id, client)
@@ -983,6 +1065,57 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
     # ------------------------------------------------------------------
     # Reconnection helpers
     # ------------------------------------------------------------------
+
+    def _note_account_refused(self, what: str, err: BaseException) -> None:
+        """Record that the account refused one of our calls."""
+        self._session_owner = SESSION_OWNER_ELSEWHERE
+        self._account_refused_at = time.monotonic()
+        _LOGGER.warning(
+            "The account refused '%s' (%s): another client holds the session, "
+            "so it is not presented again for %d min and the values stay as "
+            "cached",
+            what,
+            err,
+            ACCOUNT_SESSION_RETRY_AFTER_MINUTES,
+        )
+
+    def _account_refused_recently(self) -> bool:
+        """Whether the account refused us inside the back-off window."""
+        if self._account_refused_at is None:
+            return False
+        window = ACCOUNT_SESSION_RETRY_AFTER_MINUTES * 60
+        return time.monotonic() - self._account_refused_at < window
+
+    @property
+    def cloud_session_owner(self) -> str:
+        """Which client the account session belongs to, as last observed."""
+        return self._session_owner
+
+    async def regain_cloud_session(self) -> None:
+        """
+        Take the account session back and refresh everything we can see.
+
+        Costs one session: presenting the account is what moves it, so the
+        mobile app has to sign in again after this press. It exists to make
+        which client is current a user decision rather than a silent fight.
+        """
+        self._last_full_auth = None
+        self._account_refused_at = None
+        await force_reconnect_api(
+            self.hass,
+            self.username,
+            self.password,
+            cause="user asked to refresh data",
+        )
+        self._session_owner = SESSION_OWNER_OURS
+        self.force_refresh_devices()
+        for cache in [
+            *self._records_caches.values(),
+            *self._properties_caches.values(),
+        ]:
+            cache.mark_as_stale()
+        payload = await self.async_update_data()
+        self.async_set_updated_data(payload)
 
     async def _renew_cloud_session(self) -> bool:
         """
@@ -1025,6 +1158,10 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         except NeakasaApiClientError as reconnect_err:
             msg = "Reconnection failed"
             raise UpdateFailed(msg) from reconnect_err
+        # A sign-in is us presenting the account, so the session is ours again
+        # and any window a refusal opened is over.
+        self._session_owner = SESSION_OWNER_OURS
+        self._account_refused_at = None
         return True
 
     def _needs_full_reauth(self, err: BaseException | None) -> bool:
@@ -1136,6 +1273,16 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             _LOGGER.debug("Coordinator update complete: %d devices", len(payload))
             self._recovery_attempts = 0  # a finished update ends any recovery run
             await self._run_debug_probe(payload)
+            if self._account_refused_recently():
+                # The payload above is what we hold: the cloud refused what we
+                # asked it for, so the update says so rather than reporting a
+                # success it did not get. Home Assistant keeps these values and
+                # shows why they are not current.
+                msg = (
+                    "Values are as cached: the account session belongs to "
+                    "another client"
+                )
+                raise UpdateFailed(msg)
             return payload  # noqa: TRY300
 
         except NeakasaApiClientSessionExpiredError as err:

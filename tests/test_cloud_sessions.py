@@ -17,7 +17,11 @@ from custom_components.neakasa.api_manager import (
     clear_shared_api,
     get_shared_api,
 )
-from custom_components.neakasa.coordinator import NeakasaCoordinator
+from custom_components.neakasa.coordinator import (
+    SESSION_OWNER_ELSEWHERE,
+    SESSION_OWNER_OURS,
+    NeakasaCoordinator,
+)
 from custom_components.neakasa.exceptions import (
     NeakasaApiClientSessionExpiredError,
 )
@@ -152,6 +156,9 @@ async def test_repeated_session_failures_do_not_stack_sessions(
 
     reconnect.assert_awaited_once()
     assert client.refresh_session.call_count == 2
+
+
+SESSION_REFUSED = NeakasaApiClientSessionExpiredError("request auth error")
 
 
 def _api_manager_patches() -> tuple[MagicMock, MagicMock, MagicMock]:
@@ -313,3 +320,56 @@ async def test_sign_ins_are_numbered_and_a_reuse_is_not() -> None:
         await get_shared_api(MagicMock(), USER, PASSWORD, "session expired")
         assert _session_mints[USER] == before + 2
         assert api_cls.return_value.connect.await_count == 2
+
+
+async def test_a_refused_account_call_opens_a_back_off_and_says_so(
+    hass: HomeAssistant,
+    mock_config_entry: MagicMock,
+) -> None:
+    """The list we were given is served, and the update says the values are cached."""
+    client = _scanning_client()
+    client.get_devices = AsyncMock(side_effect=[DEVICE_LIST, SESSION_REFUSED])
+    coordinator = _coordinator(hass, mock_config_entry, client)
+
+    first = await coordinator.async_update_data()
+    assert "iot-001" in first
+    assert coordinator.cloud_session_owner == SESSION_OWNER_OURS
+
+    coordinator.force_refresh_devices()
+    with pytest.raises(UpdateFailed):
+        await coordinator.async_update_data()
+    assert client.get_devices.call_count == 2
+    assert coordinator.cloud_session_owner == SESSION_OWNER_ELSEWHERE
+
+    with pytest.raises(UpdateFailed):
+        await coordinator.async_update_data()
+    assert client.get_devices.call_count == 2
+
+
+async def test_a_request_takes_the_session_back_and_re_reads(
+    hass: HomeAssistant,
+    mock_config_entry: MagicMock,
+) -> None:
+    """Regaining the session signs in once, closes the window and reads again."""
+    client = _scanning_client()
+    client.get_devices = AsyncMock(
+        side_effect=[DEVICE_LIST, SESSION_REFUSED, DEVICE_LIST]
+    )
+    coordinator = _coordinator(hass, mock_config_entry, client)
+
+    first = await coordinator.async_update_data()
+    assert "iot-001" in first
+
+    coordinator.force_refresh_devices()
+    with pytest.raises(UpdateFailed):
+        await coordinator.async_update_data()
+    assert coordinator.cloud_session_owner == SESSION_OWNER_ELSEWHERE
+
+    with patch(
+        "custom_components.neakasa.coordinator.force_reconnect_api",
+        new=AsyncMock(),
+    ) as reconnect:
+        await coordinator.regain_cloud_session()
+    reconnect.assert_awaited_once()
+    assert client.get_devices.call_count == 3
+    assert coordinator.cloud_session_owner == SESSION_OWNER_OURS
