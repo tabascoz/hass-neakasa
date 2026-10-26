@@ -17,7 +17,7 @@ The Neakasa Home Assistant Custom Integration allows you to integrate your Neaka
 
 ### Currently supported devices
 - Neakasa M1 (Cat Litter Box)
-- Neakasa Riko (Wet Meal Feeder) — read-write (beta, `v1.5.0-beta2`)
+- Neakasa Riko (Wet Meal Feeder) — read-write (beta, `v1.5.0-beta3`)
 
 #### Riko (wet meal feeder) features
 |Type|Name|Notes|
@@ -31,6 +31,8 @@ The Neakasa Home Assistant Custom Integration allows you to integrate your Neaka
 |Number|Food quantity|portion used by the next Feed now, 3–15 g|
 |Number|Water ratio|water-to-food ratio used by the next Feed now, 1–5 (water amount = portion × ratio)|
 |Switch|Save feed as default|whether a Feed now stores the amounts it used on the machine; default off|
+|Sensor|Cloud session status|which client holds the account's session (`Unknown` / `Home Assistant` / `Not Home Assistant`), with `last_presented_at`, `last_presented_call`, `refused_at`, `records_as_cached` as state attributes; lives on the account device|
+|Button|Refresh data now|present the account to the cloud again so the next scan reads it; costs one session, so the Neakasa app has to sign in again afterwards|
 
 > On setup the integration reads the machine's own `defFdCfg` and shows it (the water
 > amount in grams is turned back into the ratio). Editing a number only stages the next
@@ -76,17 +78,17 @@ The Neakasa Home Assistant Custom Integration allows you to integrate your Neaka
 
 ## Installation
 
-### Getting the Riko beta (`v1.5.0-beta2`)
+### Getting the Riko beta (`v1.5.0-beta3`)
 
 The Riko support ships as a pre-release. To try it before the next stable release:
 
 **Via HACS** — in Home Assistant, open HACS → *Integrations* → Neakasa → use the
-version selector to download `v1.5.0-beta2`, then restart Home Assistant.
+version selector to download `v1.5.0-beta3`, then restart Home Assistant.
 
 **Manually (zip)** — download this beta's asset and extract into your config dir:
 
 ```bash
-wget https://github.com/tabascoz/hass-neakasa/releases/download/v1.5.0-beta2/neakasa.zip
+wget https://github.com/tabascoz/hass-neakasa/releases/download/v1.5.0-beta3/neakasa.zip
 mkdir -p custom_components/neakasa && unzip neakasa.zip -d custom_components/neakasa && rm neakasa.zip
 ```
 
@@ -97,7 +99,26 @@ Then restart Home Assistant. The beta is opt-in — HACS keeps the latest *stabl
 machine keep adding water and report an error of clogged water sprays. `v1.5.0-beta2`
 sends the amount in grams, the way the official app does, and adds the account option
 `feed_keep_as_new_defaults` for storing the amounts a feed used as the machine's
-defaults.
+defaults. `v1.5.0-beta3` keeps that feeding behaviour and adds the account side of the
+fight over the account's session: the **Cloud session status** sensor says which client
+the account last presented itself to and shows when we last presented it, when it
+refused us and whether the record values on screen are ones we are holding; the
+**Refresh data now** button takes the session back on request, which costs one session
+and so asks the Neakasa app to sign in again; the per-scan reads stay at the
+`scan_interval` you set, because any cloud call - a device read or the IoT token
+exchange - is what moves the session. Feeding is unchanged from beta2: the numbers
+still only stage a feed, the machine is written by a Feed now alone.
+
+Two more things `v1.5.0-beta3` cleans up. The integration no longer writes the
+account's name into the log: the account appears as `acct-<hash>`, a stable label,
+so the sign-in count and any comparison between two accounts stay readable while the
+login itself never reaches the journal, and the text the cloud returns in an error is
+redacted before it is logged. And a device that the config entry no longer describes
+is forgotten when the entry is set up again, so configuring the entry with other
+credentials leaves one account device in the UI rather than one per set-up. The two
+temporary debug buttons on the feeder (**Debug token churn**, **Debug invalidate
+token**) and the `debug_probe` option are still there to measure the token paths and
+will be dropped before `v1.5.0` ships.
 
 ### HACS (recommended)
 
