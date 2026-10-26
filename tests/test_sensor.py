@@ -54,6 +54,9 @@ _SENTINEL = object()
 
 def _mock_coord(snap: NeakasaDeviceSnapshot | None = _SENTINEL) -> MagicMock:
     c = MagicMock()
+    # The cat sensors report their records as stale when the account refused
+    # them; these tests describe the normal case, where it did not.
+    c.records_refused = False
     if snap is _SENTINEL:
         c.device_snapshot.return_value = FAKE_SNAPSHOT
     else:

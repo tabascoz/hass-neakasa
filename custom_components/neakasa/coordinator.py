@@ -448,6 +448,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         # has asked.
         self._session_owner = SESSION_OWNER_UNKNOWN
         self._account_refused_at: float | None = None
+        self._window_reported = False
 
         scan_interval = config_entry.options.get("scan_interval", 60)
         super().__init__(
@@ -1076,6 +1077,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         """Record that the account refused one of our calls."""
         self._session_owner = SESSION_OWNER_ELSEWHERE
         self._account_refused_at = time.monotonic()
+        self._window_reported = False
         _LOGGER.warning(
             "The account refused '%s' (%s): another client holds the session, "
             "so it is not presented again for %d min and the values stay as "
@@ -1096,6 +1098,11 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
     def cloud_session_owner(self) -> str:
         """Which client the account session belongs to, as last observed."""
         return self._session_owner
+
+    @property
+    def records_refused(self) -> bool:
+        """Whether the records we would read now were refused by the account."""
+        return self._account_refused_recently()
 
     async def regain_cloud_session(self) -> None:
         """
@@ -1279,16 +1286,15 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             _LOGGER.debug("Coordinator update complete: %d devices", len(payload))
             self._recovery_attempts = 0  # a finished update ends any recovery run
             await self._run_debug_probe(payload)
-            if self._account_refused_recently():
-                # The payload above is what we hold: the cloud refused what we
-                # asked it for, so the update says so rather than reporting a
-                # success it did not get. Home Assistant keeps these values and
-                # shows why they are not current.
-                msg = (
-                    "Values are as cached: the account session belongs to "
-                    "another client"
+            if self._account_refused_recently() and not self._window_reported:
+                # Said once per window, not once per scan: the values are still
+                # delivered, the device ones in them are fresh, and the sensors
+                # whose only source is the records say so themselves.
+                self._window_reported = True
+                _LOGGER.info(
+                    "Values are partly as cached: the account session belongs "
+                    "to another client, so the record-based sensors report it",
                 )
-                raise UpdateFailed(msg)
             return payload  # noqa: TRY300
 
         except NeakasaApiClientSessionExpiredError as err:

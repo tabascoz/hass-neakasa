@@ -340,14 +340,16 @@ async def test_a_refused_account_call_opens_a_back_off_and_says_so(
     assert coordinator.cloud_session_owner == SESSION_OWNER_OURS
 
     coordinator.force_refresh_devices()
-    with pytest.raises(UpdateFailed):
-        await coordinator.async_update_data()
+    second = await coordinator.async_update_data()
+    assert "iot-001" in second
     assert client.get_devices.call_count == 2
+    assert coordinator.records_refused is True
     assert coordinator.cloud_session_owner == SESSION_OWNER_ELSEWHERE
 
-    with pytest.raises(UpdateFailed):
-        await coordinator.async_update_data()
+    third = await coordinator.async_update_data()
+    assert "iot-001" in third
     assert client.get_devices.call_count == 2
+    assert coordinator.records_refused is True
 
 
 async def test_a_request_takes_the_session_back_and_re_reads(
@@ -365,8 +367,7 @@ async def test_a_request_takes_the_session_back_and_re_reads(
     assert "iot-001" in first
 
     coordinator.force_refresh_devices()
-    with pytest.raises(UpdateFailed):
-        await coordinator.async_update_data()
+    await coordinator.async_update_data()
     assert coordinator.cloud_session_owner == SESSION_OWNER_ELSEWHERE
 
     with patch(
@@ -394,8 +395,7 @@ async def test_the_account_sensor_names_the_client_that_holds_the_session(
     assert sensor.native_value == SESSION_OWNER_OURS
 
     coordinator.force_refresh_devices()
-    with pytest.raises(UpdateFailed):
-        await coordinator.async_update_data()
+    await coordinator.async_update_data()
     assert sensor.native_value == SESSION_OWNER_ELSEWHERE
 
 
@@ -414,9 +414,8 @@ async def test_the_account_button_takes_the_session_back_in_one_sign_in(
     assert "iot-001" in first
 
     coordinator.force_refresh_devices()
-    with pytest.raises(UpdateFailed):
-        await coordinator.async_update_data()
-    assert coordinator.cloud_session_owner == SESSION_OWNER_ELSEWHERE
+    assert (await coordinator.async_update_data()) != {}
+    assert coordinator.records_refused is True
 
     button = NeakasaRefreshDataButton(coordinator, MagicMock())
     with patch(
