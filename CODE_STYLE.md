@@ -115,6 +115,10 @@ Until full strict typing is achieved:
   - `warning` — recoverable failures.
   - `error` / `exception` — unrecoverable; pair `exception` with caught exceptions.
 - Never log secrets (`token`, `password`, `key`, full headers).
+- Never log the account identity either: name an account with
+  `log_redact.account_label` (a hash label, so one account stays one word), and
+  pass any value that quotes the cloud (`message=`, `Body:`, a response body)
+  through `log_redact.redact_text`.
 
 ## Error messages
 

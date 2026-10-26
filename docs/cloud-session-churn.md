@@ -174,3 +174,51 @@ account entities are now named by the config entry instead, and the entry prunes
 devices it created and no longer describes, so changing credentials changes no
 device at all. The machines never duplicated because their identifiers are the
 stable iotIds, which is also why the second account keeps the same entity ids.
+
+That pruning had never run: `_prune_devices_this_entry_no_longer_describes`
+asked `registry.async_get_devices()` with no filters, and `async_get_devices`
+walks only the identifier and connection indexes
+(`helpers/device_registry.py:1176 get_entries`), so it returns nothing when
+neither is given - `config_entry_id` alone does not help. The journal held 0
+`Forgetting device` lines on 2026-10-26 and the registry kept five neakasa
+devices for the one entry `01M0YRP208AK3WEBZ8DXJN2D7B`: the two machines, two
+account devices named by the usernames of the two set-ups (14:15 and 17:55) and
+the live one named by the entry (18:31). The enumeration is now the one Home
+Assistant keys by config entry (`async_entries_for_config_entry(registry,
+entry.entry_id)`), which is what core itself uses to act on one entry's
+devices, so the two leftovers are forgotten at the next set-up instead of being
+left for a person to delete in the UI. Their entities go with them: an entity
+whose device was removed is marked orphaned and kept for
+`ORPHANED_ENTITY_KEEP_SECONDS` (30 days, `helpers/entity_registry.py:81`)
+before `async_purge_expired_orphaned_entities` (`:2457`) drops it, which is
+what left the account sensor reading `unavailable` and forced the `_2`/`_3`
+suffixes on the live ids.
+
+## What the journal no longer carries
+
+The same branch stopped logging the account itself. Measured on 2026-10-26 from
+14:00, 164 of 3111 journal lines carried an account email, in six shapes:
+`Finished fetching neakasa (account:<email>) data in …` (61, and that name is
+the one given to `DataUpdateCoordinator`, whose unique_id is
+`account:{username.lower()}` in `config_flow.py`), `Reusing shared API client
+for <email>` (54), `Account session minted #N for <email>` (14),
+`Authenticating`/`Authenticated shared API client for <email>` (14 each) and
+`Clearing invalid client for <email>` (1). Three more lines could carry it when
+they fire: the body dumps `api.py` prints for a failed base-url or login call,
+`iot_gateway.py`'s body dump, and `api_client.py`'s error translations, which
+quote the cloud's message.
+
+`log_redact.py` is the answer. `account_label(username)` returns `acct-` plus a
+blake2s-4 hash of the login normalised the way the unique_id is, so every line
+about one account carries one word that no longer spells it out while the
+sign-in counter and the two-account comparison stay readable end to end;
+`redact_text(value)` is for the lines that quote the cloud, whose fields are
+not ours to choose - the login answer holds the email, the nickname, the phone,
+the avatar and the tokens, names `api.py:_describe_fields` measured on this
+unit at 17:04 and 17:55 - and an email-shaped word becomes the same label while
+named account values and opaque runs are dropped. `diagnostics.py` already
+redacted these keys for the diagnostics endpoint; the journal now agrees with it
+rather than spelling the account out next to it. What stays in the log is what
+makes the measurement countable: iotIds, device names, cloud paths, the
+presentation and write lines and the `Login fields:` names - none of which
+belongs to the account.

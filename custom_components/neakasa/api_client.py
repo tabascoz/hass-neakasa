@@ -12,6 +12,7 @@ from .exceptions import (
     NeakasaApiClientCommunicationError,
     NeakasaApiClientSessionExpiredError,
 )
+from .log_redact import redact_text
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -53,13 +54,13 @@ async def _translate_errors() -> AsyncIterator[None]:
             _LOGGER.info(
                 "Error translation: APIAuthError -> SessionExpired"
                 " (matched a token/auth phrase in: %r)",
-                message,
+                redact_text(message),
             )
             raise NeakasaApiClientSessionExpiredError(message) from err
         _LOGGER.info(
             "Error translation: APIAuthError -> AuthenticationError"
             " (no token/auth phrase in: %r)",
-            message,
+            redact_text(message),
         )
         raise NeakasaApiClientAuthenticationError(message) from err
     except APIConnectionError as err:
@@ -68,13 +69,13 @@ async def _translate_errors() -> AsyncIterator[None]:
             _LOGGER.info(
                 "Error translation: APIConnectionError -> SessionExpired"
                 " (matched a token/auth phrase in: %r)",
-                message,
+                redact_text(message),
             )
             raise NeakasaApiClientSessionExpiredError(message) from err
         _LOGGER.info(
             "Error translation: APIConnectionError -> CommunicationError"
             " (no token/auth phrase in: %r)",
-            message,
+            redact_text(message),
         )
         raise NeakasaApiClientCommunicationError(message) from err
 

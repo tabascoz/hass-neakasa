@@ -14,10 +14,21 @@ other is busy. What is needed is a measured answer to two questions:
 From `journalctl -u homeassistant` on 2026-10-26:
 
 ```text
-10:14:37.876  Authenticating shared API client for tabascoz@gmail.com
+10:14:37.876  Authenticating shared API client for acct-09489a31
 10:14:40      the mobile app was found on its login page by the user
 10:14:45.890  Finished fetching neakasa ... data in 8.014 seconds (success: True)
 ```
+
+That line named the account by its login, an email, on that date; the branch
+being built replaces the login with `log_redact.account_label` and the update
+manager's name with the config entry's id, so the excerpt is written as the
+journal will read once this build runs on the unit - the line itself has not
+been observed redacted yet. The labels used in these files are what that
+function returns for the two accounts on this unit: `acct-09489a31` is the
+account the entry was set up with first, `acct-71874e3b` the second one
+reconfigured in at 17:55. A label is a hash of the login, so it is one thing
+per account forever: the sign-in count and the two-account comparison below
+stay readable with no login in the log.
 
 A sign-in is followed 2-3 seconds later by the app losing its session. That is
 the only single-sign-in event in the log for that period, so the reading is
@@ -37,7 +48,7 @@ without that an app observation cannot be attributed to a press. The two lines
 the instrumented build adds are the measurement, not a behaviour change:
 
 ```text
-Account session minted #1 for tabascoz@gmail.com: cause=coordinator asked for a client (nothing cached for these credentials yet)
+Account session minted #1 for acct-09489a31: cause=coordinator asked for a client (nothing cached for these credentials yet)
 Cloud write: /thing/service/invoke iotId=4TQDtRLglcQJ5goDNlug000000 identifier=cleanNow args={'bStartClean': 1}
 ```
 

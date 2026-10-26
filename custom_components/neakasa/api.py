@@ -15,6 +15,7 @@ from aiohttp import ClientError
 from .api_encryption import APIEncryption
 from .const import _LOGGER
 from .iot_gateway import AliyunIoTClient, IoTConfig, IoTResponse
+from .log_redact import redact_text
 
 if TYPE_CHECKING:
     from aiohttp import ClientSession
@@ -186,7 +187,7 @@ class NeakasaAPI:
                     _LOGGER.error(
                         "Base URL failed with status %s: %s",
                         response.status,
-                        text[:400],
+                        redact_text(text[:400]),
                     )
                     raise APIConnectionError("Error connecting to api.")
 
@@ -195,7 +196,9 @@ class NeakasaAPI:
                 except Exception as e:
                     text = await response.text()
                     _LOGGER.error(
-                        "Failed to parse base URL JSON: %s. Body: %s", e, text[:400]
+                        "Failed to parse base URL JSON: %s. Body: %s",
+                        e,
+                        redact_text(text[:400]),
                     )
                     raise APIConnectionError("Error connecting to api.") from e
 
@@ -247,7 +250,7 @@ class NeakasaAPI:
                     _LOGGER.error(
                         "Login failed with status %s: %s",
                         response.status,
-                        text[:500],
+                        redact_text(text[:500]),
                     )
                     raise APIConnectionError("Error connecting to api.")
 
@@ -256,7 +259,9 @@ class NeakasaAPI:
                 except Exception as e:
                     text = await response.text()
                     _LOGGER.error(
-                        "Failed to parse login JSON: %s. Body: %s", e, text[:500]
+                        "Failed to parse login JSON: %s. Body: %s",
+                        e,
+                        redact_text(text[:500]),
                     )
                     raise APIConnectionError("Error connecting to api.") from e
 
@@ -416,7 +421,7 @@ class NeakasaAPI:
                 "IoT cloud error — path=%s code=%s message=%r data_keys=%s",
                 pathname,
                 data["code"],
-                error_msg,
+                redact_text(error_msg),
                 list(data.keys()),
             )
             raise APIConnectionError(f"Error in {pathname}: {error_msg}")

@@ -479,7 +479,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         super().__init__(
             hass,
             _LOGGER,
-            name=f"{DOMAIN} ({config_entry.unique_id})",
+            name=f"{DOMAIN} ({config_entry.entry_id})",
             update_method=self.async_update_data,
             update_interval=timedelta(seconds=scan_interval),
             config_entry=config_entry,

@@ -10,6 +10,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import NeakasaAPI
 from .api_client import NeakasaApiClient
 from .const import _LOGGER
+from .log_redact import account_label
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -22,7 +23,9 @@ _shared_locks: dict[str, asyncio.Lock] = {}
 # page came back 3 seconds after our login at 10:14:37. Numbering every
 # sign-in in the journal is what makes "the app lost its session" answerable
 # from the log rather than from the phone, so the count and the reason are
-# logged together.
+# logged together. The account is named by `log_redact.account_label`, a hash
+# of its login: the login is an email, and these lines are read on the box by
+# anyone who tails the journal.
 _session_mints: dict[str, int] = {}
 # Creating the per-credentials lock must itself be serialised, otherwise two
 # concurrent first-setup paths each get their own lock and authenticate twice.
@@ -42,15 +45,16 @@ async def get_shared_api(
     the reason instead of leaving it to be inferred from the lines around it.
     """
     credentials_key = f"{username}:{password}"
+    label = account_label(username)
     async with _shared_registry_lock:
         lock = _shared_locks.setdefault(credentials_key, asyncio.Lock())
     async with lock:
         if credentials_key in _shared_clients:
             client = _shared_clients[credentials_key]
             if client.connected:
-                _LOGGER.debug("Reusing shared API client for %s", username)
+                _LOGGER.debug("Reusing shared API client for %s", label)
                 return client
-            _LOGGER.debug("Clearing invalid client for %s: not connected", username)
+            _LOGGER.debug("Clearing invalid client for %s: not connected", label)
             del _shared_clients[credentials_key]
             why = "the cached client was not connected"
         else:
@@ -66,18 +70,18 @@ async def get_shared_api(
             _LOGGER.info(
                 "Account session minted #%d for %s: cause=%s (%s)",
                 _session_mints[username],
-                username,
+                label,
                 cause,
                 why,
             )
-            _LOGGER.debug("Authenticating shared API client for %s", username)
+            _LOGGER.debug("Authenticating shared API client for %s", label)
             await api.connect(username, password)
             client = NeakasaApiClient(api)
             _shared_clients[credentials_key] = client
-            _LOGGER.debug("Authenticated shared API client for %s", username)
+            _LOGGER.debug("Authenticated shared API client for %s", label)
         except Exception:
             _LOGGER.error(
-                "Failed to authenticate shared API for %s", username, exc_info=True
+                "Failed to authenticate shared API for %s", label, exc_info=True
             )
             raise
         else:
