@@ -137,7 +137,7 @@
                 "name": "Battery"
             },
             "cloud_session_status": {
-                "name": "Cloud session"
+                "name": "Cloud session status"
             }
         },
         "switch": {

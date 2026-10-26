@@ -59,7 +59,7 @@
                 "name": "Invalidate token (test)"
             },
             "refresh_data": {
-                "name": "Refresh data now"
+                "name": "Odśwież dane"
             }
         },
         "number": {
@@ -137,7 +137,7 @@
                 "name": "Akku"
             },
             "cloud_session_status": {
-                "name": "Cloud session"
+                "name": "Status sesji w chmurze"
             }
         },
         "switch": {

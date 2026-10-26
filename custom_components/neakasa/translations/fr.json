@@ -59,7 +59,7 @@
                 "name": "Debug invalidate token"
             },
             "refresh_data": {
-                "name": "Refresh data now"
+                "name": "Actualiser les données"
             }
         },
         "number": {
@@ -137,7 +137,7 @@
                 "name": "Bateria"
             },
             "cloud_session_status": {
-                "name": "Cloud session"
+                "name": "État de la session cloud"
             }
         },
         "switch": {
