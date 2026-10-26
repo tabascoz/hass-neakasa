@@ -16,6 +16,10 @@ if TYPE_CHECKING:
 
 from ..const import DOMAIN
 from .clean import NeakasaCleanButton
+from .debug_token import (
+    NeakasaDebugTokenChurnButton,
+    NeakasaDebugTokenInvalidateButton,
+)
 from .feed_now import NeakasaFeedNowButton
 from .level import NeakasaLevelButton
 
@@ -45,7 +49,17 @@ async def async_setup_entry(
                 identifiers={(DOMAIN, iot_id)},
             )
             if snap.category_key == "petFeeder":
-                entities.append(NeakasaFeedNowButton(coordinator, device_info, iot_id))
+                entities.extend(
+                    [
+                        NeakasaFeedNowButton(coordinator, device_info, iot_id),
+                        NeakasaDebugTokenChurnButton(coordinator, device_info, iot_id),
+                        NeakasaDebugTokenInvalidateButton(
+                            coordinator,
+                            device_info,
+                            iot_id,
+                        ),
+                    ]
+                )
                 continue
             entities.extend(
                 [

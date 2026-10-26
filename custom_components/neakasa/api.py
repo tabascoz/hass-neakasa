@@ -388,6 +388,17 @@ class NeakasaAPI:
         """
         self._iot_token = await self._get_iot_token_by_sid(self._sid)
 
+    async def debug_invalidate_tokens(self) -> None:
+        """Temporary debug tool: break both tokens this client holds.
+
+        The account token is the one ``/catbox/record`` signs with and the
+        IoT token is the one the device calls use, so the next scan must fail
+        for a token and take the session-recovery path. Removed with the test.
+        """
+        unusable = "invalid"
+        self._iot_token = unusable
+        self._encryption._token = unusable
+
     async def get_product_list(self) -> Any:
         """Fetch the product list for the account."""
         return await self._iot_request(

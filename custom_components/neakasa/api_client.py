@@ -100,6 +100,10 @@ class NeakasaApiClient:
         async with _translate_errors():
             await self._api.refresh_session()
 
+    async def debug_invalidate_tokens(self) -> None:
+        """Break the tokens this client holds, so the next scan must recover them."""
+        await self._api.debug_invalidate_tokens()
+
     async def get_devices(self, page_no: int = 1, page_size: int = 20) -> Any:
         """Fetch devices, translating errors."""
         async with _translate_errors():
