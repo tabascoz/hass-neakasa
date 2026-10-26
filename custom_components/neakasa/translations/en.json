@@ -52,12 +52,6 @@
             "feed_now": {
                 "name": "Feed now"
             },
-            "debug_token_churn": {
-                "name": "Debug token churn"
-            },
-            "debug_token_invalidate": {
-                "name": "Debug invalidate token"
-            },
             "refresh_data": {
                 "name": "Refresh data now"
             },

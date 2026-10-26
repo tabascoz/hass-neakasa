@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from homeassistant.components.number import NumberEntity
+from homeassistant.components.sensor import EntityCategory
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -28,6 +29,7 @@ class NeakasaFeedSoundVolumeNumber(CoordinatorEntity[NeakasaCoordinator], Number
     _attr_should_poll = False
     _attr_has_entity_name = True
     _attr_translation_key = "feed_sound_volume"
+    _attr_entity_category = EntityCategory.CONFIG
     _attr_icon = "mdi:volume-high"
     _attr_native_step = 1
     _attr_native_min_value = float(FEED_SOUND_VOLUME_MIN)

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from homeassistant.components.number import NumberEntity
+from homeassistant.components.sensor import EntityCategory
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -22,6 +23,7 @@ class NeakasaDesiccantDaysNumber(CoordinatorEntity[NeakasaCoordinator], NumberEn
     _attr_should_poll = False
     _attr_has_entity_name = True
     _attr_translation_key = "desiccant_days"
+    _attr_entity_category = EntityCategory.CONFIG
     _attr_icon = "mdi:scale-balance"
     _attr_native_unit_of_measurement = "d"
     _attr_native_step = 1

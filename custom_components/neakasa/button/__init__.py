@@ -17,10 +17,14 @@ if TYPE_CHECKING:
 from ..const import DOMAIN
 from .calibrate_food_scale import NeakasaCalibrateFoodScaleButton
 from .clean import NeakasaCleanButton
-from .debug_token import (
-    NeakasaDebugTokenChurnButton,
-    NeakasaDebugTokenInvalidateButton,
-)
+
+# Disabled for v1.5.0: the token debug presses were test tools only, and their
+# module, coordinator methods and tests are gone from this release. The calls
+# they used to make are left here as a comment so the removal is reviewable.
+# from .debug_token import (
+#     NeakasaDebugTokenChurnButton,
+#     NeakasaDebugTokenInvalidateButton,
+# )  # noqa: ERA001
 from .feed_now import NeakasaFeedNowButton
 from .level import NeakasaLevelButton
 from .mark_food_bin_clean import NeakasaMarkFoodBinCleanButton
@@ -78,16 +82,17 @@ async def async_setup_entry(
                 entities.extend(
                     [
                         NeakasaFeedNowButton(coordinator, device_info, iot_id),
-                        # The two debug buttons are temporary test tools: they make
-                        # the session path observable on demand and are dropped
-                        # before v1.5.0 ships. docs/app-session-experiments.md says
-                        # what each press is for and which journal lines to read.
-                        NeakasaDebugTokenChurnButton(coordinator, device_info, iot_id),
-                        NeakasaDebugTokenInvalidateButton(
-                            coordinator,
-                            device_info,
-                            iot_id,
-                        ),
+                        # Disabled with the debug module removed: these two presses
+                        # only existed to watch the token path, and
+                        # docs/app-session-experiments.md keeps what they showed.
+                        # NeakasaDebugTokenChurnButton(
+                        #     coordinator, device_info, iot_id
+                        # ),
+                        # NeakasaDebugTokenInvalidateButton(
+                        #     coordinator,
+                        #     device_info,
+                        #     iot_id,
+                        # ),
                         NeakasaResetDesiccantButton(coordinator, device_info, iot_id),
                         NeakasaResetBowlScaleButton(coordinator, device_info, iot_id),
                         NeakasaCalibrateFoodScaleButton(

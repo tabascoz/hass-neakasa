@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from homeassistant.components.sensor import EntityCategory
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import STATE_OFF, STATE_ON
 from homeassistant.core import callback
@@ -27,6 +28,7 @@ class NeakasaDisplayStandbySwitch(CoordinatorEntity[NeakasaCoordinator], SwitchE
     _attr_should_poll = False
     _attr_has_entity_name = True
     _attr_translation_key = "display_standby"
+    _attr_entity_category = EntityCategory.CONFIG
     _attr_icon = "mdi:screen-display"
 
     def __init__(

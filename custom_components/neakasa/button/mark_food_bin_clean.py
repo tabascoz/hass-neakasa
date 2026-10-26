@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from homeassistant.components.button import ButtonEntity
+from homeassistant.components.sensor import EntityCategory
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -29,6 +30,7 @@ class NeakasaMarkFoodBinCleanButton(
     _attr_should_poll = False
     _attr_has_entity_name = True
     _attr_translation_key = "mark_food_bin_clean"
+    _attr_entity_category = EntityCategory.CONFIG
     _attr_icon = "mdi:broom"
 
     def __init__(

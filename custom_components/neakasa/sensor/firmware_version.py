@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import EntityCategory, SensorEntity
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -21,6 +21,7 @@ class NeakasaFirmwareVersionSensor(CoordinatorEntity[NeakasaCoordinator], Sensor
     _attr_should_poll = False
     _attr_has_entity_name = True
     _attr_translation_key = "firmware_version"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:memory"
 
     def __init__(

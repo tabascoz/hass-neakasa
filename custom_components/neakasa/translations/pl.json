@@ -52,12 +52,6 @@
             "feed_now": {
                 "name": "Feeding now"
             },
-            "debug_token_churn": {
-                "name": "Debug churn token (test)"
-            },
-            "debug_token_invalidate": {
-                "name": "Invalidate token (test)"
-            },
             "refresh_data": {
                 "name": "Odśwież dane"
             },
