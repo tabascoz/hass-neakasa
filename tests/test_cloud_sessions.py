@@ -11,7 +11,7 @@ from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
-from custom_components.neakasa.api import _describe_write
+from custom_components.neakasa.api import _describe_presentation, _describe_write
 from custom_components.neakasa.api_manager import (
     _session_mints,
     _shared_clients,
@@ -22,8 +22,9 @@ from custom_components.neakasa.api_manager import (
 from custom_components.neakasa.button.refresh_data import NeakasaRefreshDataButton
 from custom_components.neakasa.coordinator import (
     CLOUD_SESSION_OWNERS,
-    SESSION_OWNER_ELSEWHERE,
-    SESSION_OWNER_OURS,
+    SESSION_EVIDENCE_HOLD_MINUTES,
+    SESSION_OWNER_HOME_ASSISTANT,
+    SESSION_OWNER_NOT_HOME_ASSISTANT,
     SESSION_OWNER_UNKNOWN,
     NeakasaCoordinator,
 )
@@ -341,14 +342,14 @@ async def test_a_refused_account_call_opens_a_back_off_and_says_so(
 
     first = await coordinator.async_update_data()
     assert "iot-001" in first
-    assert coordinator.cloud_session_owner == SESSION_OWNER_OURS
+    assert coordinator.cloud_session_owner == SESSION_OWNER_HOME_ASSISTANT
 
     coordinator.force_refresh_devices()
     second = await coordinator.async_update_data()
     assert "iot-001" in second
     assert client.get_devices.call_count == 2
     assert coordinator.records_refused is True
-    assert coordinator.cloud_session_owner == SESSION_OWNER_ELSEWHERE
+    assert coordinator.cloud_session_owner == SESSION_OWNER_NOT_HOME_ASSISTANT
 
     third = await coordinator.async_update_data()
     assert "iot-001" in third
@@ -372,7 +373,7 @@ async def test_a_request_takes_the_session_back_and_re_reads(
 
     coordinator.force_refresh_devices()
     await coordinator.async_update_data()
-    assert coordinator.cloud_session_owner == SESSION_OWNER_ELSEWHERE
+    assert coordinator.cloud_session_owner == SESSION_OWNER_NOT_HOME_ASSISTANT
 
     with patch(
         "custom_components.neakasa.coordinator.force_reconnect_api",
@@ -381,7 +382,7 @@ async def test_a_request_takes_the_session_back_and_re_reads(
         await coordinator.regain_cloud_session()
     reconnect.assert_awaited_once()
     assert client.get_devices.call_count == 3
-    assert coordinator.cloud_session_owner == SESSION_OWNER_OURS
+    assert coordinator.cloud_session_owner == SESSION_OWNER_HOME_ASSISTANT
 
 
 async def test_the_account_sensor_names_the_client_that_holds_the_session(
@@ -396,11 +397,11 @@ async def test_the_account_sensor_names_the_client_that_holds_the_session(
     sensor = NeakasaCloudSessionStatusSensor(coordinator, MagicMock())
     first = await coordinator.async_update_data()
     assert "iot-001" in first
-    assert sensor.native_value == SESSION_OWNER_OURS
+    assert sensor.native_value == SESSION_OWNER_HOME_ASSISTANT
 
     coordinator.force_refresh_devices()
     await coordinator.async_update_data()
-    assert sensor.native_value == SESSION_OWNER_ELSEWHERE
+    assert sensor.native_value == SESSION_OWNER_NOT_HOME_ASSISTANT
 
 
 async def test_the_account_button_takes_the_session_back_in_one_sign_in(
@@ -430,7 +431,7 @@ async def test_the_account_button_takes_the_session_back_in_one_sign_in(
 
     reconnect.assert_awaited_once()
     assert client.get_devices.call_count == 3
-    assert coordinator.cloud_session_owner == SESSION_OWNER_OURS
+    assert coordinator.cloud_session_owner == SESSION_OWNER_HOME_ASSISTANT
 
 
 async def test_the_window_end_takes_the_session_back_by_itself(
@@ -542,3 +543,71 @@ def test_the_account_sensor_is_declared_as_an_enum_status() -> None:
     assert sensor.device_class is SensorDeviceClass.ENUM
     assert list(sensor.options) == list(CLOUD_SESSION_OWNERS)
     assert sensor.native_value == SESSION_OWNER_UNKNOWN
+
+
+# ---------------------------------------------------------------------------
+# What an accepted account call costs, and what a claim is based on
+# ---------------------------------------------------------------------------
+
+
+def test_presentation_lines_name_the_call_and_the_device() -> None:
+    """An accepted account call is as countable as a write is."""
+    assert _describe_presentation("/uc/listBindingByAccount", {}) == (
+        "/uc/listBindingByAccount"
+    )
+    params = {"device_name": "T1 Plus", "bind_status": 2}
+    assert _describe_presentation("/catbox/record", params) == (
+        "/catbox/record device=T1 Plus"
+    )
+
+
+async def test_the_evidence_says_which_call_made_the_claim(
+    hass: HomeAssistant,
+    mock_config_entry: MagicMock,
+) -> None:
+    """The times and the call behind a claim are published, not hidden."""
+    client = _scanning_client()
+    client.get_devices = AsyncMock(side_effect=[DEVICE_LIST, SESSION_REFUSED])
+    coordinator = _coordinator(hass, mock_config_entry, client)
+
+    assert "iot-001" in await coordinator.async_update_data()
+    evidence = coordinator.session_evidence
+    assert evidence["last_presented_call"] == "records"
+    assert evidence["last_presented_at"] is not None
+    assert evidence["refused_at"] is None
+
+    coordinator.force_refresh_devices()
+    await coordinator.async_update_data()
+    assert coordinator.cloud_session_owner == SESSION_OWNER_NOT_HOME_ASSISTANT
+    assert coordinator.session_evidence["refused_at"] is not None
+
+
+async def test_the_account_sensor_publishes_the_evidence(
+    hass: HomeAssistant,
+    mock_config_entry: MagicMock,
+) -> None:
+    """The sensor shows what the claim is based on, so the UI can be read."""
+    client = _scanning_client()
+    coordinator = _coordinator(hass, mock_config_entry, client)
+    sensor = NeakasaCloudSessionStatusSensor(coordinator, MagicMock())
+
+    assert "iot-001" in await coordinator.async_update_data()
+    assert sensor.native_value == SESSION_OWNER_HOME_ASSISTANT
+    assert set(sensor.extra_state_attributes) == set(coordinator.session_evidence)
+
+
+async def test_a_claim_nothing_proves_for_a_hold_says_unknown(
+    hass: HomeAssistant,
+    mock_config_entry: MagicMock,
+) -> None:
+    """The claim ages out; the evidence still says what was seen."""
+    client = _scanning_client()
+    coordinator = _coordinator(hass, mock_config_entry, client)
+
+    assert "iot-001" in await coordinator.async_update_data()
+    assert coordinator.cloud_session_owner == SESSION_OWNER_HOME_ASSISTANT
+
+    aged = time.monotonic() - (SESSION_EVIDENCE_HOLD_MINUTES + 1) * 60
+    coordinator._last_presented_at = aged
+    assert coordinator.cloud_session_owner == SESSION_OWNER_UNKNOWN
+    assert coordinator.session_evidence["last_presented_call"] == "records"

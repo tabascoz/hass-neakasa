@@ -137,7 +137,21 @@
                 "name": "Akku"
             },
             "cloud_session_status": {
-                "name": "Cloud-Sitzungsstatus"
+                "name": "Cloud-Sitzungsstatus",
+                "state": {
+                    "unknown": "Unknown",
+                    "home_assistant": "Home Assistant",
+                    "not_home_assistant": "Nicht Home Assistant"
+                },
+                "state_attributes": {
+                    "options": {
+                        "state": {
+                            "unknown": "Unknown",
+                            "home_assistant": "Home Assistant",
+                            "not_home_assistant": "Nicht Home Assistant"
+                        }
+                    }
+                }
             }
         },
         "switch": {

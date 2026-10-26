@@ -6,7 +6,7 @@ import asyncio
 import json
 import time
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
@@ -38,10 +38,22 @@ if TYPE_CHECKING:
 
     from .api_client import NeakasaApiClient
 
-# The account's device list changes rarely; refetching it on every scan is a
-# large part of the cloud traffic, which is what makes the Neakasa app lose
-# its own session. One entry keeps it cached for this long.
-DEVICE_LIST_REFRESH_MINUTES = 10
+# Listing the account's devices is an account presentation: it moves the
+# session, so how often it happens is what makes the Neakasa app sign in
+# again. Six hours keeps us near two presentations an hour, through the
+# records path; the Refresh data now button and a config reload find a
+# device you just added. The value this replaces was 10 minutes: six
+# presentations an hour on the 5-minute scan cadence this entry runs.
+DEVICE_LIST_REFRESH_MINUTES = 6 * 60
+
+# Placeholder, not measured yet: how long a claim about the session owner can
+# still be true. A session that nobody presents ages out on its own - measured
+# on 2026-10-26 at 16:22-16:29, where the app needed a sign-in minutes after
+# its own login while our client presented nothing - but for how long is the
+# open question there: X10 reads whether the login answer states a lifetime at
+# all, and X9 measures it by watching the app. Neither has been run since this
+# value was written, so fifteen minutes is a guess, not a measurement.
+SESSION_EVIDENCE_HOLD_MINUTES = 15
 # A full re-login mints a new session for the account, so it is done at most
 # once per window; renewing the IoT token (one call) is tried first.
 FULL_REAUTH_COOLDOWN_SECONDS = 600
@@ -73,15 +85,26 @@ SESSION_REGAIN_POLICIES: tuple[str, ...] = (
     SESSION_REGAIN_ALWAYS,
 )
 DEFAULT_SESSION_REGAIN_POLICY = SESSION_REGAIN_WINDOW
-# What the account sensor reports: which client the session belongs to.
-SESSION_OWNER_OURS = "ours"
-SESSION_OWNER_ELSEWHERE = "foreign"
+# What the account sensor reports: which client the session belongs to. The
+# values are what rules, templates and actions compare against, so they stay
+# lowercase slugs; the words you see in the UI come from the state maps in
+# translations/. A refusal only ever proves that our token is no longer the
+# one holding the session - the cloud may equally have let that session age
+# out - so the value says not_home_assistant instead of naming an app.
+SESSION_OWNER_HOME_ASSISTANT = "home_assistant"
+SESSION_OWNER_NOT_HOME_ASSISTANT = "not_home_assistant"
 SESSION_OWNER_UNKNOWN = "unknown"
 CLOUD_SESSION_OWNERS: tuple[str, ...] = (
     SESSION_OWNER_UNKNOWN,
-    SESSION_OWNER_OURS,
-    SESSION_OWNER_ELSEWHERE,
+    SESSION_OWNER_HOME_ASSISTANT,
+    SESSION_OWNER_NOT_HOME_ASSISTANT,
 )
+
+
+def _utc_stamp() -> str:
+    """Return the current time as the account sensor will print it."""
+    return datetime.now(UTC).isoformat(timespec="seconds")
+
 
 CATLITTER_EXPECTED_KEYS: tuple[str, ...] = (
     "binFullWaitReset",
@@ -463,6 +486,13 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         self._account_refused_at: float | None = None
         self._window_reported = False
         self._regain_hint_shown = False
+        # When each claim was made, so the account sensor can show its evidence.
+        # These are printable stamps only; the rules below work on the monotonic
+        # clock in _last_presented_at and _account_refused_at.
+        self._last_presented_at: float | None = None
+        self._last_presented_when: str | None = None
+        self._last_presented_call: str | None = None
+        self._refused_when: str | None = None
 
         scan_interval = config_entry.options.get("scan_interval", 60)
         # Both are per config entry: a household that uses the mobile app as
@@ -934,8 +964,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             return self._match_supported_devices(self._account_devices)
         # An accepted presentation is us holding the session: the state is ours
         # and any window a refusal opened is over.
-        self._session_owner = SESSION_OWNER_OURS
-        self._account_refused_at = None
+        self._note_presented("device list")
         self._account_devices = all_devices
         return self._match_supported_devices(all_devices)
 
@@ -1026,8 +1055,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                 if held is None:
                     raise
                 return held
-            self._session_owner = SESSION_OWNER_OURS
-            self._account_refused_at = None
+            self._note_presented("records")
             return records
 
         return await records_cache.get_or_update(fetch)
@@ -1097,10 +1125,20 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
     # Reconnection helpers
     # ------------------------------------------------------------------
 
+    def _note_presented(self, what: str) -> None:
+        """Record that we presented the account and the cloud accepted it."""
+        self._session_owner = SESSION_OWNER_HOME_ASSISTANT
+        self._account_refused_at = None
+        self._last_presented_at = time.monotonic()
+        self._last_presented_when = _utc_stamp()
+        self._last_presented_call = what
+        self._refused_when = None
+
     def _note_account_refused(self, what: str, err: BaseException) -> None:
         """Record that the account refused one of our calls."""
-        self._session_owner = SESSION_OWNER_ELSEWHERE
+        self._session_owner = SESSION_OWNER_NOT_HOME_ASSISTANT
         self._account_refused_at = time.monotonic()
+        self._refused_when = _utc_stamp()
         self._window_reported = False
         self._regain_hint_shown = False
         _LOGGER.warning(
@@ -1152,9 +1190,8 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         reaction to a failure that should not be repeated.
         """
         self._last_full_auth = None
-        self._account_refused_at = None
         await force_reconnect_api(self.hass, self.username, self.password, cause=reason)
-        self._session_owner = SESSION_OWNER_OURS
+        self._note_presented(f"session taken back ({reason})")
         # Having taken the session, the scan that regained it should use it: the
         # caches that served the refused values are marked stale so they are read
         # again now, and the values stop being reported as stale.
@@ -1167,8 +1204,41 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
 
     @property
     def cloud_session_owner(self) -> str:
-        """Which client the account session belongs to, as last observed."""
+        """
+        Which client holds the session, as far as a recent proof says.
+
+        Every value here is an observation of one moment: an accepted call
+        proved we held it, a refusal proved we do not. Neither is still
+        supportable once SESSION_EVIDENCE_HOLD_MINUTES have passed without new
+        proof, since a session nobody presents ages out on its own - the run of
+        2026-10-26 16:22-16:29 measured exactly that, with our client making no
+        account call at all. The sensor keeps the claim in the value and puts
+        the times in its attributes, so unknown always means we have no proof.
+        """
+        if self._session_owner == SESSION_OWNER_UNKNOWN or self._evidence_is_old():
+            return SESSION_OWNER_UNKNOWN
         return self._session_owner
+
+    @property
+    def session_evidence(self) -> dict[str, Any]:
+        """What the reported owner is based on, so the claim can be checked."""
+        return {
+            "last_presented_at": self._last_presented_when,
+            "last_presented_call": self._last_presented_call,
+            "refused_at": self._refused_when,
+            "evidence_hold_minutes": str(SESSION_EVIDENCE_HOLD_MINUTES),
+        }
+
+    def _evidence_is_old(self) -> bool:
+        """Whether nothing has proved the reported owner for a whole hold."""
+        anchor_at = (
+            self._account_refused_at
+            if self._session_owner == SESSION_OWNER_NOT_HOME_ASSISTANT
+            else self._last_presented_at
+        )
+        if anchor_at is None:
+            return True
+        return time.monotonic() - anchor_at > SESSION_EVIDENCE_HOLD_MINUTES * 60
 
     @property
     def records_refused(self) -> bool:
@@ -1230,8 +1300,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             raise UpdateFailed(msg) from reconnect_err
         # A sign-in is us presenting the account, so the session is ours again
         # and any window a refusal opened is over.
-        self._session_owner = SESSION_OWNER_OURS
-        self._account_refused_at = None
+        self._note_presented(f"sign-in for {reason}")
         return True
 
     def _needs_full_reauth(self, err: BaseException | None) -> bool:

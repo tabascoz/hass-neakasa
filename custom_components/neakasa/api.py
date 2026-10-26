@@ -28,6 +28,50 @@ if TYPE_CHECKING:
 _WRITE_PATHS: tuple[str, ...] = ("/thing/properties/set", "/thing/service/invoke")
 
 
+# The calls that present the account to the cloud: an accepted one is as good a
+# session-mover as a rejected one, and accepted ones log nothing at all - which
+# is why the runs of 2026-10-26 could only count refusals and infer the rest.
+# Naming every accepted presentation makes the number of presentations per hour,
+# the actual lever, measurable from the journal.
+_PRESENTATION_PATHS: tuple[str, ...] = ("/uc/listBindingByAccount", "/catbox/record")
+
+
+def _field_names(payload: object, prefix: str = "") -> list[str]:
+    """Return the dotted names of the fields a decoded response carries."""
+    if not isinstance(payload, dict):
+        return [prefix] if prefix else []
+    names: list[str] = []
+    for key, value in payload.items():
+        path = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict):
+            names.append(path)
+            names.extend(_field_names(value, path))
+        else:
+            names.append(path)
+    return names
+
+
+def _describe_fields(payload: object) -> str:
+    """
+    Name what the cloud returned, one space-separated line, values never.
+
+    The lifetime of a session is the one thing about the account we have had to
+    guess, and the login answer is the only place the cloud could state it for
+    free: every start already pays one sign-in. Naming the fields - not their
+    values, which are tokens, an address and a name - is what tells us whether
+    a session lifetime is being sent at all, and where.
+    """
+    return " ".join(sorted(_field_names(payload)))
+
+
+def _describe_presentation(pathname: str, params: dict[str, Any]) -> str:
+    """Return one line naming an accepted account call and what it was about."""
+    device = params.get("device_name")
+    if device is None:
+        return pathname
+    return f"{pathname} device={device}"
+
+
 def _describe_write(pathname: str, params: dict[str, Any]) -> str:
     """Return one line naming an accepted write, the device and the payload."""
     target = str(params.get("iotId", ""))
@@ -189,7 +233,6 @@ class NeakasaAPI:
                     response.status,
                     response.content_type or "EMPTY",
                 )
-
                 if response.status != 200:
                     text = await response.text()
                     _LOGGER.error(
@@ -207,6 +250,8 @@ class NeakasaAPI:
                         "Failed to parse login JSON: %s. Body: %s", e, text[:500]
                     )
                     raise APIConnectionError("Error connecting to api.") from e
+
+                _LOGGER.info("Login fields: %s", _describe_fields(response_json))
 
                 if response_json["code"] != 0:
                     raise APIAuthError(
@@ -361,6 +406,10 @@ class NeakasaAPI:
             raise APIConnectionError(f"Error in {pathname}: {error_msg}")
         if pathname in _WRITE_PATHS:
             _LOGGER.info("Cloud write: %s", _describe_write(pathname, params))
+        elif pathname in _PRESENTATION_PATHS:
+            _LOGGER.info(
+                "Account presentation: %s", _describe_presentation(pathname, params)
+            )
         return data["data"]
 
     async def _iot_request_once(
@@ -494,6 +543,7 @@ class NeakasaAPI:
 
     async def _signed_get(self, url: str, params: dict[str, Any]) -> Any:
         """Internal: signed GET to the Neakasa web API."""
+        path = url.rsplit("/", maxsplit=1)[-1]
         try:
             timestamp = int(time.time())
             signature = base64.b64encode(
@@ -516,6 +566,10 @@ class NeakasaAPI:
                 data = await response.json()
                 if data["code"] != 0:
                     raise APIConnectionError("Error getting data: " + data["message"])
+                if path in _PRESENTATION_PATHS:
+                    _LOGGER.info(
+                        "Account presentation: %s", _describe_presentation(path, params)
+                    )
                 return data["data"]
         except ClientError:
             raise APIConnectionError("Error connecting to api.")

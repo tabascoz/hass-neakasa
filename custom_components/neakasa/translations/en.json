@@ -137,7 +137,21 @@
                 "name": "Battery"
             },
             "cloud_session_status": {
-                "name": "Cloud session status"
+                "name": "Cloud session status",
+                "state": {
+                    "unknown": "Unknown",
+                    "home_assistant": "Home Assistant",
+                    "not_home_assistant": "Not Home Assistant"
+                },
+                "state_attributes": {
+                    "options": {
+                        "state": {
+                            "unknown": "Unknown",
+                            "home_assistant": "Home Assistant",
+                            "not_home_assistant": "Not Home Assistant"
+                        }
+                    }
+                }
             }
         },
         "switch": {

@@ -41,6 +41,40 @@ Account session minted #1 for tabascoz@gmail.com: cause=coordinator asked for a 
 Cloud write: /thing/service/invoke iotId=4TQDtRLglcQJ5goDNlug000000 identifier=cleanNow args={'bStartClean': 1}
 ```
 
+## Second instrument: the accepted account calls
+
+The run of 16:2x on the same unit showed the first instrument was not enough: a
+sign-in and a write are visible, but the calls that only *read* the account -
+`/uc/listBindingByAccount` and `/catbox/record` - return 200 and logged nothing,
+so the half of the lever that is always accepted could only be counted by
+inference. The build now names those too, beside the write line:
+
+```text
+Account presentation: /uc/listBindingByAccount
+Account presentation: /catbox/record device=T1 Plus
+```
+
+`api.py:_PRESENTATION_PATHS` and `api.py:_describe_presentation` are the whole
+change: a log line, no behaviour, so the count of presentations per hour - what
+the app's re-asks follow - can be read instead of guessed.
+
+A third instrument is for the one quantity the runs kept hitting: how long a
+session lives once it stops being presented. The login answer is the only place
+the cloud could state it for free - every start already pays one sign-in - so the
+build also names the fields it received, values never:
+
+```text
+Login fields: code data data.login_token data.user_info data.user_info.sid
+```
+
+`api.py:_describe_fields` is the whole change. What to read for is a lifetime: a
+field under `data` or `data.user_info` whose name words a duration
+(`session_over_time`, `expires_in`, `ttl`, a seconds count). If one is there,
+`SESSION_EVIDENCE_HOLD_MINUTES` stops being a placeholder and becomes what the
+cloud says it is; if none is, the number stays as open as X9 says it is, and the
+only way to know it is to watch the app ask - which is also the only way that
+costs the account a session.
+
 ## Running the matrix
 
 On the unit, paste these once:
@@ -50,12 +84,12 @@ check() {   # what our code asked of the cloud in the last N minutes
   since=$(date -d "$2 min" '+%Y-%m-%d %H:%M')
   printf '== %s since %s ==\n' "$1" "$since"
   journalctl -u homeassistant --since "$since" --no-pager |
-    grep -E 'Account session minted|Cloud write|IoT cloud error|Session expired|TokenInvalid|identityId|Renewed the cloud|Reconnect|Authenticating|Debug tokens' |
+    grep -E 'Account session minted|Account presentation|Cloud write|IoT cloud error|Session expired|TokenInvalid|identityId|Renewed the cloud|Reconnect|Authenticating|Debug tokens' |
     tail -15
 }
 states() {  # entity states written, counted per minute
   journalctl -u homeassistant --since "$2 min" --no-pager |
-    grep -E 'Reported state' | grep -oE '10:[0-9]{2}' | sort | uniq -c
+    grep -E 'Reported state' | grep -oE '[0-9]{2}:[0-9]{2}' | sort | uniq -c
 }
 ```
 
@@ -80,6 +114,8 @@ cause that reproduces at both of our timestamps is ours.
 | Y3 | sign into the app 3 times in a row | whether our access fails after the 1st or after the 3rd | - |
 | Y4 | do a **write in the app** (feed there) rather than a login | whether our next scan still works | - |
 | Z1 | leave everything untouched for one hour | expect 0 minted sessions - that is the natural rate | ok |
+| X10 | read one boot's `Login fields:` line | the field names of the login answer, values never | names a session lifetime only if the cloud sends one |
+| X9 | sign into the app, then leave both clients alone for 20 minutes | only our own `Account presentation` lines, at the cadence the caches set | the first minute the app asks again is a session's own lifetime |
 
 ## Reading the results
 
@@ -110,6 +146,30 @@ sensors only.
 | XH - the machine's own button | **ok, no re-ask**, and the app lists the manual event it created | nothing at all from our client between 11:51:00 and 11:55:30; the physical press at 11:51:30 made no `Cloud write` | once, in a window with no scan in it |
 | X7 - debug invalidate in HA | ok at 11:58:30, re-ask at 12:01:30 | `11:57:18.611 Debug tokens invalidated`; the next scan `12:00:46 ... code=401` + `TokenInvalid ... does not contain the @ sign` then `Finished fetching ... success: True` - no `Session expired, reconnecting silently`, no mint | once |
 
+## The run of 16:20 - 16:32, and what it says about a session's own life
+
+Restart at 16:20, app signed into at 16:22:15, app found needing a sign-in again
+at 16:29. What our client did in that window, from the journal:
+
+| time | lines | account presentations |
+|------|-------|------------------------|
+| 16:20:33 | `Account session minted #1 ... (nothing cached for these credentials yet)`, `Login response - Status: 200`, boot scan 28.3 s | sign-in, then list and records, all accepted |
+| 16:26:02 | `Reusing shared API client`, two `Getting device properties`, `0.385 seconds (success: True)` | none - the caches served the list and the records |
+| 16:31:02 | same shape, `0.486 s`, no `The account refused` line | the device list again (its cache was due at ~16:30:47), accepted |
+
+What that settles:
+
+- The app losing its session at 16:29 has no cause in our client: nothing between
+  the login at 16:22:15 and 16:29 presented the account. A session that nobody
+  presents ages out on its own, minutes after being handed over.
+- A claim about the owner is only true near the observation that made it. The
+  whole basis for reporting `home_assistant` at 16:29 is an accepted call at 16:20,
+  which is why the value now decays to `unknown` past `SESSION_EVIDENCE_HOLD_MINUTES`
+  and the attributes carry `last_presented_at`, `last_presented_call` and `refused_at`.
+- What it opens: the lifetime itself. 16:2x shows minutes, the hour of 12:02-13:02
+  shows less than an hour. X9 measures it; the constant stays a placeholder until
+  then.
+
 ## The rule the runs support
 
 Presenting the account to the cloud moves the session, whether the request is
@@ -137,6 +197,9 @@ Two options exist now, both per config entry (options flow, applied on a
 reload of the entry, which the integration already does for its update
 listener):
 
+Three things now set the rate at which the account is presented, all of them
+per config entry or in code where no user chooses it:
+
 - `account_session_window_minutes` (5-720, default 30): how long a refusal keeps
   the account from being presented again.
 - `session_regain_policy` (`never` | `window` | `always`, default `window`): how
@@ -152,5 +215,13 @@ this entry runs (measured before the change: 12 account presentations an hour,
 | 30 min | 0 | <=2 | <=12 |
 | 5 min | 0 | <=12 | <=12 |
 
-Those are predictions to be measured, not measurements. The runs that set them
-are the ones above.
+The cadence no user chooses: the account device list is cached for six hours
+(`coordinator.py:DEVICE_LIST_REFRESH_MINUTES`) instead of ten minutes, because a
+list call is a presentation and ten minutes costs six an hour on its own. A device
+added to the account is found by the `Refresh data now` button or on a config
+reload, which is the manual path that already exists.
+
+Those are predictions to be measured, not measurements. The runs that set them are
+the ones above, and the `Account presentation:` lines are what turns them into
+measurements: count them with `grep -c 'Account presentation'` over a fixed period
+instead of inferring them from the app asking to sign in.

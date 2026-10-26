@@ -137,7 +137,21 @@
                 "name": "Akku"
             },
             "cloud_session_status": {
-                "name": "Status sesji w chmurze"
+                "name": "Status sesji w chmurze",
+                "state": {
+                    "unknown": "Unknown",
+                    "home_assistant": "Home Assistant",
+                    "not_home_assistant": "Nie Home Assistant"
+                },
+                "state_attributes": {
+                    "options": {
+                        "state": {
+                            "unknown": "Unknown",
+                            "home_assistant": "Home Assistant",
+                            "not_home_assistant": "Nie Home Assistant"
+                        }
+                    }
+                }
             }
         },
         "switch": {

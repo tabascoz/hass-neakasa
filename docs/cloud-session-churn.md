@@ -47,10 +47,13 @@ into roughly seven cloud requests a minute.
 
 - One API client per scan: `async_update_data` takes the client once and passes
   it to the per-device helpers, so a scan costs one client acquisition.
-- The account device list is cached (`ValueCacher`, 10 minutes) and reused for
-  device names; recovery paths call `force_refresh_devices()` so a new device is
-  found after a reconnect. A device added to the account now appears in the UI
-  within ten minutes instead of one minute.
+- The account device list is cached (`ValueCacher`, six hours now, ten minutes in
+  the first version) and reused for device names; recovery paths call
+  `force_refresh_devices()` so a new device is found after a reconnect. Listing
+  the account is an account presentation, so ten minutes cost six of them an
+  hour by itself; six hours leaves the records path as the only automatic one. A
+  device added to the account appears within six hours unless you press
+  `Refresh data now`, which is the manual path this already had.
 - A rejected session is recovered by renewing the IoT token (`refresh_session`,
   one call) and a full re-login happens at most once per
   `FULL_REAUTH_COOLDOWN_SECONDS`. When the cooldown blocks it, the scan fails
@@ -123,3 +126,17 @@ day of running plus your observation.
 Keep it if the app stays connected while full sign-ins stay around one per
 start rather than one per minute. Discard it otherwise. Nothing on `main` refers
 to this file.
+
+## After the decision: the app losing its session is not only our sign-ins
+
+The branch was kept, and the next symptom measured on the same unit (2026-10-26,
+restart at 16:20, the app signed into at 16:22:15, the app needing a sign-in at
+16:29) is one this document cannot explain: a session that nobody presents ages
+out on its own, minutes after being handed over. Nothing our client did in that
+window presented the account, so the app lost a session we never took.
+
+See [app-session-experiments.md](app-session-experiments.md) for that run, the
+`Account presentation:` instrument that makes the count of presentations per hour
+readable instead of inferred, and the vocabulary the account sensor now uses
+(`unknown`, `home_assistant`, `not_home_assistant`) with the timestamps behind
+every claim in its attributes.

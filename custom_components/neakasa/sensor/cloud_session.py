@@ -1,8 +1,8 @@
-"""Account-level sensor: which client holds the cloud session."""
+"""Account-level sensor: which client the cloud session belongs to, and why."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.core import callback
@@ -21,7 +21,19 @@ if TYPE_CHECKING:
 class NeakasaCloudSessionStatusSensor(
     CoordinatorEntity[NeakasaCoordinator], SensorEntity
 ):
-    """Which client the account's session currently belongs to."""
+    """
+    Which client the account's session belongs to, as far as we can prove.
+
+    The values are the slugs in CLOUD_SESSION_OWNERS - what rules and
+    actions compare against - and the words you see come from the state
+    maps in translations/. home_assistant says our last account call was
+    accepted, not_home_assistant says it was refused (the mobile app holds
+    the session, or the cloud let it age out on its own: a refusal cannot
+    tell those apart), and unknown says we have no proof left, which the
+    coordinator applies once nothing has proved a claim for a hold. The
+    attributes carry the timestamps, so any claim traces to the call that
+    made it.
+    """
 
     _attr_should_poll = False
     _attr_has_entity_name = True
@@ -40,6 +52,11 @@ class NeakasaCloudSessionStatusSensor(
         self._attr_unique_id = f"{coordinator.username}-cloud_session"
         self._attr_options = list(CLOUD_SESSION_OWNERS)
         self._last_owner = SESSION_OWNER_UNKNOWN
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """What the reported owner is based on, so the claim can be checked."""
+        return self.coordinator.session_evidence
 
     @property
     def native_value(self) -> str:
