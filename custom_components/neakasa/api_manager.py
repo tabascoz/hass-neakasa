@@ -32,7 +32,7 @@ async def get_shared_api(
         if credentials_key in _shared_clients:
             client = _shared_clients[credentials_key]
             if client.connected:
-                _LOGGER.info("Reusing shared API client for %s", username)
+                _LOGGER.debug("Reusing shared API client for %s", username)
                 return client
             _LOGGER.debug("Clearing invalid API client for %s", username)
             del _shared_clients[credentials_key]
@@ -40,7 +40,7 @@ async def get_shared_api(
         session = async_get_clientsession(hass)
         api = NeakasaAPI(session)
         try:
-            _LOGGER.info("Authenticating shared API client for %s", username)
+            _LOGGER.debug("Authenticating shared API client for %s", username)
             await api.connect(username, password)
             client = NeakasaApiClient(api)
             _shared_clients[credentials_key] = client

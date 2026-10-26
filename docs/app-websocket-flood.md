@@ -98,8 +98,7 @@ journalctl -u homeassistant --since "-1 hour" | grep -c "Reported state for"
 An idle machine should show a short burst (the first scan after a start, then the
 real changes only). If that count is small while the apps still reconnect, the rest
 of the queue belongs to other integrations of this install, not to this one. That
-line is a measuring aid: raise it back to debug when this branch is kept, and it
-is at INFO now only so the count is visible without enabling debug logging.
+line is a measuring aid: drop it when this branch is kept.
 
 Window used: 23:06:30 until 23:08:26 on 2026-10-25, two of our own scans.
 

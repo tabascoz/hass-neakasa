@@ -64,9 +64,9 @@ into roughly seven cloud requests a minute.
 
 ## Counting it
 
-On this branch the counters are logged at INFO so the greps work without
-enabling debug logging. They are measuring aids: drop them (back to debug) if
-the branch is kept.
+The counters are debug-level lines of the integration, so they need
+Home Assistant's debug logging for `custom_components.neakasa` (configured in
+`configuration.yaml`), which is how they were read back below.
 
 ```bash
 # full sign-ins (each mints a session): expect a handful per hour, not per minute

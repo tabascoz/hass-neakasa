@@ -412,7 +412,7 @@ class NeakasaAPI:
 
     async def get_device_properties(self, iot_id: str) -> Any:
         """Fetch live device properties from Aliyun IoT."""
-        _LOGGER.info("Getting device properties for iotId: %s", iot_id)
+        _LOGGER.debug("Getting device properties for iotId: %s", iot_id)
         _LOGGER.debug(
             "API connected: %s, iotToken present: %s",
             self.connected,
