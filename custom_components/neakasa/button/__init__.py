@@ -78,6 +78,10 @@ async def async_setup_entry(
                 entities.extend(
                     [
                         NeakasaFeedNowButton(coordinator, device_info, iot_id),
+                        # The two debug buttons are temporary test tools: they make
+                        # the session path observable on demand and are dropped
+                        # before v1.5.0 ships. docs/app-session-experiments.md says
+                        # what each press is for and which journal lines to read.
                         NeakasaDebugTokenChurnButton(coordinator, device_info, iot_id),
                         NeakasaDebugTokenInvalidateButton(
                             coordinator,

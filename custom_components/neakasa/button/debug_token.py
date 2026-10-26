@@ -1,4 +1,11 @@
-"""Temporary debug buttons for the account tokens (remove after testing)."""
+"""
+Temporary debug buttons for the account tokens (remove after testing).
+
+Both presses exist to make the session path observable in a short time: a
+natural token expiry costs exactly what the churn press performs, and waiting
+for one is slow. What each press does, and what was seen on the unit, is
+written up in docs/app-session-experiments.md.
+"""
 
 from __future__ import annotations
 
@@ -16,7 +23,15 @@ if TYPE_CHECKING:
 
 
 class NeakasaDebugTokenChurnButton(CoordinatorEntity[NeakasaCoordinator], ButtonEntity):
-    """Press to sign in a few times in a row, so the account gains sessions."""
+    """
+    Sign the account in a few times in a row, so it gains sessions.
+
+    The press writes `Debug token churn 1/3: signing in` per sign-in and
+    `Debug token churn complete: 3 sign-ins`, beside the `Account session
+    minted #N …` lines the shared client writes for each sign-in. Each sign-in
+    is one session, which is what makes the app side sign in again; the count is
+    the thing docs/app-session-experiments.md measures.
+    """
 
     _attr_should_poll = False
     _attr_has_entity_name = True
@@ -51,14 +66,22 @@ class NeakasaDebugTokenChurnButton(CoordinatorEntity[NeakasaCoordinator], Button
         self._handle_coordinator_update()
 
     async def async_press(self) -> None:
-        """Churn the account's sessions and watch the Neakasa app."""
+        """Churn the account's sessions and watch the app sign in again."""
         await self.coordinator.debug_token_churn()
 
 
 class NeakasaDebugTokenInvalidateButton(
     CoordinatorEntity[NeakasaCoordinator], ButtonEntity
 ):
-    """Press to break the tokens we hold, so the next scan must recover them."""
+    """
+    Break the tokens we hold, so the next scan has to recover them.
+
+    The press writes `Debug tokens invalidated: the next scan must recover them`.
+    The next scan then has a records call refused for the account token, which is
+    the branch's recovery path: it must read that refusal as an expired session,
+    sign in once, and read the values again. What was observed on the unit after
+    such a press is written up in docs/app-session-experiments.md.
+    """
 
     _attr_should_poll = False
     _attr_has_entity_name = True
@@ -93,5 +116,5 @@ class NeakasaDebugTokenInvalidateButton(
         self._handle_coordinator_update()
 
     async def async_press(self) -> None:
-        """Invalidate our tokens and watch the next scan repair them."""
+        """Break our tokens so the next scan's recovery path has to run."""
         await self.coordinator.debug_invalidate_tokens()

@@ -1091,7 +1091,8 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
 
         Opt-in only (``debug_probe`` option); errors are swallowed so a
         mis-guessed identifier can never break polling. Runs a single time per
-        selected probe rather than on every update.
+        selected probe rather than on every update. What the run writes to the
+        journal, and what was seen on the unit, is in docs/app-session-experiments.md.
         """
         probe = self.config_entry.options.get("debug_probe", "none")
         if probe == "none" or not payload:
@@ -1134,7 +1135,12 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         Temporary test tool for the app side: a natural token expiry costs
         exactly this, and waiting for one is slow. Each sign-in replaces the
         shared client, so after a press the account holds the same number of
-        sessions it would have held after the same number of expiries.
+        sessions it would have held after the same number of expiries - and each
+        one is what makes the app sign in again, which is the count the branch's
+        session notes keep. The writes go to the journal as `Debug token churn
+        1/3: signing in` per sign-in and `Debug token churn complete: 3 sign-ins`
+        beside the `Account session minted #N …` lines; what was seen on the unit
+        is written up in docs/app-session-experiments.md.
         """
         for step in range(1, cycles + 1):
             _LOGGER.info("Debug token churn %d/%d: signing in", step, cycles)
@@ -1151,8 +1157,13 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         Break the tokens we hold so the next scan has to recover them.
 
         Temporary test tool for the branch's recovery path: the records call
-        fails for the account token, which must be seen as an expired session
-        and repaired by a sign-in.
+        fails for the account token, which must be read as an expired session and
+        repaired by a sign-in. The journal shows
+        `Debug tokens invalidated: the next scan must recover them`, then either
+        `The account refused 'records' …` or the `Renewed the cloud session …`
+        line on the next scan, and the account sensor says which client holds the
+        session. What was seen on the unit is written up in
+        docs/app-session-experiments.md.
         """
         client = await self._get_client()
         await client.debug_invalidate_tokens()

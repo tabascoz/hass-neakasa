@@ -68,6 +68,10 @@ class NeakasaOptionsFlow(OptionsFlow):
                     "feed_keep_as_new_defaults",
                     default=current_keep_defaults,
                 ): bool,
+                # Temporary test tools for the token paths: `debug_probe` runs one
+                # named write per scan and `invoke_custom` sends an identifier you
+                # type in. Both are dropped before v1.5.0 ships;
+                # docs/app-session-experiments.md says what each one measures.
                 vol.Required(
                     "debug_probe",
                     default=current_probe,
