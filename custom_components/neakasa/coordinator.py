@@ -59,7 +59,20 @@ MAX_SESSION_RECOVERY_ATTEMPTS = 2
 # and 12 scans in a row served refused records while reporting success, with no
 # attempt to get the session back. A refusal opens this window, during which the
 # account is not presented again and what we hold is served with a reason.
-ACCOUNT_SESSION_RETRY_AFTER_MINUTES = 30
+ACCOUNT_SESSION_WINDOW_DEFAULT_MINUTES = 30
+# When control of the account session is taken back: never (the button is the
+# only way), at the end of the window (what makes the other client usable in
+# turn), or on every scan (the old fight, for accounts whose app is not the
+# client the user cares about).
+SESSION_REGAIN_NEVER = "never"
+SESSION_REGAIN_WINDOW = "window"
+SESSION_REGAIN_ALWAYS = "always"
+SESSION_REGAIN_POLICIES: tuple[str, ...] = (
+    SESSION_REGAIN_NEVER,
+    SESSION_REGAIN_WINDOW,
+    SESSION_REGAIN_ALWAYS,
+)
+DEFAULT_SESSION_REGAIN_POLICY = SESSION_REGAIN_WINDOW
 # What the account sensor reports: which client the session belongs to.
 SESSION_OWNER_OURS = "ours"
 SESSION_OWNER_ELSEWHERE = "foreign"
@@ -449,8 +462,19 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         self._session_owner = SESSION_OWNER_UNKNOWN
         self._account_refused_at: float | None = None
         self._window_reported = False
+        self._regain_hint_shown = False
 
         scan_interval = config_entry.options.get("scan_interval", 60)
+        # Both are per config entry: a household that uses the mobile app as
+        # its main client wants a long window and no automatic regaining, while
+        # one that only cares about Home Assistant wants the session back soon.
+        self._session_window_minutes = config_entry.options.get(
+            "account_session_window_minutes",
+            ACCOUNT_SESSION_WINDOW_DEFAULT_MINUTES,
+        )
+        self._session_regain_policy = config_entry.options.get(
+            "session_regain_policy", DEFAULT_SESSION_REGAIN_POLICY
+        )
         super().__init__(
             hass,
             _LOGGER,
@@ -1078,21 +1102,68 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         self._session_owner = SESSION_OWNER_ELSEWHERE
         self._account_refused_at = time.monotonic()
         self._window_reported = False
+        self._regain_hint_shown = False
         _LOGGER.warning(
             "The account refused '%s' (%s): another client holds the session, "
             "so it is not presented again for %d min and the values stay as "
             "cached",
             what,
             err,
-            ACCOUNT_SESSION_RETRY_AFTER_MINUTES,
+            self._session_window_minutes,
         )
 
     def _account_refused_recently(self) -> bool:
         """Whether the account refused us inside the back-off window."""
         if self._account_refused_at is None:
             return False
-        window = ACCOUNT_SESSION_RETRY_AFTER_MINUTES * 60
+        window = self._session_window_minutes * 60
         return time.monotonic() - self._account_refused_at < window
+
+    def _window_over(self) -> bool:
+        """Whether a refusal opened a window and that window has now passed."""
+        return (
+            self._account_refused_at is not None
+            and not self._account_refused_recently()
+        )
+
+    def _session_regain_due(self) -> bool:
+        """Whether this scan should take the account session back."""
+        if self._session_regain_policy == SESSION_REGAIN_NEVER:
+            return False
+        if self._session_regain_policy == SESSION_REGAIN_ALWAYS:
+            return self._account_refused_at is not None
+        return self._window_over()
+
+    def _regain_hint_due(self) -> bool:
+        """Whether to say once that only the button takes the session back."""
+        return (
+            self._session_regain_policy == SESSION_REGAIN_NEVER
+            and self._window_over()
+            and not self._regain_hint_shown
+        )
+
+    async def take_account_session_back(self, reason: str) -> None:
+        """
+        Sign in so the account session is ours again.
+
+        Costs one session, which is what the other client notices: it has to
+        authenticate again. The re-auth cooldown does not apply here - taking
+        control back at the end of a window is a decision of this entry, not a
+        reaction to a failure that should not be repeated.
+        """
+        self._last_full_auth = None
+        self._account_refused_at = None
+        await force_reconnect_api(self.hass, self.username, self.password, cause=reason)
+        self._session_owner = SESSION_OWNER_OURS
+        # Having taken the session, the scan that regained it should use it: the
+        # caches that served the refused values are marked stale so they are read
+        # again now, and the values stop being reported as stale.
+        self.force_refresh_devices()
+        for cache in [
+            *self._records_caches.values(),
+            *self._properties_caches.values(),
+        ]:
+            cache.mark_as_stale()
 
     @property
     def cloud_session_owner(self) -> str:
@@ -1112,21 +1183,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         mobile app has to sign in again after this press. It exists to make
         which client is current a user decision rather than a silent fight.
         """
-        self._last_full_auth = None
-        self._account_refused_at = None
-        await force_reconnect_api(
-            self.hass,
-            self.username,
-            self.password,
-            cause="user asked to refresh data",
-        )
-        self._session_owner = SESSION_OWNER_OURS
-        self.force_refresh_devices()
-        for cache in [
-            *self._records_caches.values(),
-            *self._properties_caches.values(),
-        ]:
-            cache.mark_as_stale()
+        await self.take_account_session_back("user asked to refresh data")
         payload = await self.async_update_data()
         self.async_set_updated_data(payload)
 
@@ -1252,9 +1309,29 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
     # Main update loop
     # ------------------------------------------------------------------
 
+    async def _apply_session_policy(self) -> None:
+        """Regain the account session, or say why nothing will regain it."""
+        if self._session_regain_due():
+            _LOGGER.info(
+                "Taking the account session back (%s): the other client "
+                "has to sign in again",
+                self._session_regain_policy,
+            )
+            await self.take_account_session_back(
+                f"session policy {self._session_regain_policy}"
+            )
+        elif self._regain_hint_due():
+            self._regain_hint_shown = True
+            _LOGGER.info(
+                "The session window passed and this entry does not take "
+                "control back by itself: press Refresh data now when you "
+                "want Home Assistant to be the current client"
+            )
+
     async def async_update_data(self) -> NeakasaPayload:
         """Fetch fresh data from all CatLitter devices on the account."""
         try:
+            await self._apply_session_policy()
             client = await self._get_client()
             devices = await self._discover_devices(client)
             self._device_ids = [d["iotId"] for d in devices]

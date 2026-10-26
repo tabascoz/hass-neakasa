@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -427,3 +428,104 @@ async def test_the_account_button_takes_the_session_back_in_one_sign_in(
     reconnect.assert_awaited_once()
     assert client.get_devices.call_count == 3
     assert coordinator.cloud_session_owner == SESSION_OWNER_OURS
+
+
+async def test_the_window_end_takes_the_session_back_by_itself(
+    hass: HomeAssistant,
+    mock_config_entry: MagicMock,
+) -> None:
+    """The default policy signs in on the scan after the window passed."""
+    client = _scanning_client()
+    client.get_devices = AsyncMock(
+        side_effect=[DEVICE_LIST, SESSION_REFUSED, DEVICE_LIST]
+    )
+    coordinator = _coordinator(hass, mock_config_entry, client)
+
+    first = await coordinator.async_update_data()
+    assert "iot-001" in first
+    assert coordinator.records_refused is False
+
+    coordinator.force_refresh_devices()
+    assert (await coordinator.async_update_data()) != {}
+    assert coordinator.records_refused is True
+
+    window = coordinator._session_window_minutes * 60
+    coordinator._account_refused_at = time.monotonic() - window - 1
+    with patch(
+        "custom_components.neakasa.coordinator.force_reconnect_api",
+        new=AsyncMock(),
+    ) as reconnect:
+        assert (await coordinator.async_update_data()) != {}
+    reconnect.assert_awaited_once()
+    assert client.get_devices.call_count == 3
+    assert coordinator.records_refused is False
+
+
+async def test_an_entry_can_decline_and_the_button_is_the_way_back(
+    hass: HomeAssistant,
+    mock_config_entry: MagicMock,
+) -> None:
+    """With the policy never set, nothing signs in and the button still works."""
+    mock_config_entry.options = {
+        "account_session_window_minutes": 30,
+        "session_regain_policy": "never",
+    }
+    client = _scanning_client()
+    client.get_devices = AsyncMock(
+        side_effect=[DEVICE_LIST, SESSION_REFUSED, DEVICE_LIST]
+    )
+    coordinator = _coordinator(hass, mock_config_entry, client)
+
+    first = await coordinator.async_update_data()
+    assert "iot-001" in first
+
+    coordinator.force_refresh_devices()
+    assert (await coordinator.async_update_data()) != {}
+    assert coordinator.records_refused is True
+
+    window = coordinator._session_window_minutes * 60
+    coordinator._account_refused_at = time.monotonic() - window - 1
+    with patch(
+        "custom_components.neakasa.coordinator.force_reconnect_api",
+        new=AsyncMock(),
+    ) as reconnect:
+        assert (await coordinator.async_update_data()) != {}
+    reconnect.assert_not_called()
+
+    with patch(
+        "custom_components.neakasa.coordinator.force_reconnect_api",
+        new=AsyncMock(),
+    ) as reconnect:
+        await coordinator.regain_cloud_session()
+    reconnect.assert_awaited_once()
+    assert coordinator.records_refused is False
+
+
+async def test_the_always_policy_returns_control_on_the_next_scan(
+    hass: HomeAssistant,
+    mock_config_entry: MagicMock,
+) -> None:
+    """The fight is available on demand for accounts whose app is not the user."""
+    mock_config_entry.options = {
+        "account_session_window_minutes": 30,
+        "session_regain_policy": "always",
+    }
+    client = _scanning_client()
+    client.get_devices = AsyncMock(
+        side_effect=[DEVICE_LIST, SESSION_REFUSED, DEVICE_LIST]
+    )
+    coordinator = _coordinator(hass, mock_config_entry, client)
+
+    first = await coordinator.async_update_data()
+    assert "iot-001" in first
+
+    coordinator.force_refresh_devices()
+    with patch(
+        "custom_components.neakasa.coordinator.force_reconnect_api",
+        new=AsyncMock(),
+    ) as reconnect:
+        assert (await coordinator.async_update_data()) != {}
+        assert (await coordinator.async_update_data()) != {}
+        reconnect.assert_awaited_once()
+    assert client.get_devices.call_count == 3
+    assert coordinator.records_refused is False

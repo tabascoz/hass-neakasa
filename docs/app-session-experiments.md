@@ -130,3 +130,27 @@ the @ sign`), so for one hour Home Assistant reported cat weights, `last_usage` 
 bin states that the cloud had refused, and nothing ever asked the session back. No
 `Reported state` line appeared in that hour: the writes at 11:55 (38) and 12:00 (0)
 differ only because the model changed in the first one.
+
+## The settings that followed the rule
+
+Two options exist now, both per config entry (options flow, applied on a
+reload of the entry, which the integration already does for its update
+listener):
+
+- `account_session_window_minutes` (5-720, default 30): how long a refusal keeps
+  the account from being presented again.
+- `session_regain_policy` (`never` | `window` | `always`, default `window`): how
+  control is taken back - never (the account button is the only way), at the end
+  of the window (default), or on every scan while the session is elsewhere.
+
+Expected sessions per hour while the app is being used, on the 5-minute cadence
+this entry runs (measured before the change: 12 account presentations an hour,
+0 sign-ins, and the records refused on all 12):
+
+| window | `never` | `window` | `always` |
+|--------|---------|----------|----------|
+| 30 min | 0 | <=2 | <=12 |
+| 5 min | 0 | <=12 | <=12 |
+
+Those are predictions to be measured, not measurements. The runs that set them
+are the ones above.
