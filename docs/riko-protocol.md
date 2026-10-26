@@ -216,13 +216,41 @@ on both devices. The two new platforms are registered only for the feeder, and t
 entity names exist in all four translation files with the same key tree, which is
 what the translation test checks.
 
+## What the device files them as (v1.5.0-beta5)
+
+Twenty controls on one device mixed the actions you press often, the settings you
+tune once and leave alone, and the values that only identify the machine, so
+Home Assistant's entity categories are now used and the device presents them apart:
+
+- **Configuration** — `refresh_data` on the account device, and on the feeder the
+  settings you set and leave: `calibrate_food_scale`, `desiccant_days`,
+  `display_custom_message`, `display_standby`, `display_standby_kind`,
+  `feed_sound_volume`, `fresh_meal_manager`,
+  `mark_food_bin_clean`, `mark_water_bin_clean`, `rehydration_minutes`,
+  `reset_bowl_scale`, `reset_desiccant`.
+- **Diagnostics** — `wifi_rssi` (both devices), `device_serial`,
+  `firmware_version`.
+- **Controls as they are** — `feed_now`, `food_grams`, `water_ratio`,
+  `feed_keep_as_new_defaults`, `do_not_disturb`, the level and state sensors and
+  the rest: everything you use often stays where it was.
+
+A category is a UI grouping only. No unique id, no unit, no enabled default and no
+wire call moved, so an installed browser keeps every entity it has and only re-files
+them. The standby message is also renamed in the translations to **Standby display
+custom message**; the key stays `display_custom_message`, so the entity is
+re-labelled rather than recreated.
+
 ## How the integration reads the rest (v1.5.0-beta4)
 
 Read is never invented. A control the machine answered with a value is shown as that
 value; a control it has never answered with one shows nothing - `None` for a sensor,
-off for a switch only when the machine says off, and unknown for the select and the
-text entity. The keys this unit has never answered are listed above, and the same
-marker is what the entities read.
+off for a switch only when the machine says off, and unknown for the select. The
+standby display message is the exception added in v1.5.0-beta5, and the exception is
+deliberate: an entity with no state cannot be typed into, so a device whose display
+config holds no message is presented with an empty one, which is what makes writing
+a message possible. A device that is not in the model at all still shows nothing.
+The keys this unit has never answered are listed above, and the same marker is what
+the entities read.
 
 A setting that names one part of a nested config writes only that part and copies the
 machine's current sibling values into the write, because the gateway replaces the

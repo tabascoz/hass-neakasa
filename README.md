@@ -160,6 +160,39 @@ here, so a press is what says whether this firmware takes them. Nothing is
 invented: a control the machine has never answered with a value shows nothing,
 which is what the same section of `docs/riko-protocol.md` says for each key.
 
+### Beta notes (`v1.5.0-beta5`)
+
+What `v1.5.0-beta5` changes is the device's own filing and one control's
+presentation, not the machine. The settings you tune once and leave alone (**Calibrate
+the food scale**, **Desiccant days**, **Desiccant pack is changed**, **Food bin was
+cleaned**, **Keep the meal fresh**, **Meal sound volume**, **Rehydration time**,
+**Show the display when idle**, **Standby display kind**, **Standby display custom
+message**, **Water tank was cleaned**, **Zero the bowl scale**) are marked as
+configuration and the two that only identify the machine (**Device serial**,
+**Firmware version**) as diagnostics, so Home Assistant presents them apart from the
+actions you press often. The standby message is also renamed to **Standby display
+custom message** and reads as empty when the machine's display config holds no
+message, which is what lets one be typed in - an entity with no state cannot be
+typed into, so the control was unreachable before. The token debug buttons are gone:
+they existed only to watch the token path for these notes. Nothing else moved: no
+unique id, unit, default or wire call changed, so an install that already has the
+entities keeps every one of them and only re-files them.
+
+What that release also records is the one thing it cannot make better: with the
+integration running, the Neakasa mobile app (iOS and the Android APK) reports the
+machine as offline about once a minute and goes back to its login page, because the
+integration and the app sign in to the same Neakasa account and that account keeps
+the session of whichever client authenticated last - a sign-in from one side costs
+the other side its session, and any touch of the cloud from our client does it, not
+only the account calls. The tests taken against that and why none of them changed
+the result are written out in `docs/cloud-session-churn.md` and
+`docs/app-session-experiments.md`. The workaround that removes the shared resource
+entirely is to give Home Assistant its own Neakasa account: create a second one in
+the app, share the machines to it, and configure this integration with that account -
+the app and Home Assistant then describe different accounts and there is no session
+left to fight over. If that split is not yours and the app's stability matters more
+than the integration, disabling this entry is the switch that keeps the app normal.
+
 ### HACS (recommended)
 
 This integration is available in HACS (Home Assistant Community Store).

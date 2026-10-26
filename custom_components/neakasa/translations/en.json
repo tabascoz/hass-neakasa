@@ -238,7 +238,7 @@
         },
         "text": {
             "display_custom_message": {
-                "name": "Standby display message"
+                "name": "Standby display custom message"
             }
         }
     }

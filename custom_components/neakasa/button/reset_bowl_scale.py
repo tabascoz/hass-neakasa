@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from homeassistant.components.button import ButtonEntity
+from homeassistant.components.sensor import EntityCategory
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -27,6 +28,7 @@ class NeakasaResetBowlScaleButton(CoordinatorEntity[NeakasaCoordinator], ButtonE
     _attr_should_poll = False
     _attr_has_entity_name = True
     _attr_translation_key = "reset_bowl_scale"
+    _attr_entity_category = EntityCategory.CONFIG
     _attr_icon = "mdi:scale"
 
     def __init__(

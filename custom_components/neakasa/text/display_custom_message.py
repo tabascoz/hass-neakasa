@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from homeassistant.components.sensor import EntityCategory
 from homeassistant.components.text import TextEntity
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -30,6 +31,7 @@ class NeakasaDisplayCustomMessageText(
     _attr_should_poll = False
     _attr_has_entity_name = True
     _attr_translation_key = "display_custom_message"
+    _attr_entity_category = EntityCategory.CONFIG
     _attr_icon = "mdi:text"
     _attr_native_max = DISPLAY_PARAM_MAX_CHARS
 
@@ -66,11 +68,20 @@ class NeakasaDisplayCustomMessageText(
 
     @property
     def value(self) -> str | None:
-        """Return the message the machine states, or None when it does not."""
+        """
+        Return the message the display shows, or `""` when it shows none.
+
+        A device that is not in the model at all stays `None`, because an empty
+        message would be a claim about a machine that was never read. A device
+        that states its display config with nothing in the message field is shown
+        empty, which is what lets a message be typed into it: Home Assistant
+        offers no typing for an entity that has no state, so a machine that holds
+        no standby message would otherwise be unreachable.
+        """
         snap = self._snap
         if snap is None:
             return None
-        return snap.display_param
+        return snap.display_param or ""
 
     async def async_set_value(self, value: str) -> None:
         """Write a message the front display should show."""

@@ -325,6 +325,25 @@ async def test_display_kind_and_message_write_the_display_config(
     assert snap.display_cfg["displayType"] == 2
 
 
+async def test_a_display_that_states_no_message_still_takes_one(
+    hass: HomeAssistant, mock_config_entry: MagicMock
+) -> None:
+    """An empty message is a state, so the field stays typeable."""
+    props = copy.deepcopy(BASE)
+    props["displayCfg"] = {"value": {"displayType": 2, "bDisplayIfIdle": 1}}
+    coordinator = _make_coordinator(hass, mock_config_entry, _snapshot(props))
+    snap = coordinator.data["riko-001"]
+
+    message = NeakasaDisplayCustomMessageText(coordinator, DEVICE_INFO, "riko-001")
+    assert message.value == ""
+    await message.async_set_value("Neakasa")
+    assert snap.display_cfg == {
+        "displayType": 2,
+        "bDisplayIfIdle": 1,
+        "displayParam": "Neakasa",
+    }
+
+
 async def test_buttons_ask_the_machine_its_own_commands(
     hass: HomeAssistant, mock_config_entry: MagicMock
 ) -> None:
