@@ -85,7 +85,16 @@ class NeakasaDisplayCustomMessageText(
         return snap.display_param or ""
 
     async def async_set_value(self, value: str) -> None:
-        """Write a message the front display should show."""
+        """
+        Write a message the front display should show.
+
+        The text is sent upper-case. The panel is a fixed LED matrix whose glyph
+        set has no lowercase forms, so a lower-case message draws blank - this
+        unit showed the message `teste1` as a bare `1`, and the same text sent
+        upper-case drew `TESTE1`. The machine stores whatever it is sent, so the
+        normalisation is ours to perform, and it is the same one the Neakasa app
+        does before sending: what the entity holds is what the panel can draw.
+        """
         if len(value) > DISPLAY_PARAM_MAX_CHARS:
             msg = f"Message too long: {len(value)} characters"
             raise ValueError(msg)
@@ -93,5 +102,5 @@ class NeakasaDisplayCustomMessageText(
         if snap is None:
             return
         cfg = dict(snap.display_cfg or {})
-        cfg["displayParam"] = value
+        cfg["displayParam"] = value.upper()
         await self.coordinator.set_property(self._iot_id, "display_cfg", cfg)

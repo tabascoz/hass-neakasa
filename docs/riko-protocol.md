@@ -70,7 +70,7 @@ Every key below is labelled by where the shape came from:
 | `freshMgrCfg` | `{bOnOff, monitorTime, leftOverTTH}` | the freshness manager: `bOnOff` starts or stops it, `monitorTime` is how long it watches the bowl in **hours** (definition 1…4, observed 4), `leftOverTTH` is the leftover threshold in **grams** (definition 0…300, observed 20) |
 | `leftover` | `{bOnOff, detGramTTh}` `[definition]` | a separate leftover detection switch with a 0…30 g threshold — this unit has never answered it |
 | `deepCleanCfg` | `{bOnOff, cleanState}` | the bowl wash: on/off and the state the wash is in (observed 0/0) |
-| `displayCfg` | `{displayType, displayParam, bDisplayIfIdle}` | the front display: which kind of standby display it shows (enum; the definition gives no value list), the text shown (`displayParam`, ≤50 characters in the definition) and whether the display is up while the machine is idle (`bDisplayIfIdle`, observed 1) |
+| `displayCfg` | `{displayType, displayParam, bDisplayIfIdle}` | the front display: the kind is the definition's enum `{"0": "time", "1": "graphics", "2": "custom"}` (labelled 时间/图形/自定义 there), the text shown (`displayParam`, ≤50 characters in the definition and stored verbatim by this unit, though the panel draws no lower-case glyphs) and whether the display is up while the machine is idle (`bDisplayIfIdle`, observed 1) |
 | `DND_Mode` | `{active, startTime, endTime, weekRept, bAudioDND, bDisplayDND}` | `[definition]` do-not-disturb: on/off, start and end as seconds of the day (0…86400), which days repeat as a 7-bit mask (0…127), and separately whether the silence applies to the sound and to the display |
 | `smartPlanCfg` | `{catId, drierFoodId}` | `[definition]` the plan bound to a pet and a desiccant brand (both 0…100000000) |
 | `fdPlanStr` | text ≤1024 | `[definition]` the feeding plan as one encoded string |
@@ -251,6 +251,27 @@ config holds no message is presented with an empty one, which is what makes writ
 a message possible. A device that is not in the model at all still shows nothing.
 The keys this unit has never answered are listed above, and the same marker is what
 the entities read.
+
+## What this unit's panel draws (v1.5.0-beta5)
+
+Measured through this integration's own write path, with a probe that sends the
+`displayCfg` the integration sends and reads the state back:
+
+- The machine stores the message as it is sent. A write of `teste1` left the state
+  reading `{"displayType": 2, "displayParam": "teste1", "bDisplayIfIdle": 1}`,
+  acknowledged a few seconds after the write - `displayCfg.time` moves on every
+  write the machine takes, so a press can be told from a no-op by that stamp.
+- The panel draws no lower-case glyphs. That same message showed on the front as a
+  bare `1`; sent as `TESTE1` the panel drew all of it. The Neakasa app reaches this
+  by upper-casing the text before it sends, so the integration's text entity writes
+  `displayParam` upper-case too, and what the entity shows is what the panel draws.
+- A kind that is not custom states `displayParam` as the empty string on this unit
+  (an earlier round read it as `N/A`), so choosing `custom` with nothing typed
+  carries that placeholder and shows nothing new.
+
+`ledScreenDisplay {animeType 0…24}` in the commands table is the machine's own way
+of putting a built-in animation ("Led点阵显示") on the front display; it is a
+different feature and is not how the custom text is carried.
 
 A setting that names one part of a nested config writes only that part and copies the
 machine's current sibling values into the write, because the gateway replaces the

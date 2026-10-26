@@ -321,7 +321,7 @@ async def test_display_kind_and_message_write_the_display_config(
 
     message = NeakasaDisplayCustomMessageText(coordinator, DEVICE_INFO, "riko-001")
     await message.async_set_value("Neakasa")
-    assert snap.display_cfg["displayParam"] == "Neakasa"
+    assert snap.display_cfg["displayParam"] == "NEAKASA"
     assert snap.display_cfg["displayType"] == 2
 
 
@@ -341,7 +341,7 @@ async def test_a_display_that_states_no_message_still_takes_one(
     assert snap.display_cfg == {
         "displayType": 2,
         "bDisplayIfIdle": 1,
-        "displayParam": "Neakasa",
+        "displayParam": "NEAKASA",
     }
 
 

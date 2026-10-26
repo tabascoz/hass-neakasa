@@ -15,9 +15,12 @@ from ..coordinator import NeakasaCoordinator, NeakasaDeviceSnapshot
 if TYPE_CHECKING:
     from homeassistant.helpers.device_registry import DeviceInfo
 
-# The machine stores the kind of standby display as one number. The names below
-# are the order the product shows them in; this unit has never answered with a
-# value for `displayType`, so the number behind a name is not confirmed here.
+# The definition spells the kind out: `displayCfg.displayType` is an enum whose
+# value list is `{"0": 时间, "1": 图形, "2": 自定义}`, so the numbers below are the
+# definition's, not inferred from the product's order. Choosing a kind carries
+# whatever message the machine states in the sibling `displayParam`; the panel draws
+# no lower-case glyphs, so a message worth seeing is upper-case, and
+# `text/display_custom_message.py` sends it that way.
 DISPLAY_TYPE_CODES: dict[str, int] = {"time": 0, "graphics": 1, "custom": 2}
 DISPLAY_TYPE_NAMES: dict[int, str] = {
     value: name for name, value in DISPLAY_TYPE_CODES.items()

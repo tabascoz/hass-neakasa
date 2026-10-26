@@ -171,9 +171,13 @@ message**, **Water tank was cleaned**, **Zero the bowl scale**) are marked as
 configuration and the two that only identify the machine (**Device serial**,
 **Firmware version**) as diagnostics, so Home Assistant presents them apart from the
 actions you press often. The standby message is also renamed to **Standby display
-custom message** and reads as empty when the machine's display config holds no
-message, which is what lets one be typed in - an entity with no state cannot be
-typed into, so the control was unreachable before. The token debug buttons are gone:
+custom message** and now presents the message the machine states (empty when the
+machine states none), which is what lets a message be typed into it at all - the
+entity had been defined on a property Home Assistant does not read, which left it
+with no state and the control unreachable. The message is sent upper-case on the
+write, because the front panel is a fixed LED matrix with no lower-case glyphs:
+this unit drew `teste1` as a bare `1` and drew `TESTE1` in full, and the Neakasa
+app does the same normalisation. The token debug buttons are gone:
 they existed only to watch the token path for these notes. Nothing else moved: no
 unique id, unit, default or wire call changed, so an install that already has the
 entities keeps every one of them and only re-files them.
