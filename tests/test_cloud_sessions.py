@@ -17,6 +17,7 @@ from custom_components.neakasa.api_manager import (
     clear_shared_api,
     get_shared_api,
 )
+from custom_components.neakasa.button.refresh_data import NeakasaRefreshDataButton
 from custom_components.neakasa.coordinator import (
     SESSION_OWNER_ELSEWHERE,
     SESSION_OWNER_OURS,
@@ -24,6 +25,9 @@ from custom_components.neakasa.coordinator import (
 )
 from custom_components.neakasa.exceptions import (
     NeakasaApiClientSessionExpiredError,
+)
+from custom_components.neakasa.sensor.cloud_session import (
+    NeakasaCloudSessionStatusSensor,
 )
 
 USER = "cloud@example.com"
@@ -370,6 +374,57 @@ async def test_a_request_takes_the_session_back_and_re_reads(
         new=AsyncMock(),
     ) as reconnect:
         await coordinator.regain_cloud_session()
+    reconnect.assert_awaited_once()
+    assert client.get_devices.call_count == 3
+    assert coordinator.cloud_session_owner == SESSION_OWNER_OURS
+
+
+async def test_the_account_sensor_names_the_client_that_holds_the_session(
+    hass: HomeAssistant,
+    mock_config_entry: MagicMock,
+) -> None:
+    """The account sensor follows what the scans observed."""
+    client = _scanning_client()
+    client.get_devices = AsyncMock(side_effect=[DEVICE_LIST, SESSION_REFUSED])
+    coordinator = _coordinator(hass, mock_config_entry, client)
+
+    sensor = NeakasaCloudSessionStatusSensor(coordinator, MagicMock())
+    first = await coordinator.async_update_data()
+    assert "iot-001" in first
+    assert sensor.native_value == SESSION_OWNER_OURS
+
+    coordinator.force_refresh_devices()
+    with pytest.raises(UpdateFailed):
+        await coordinator.async_update_data()
+    assert sensor.native_value == SESSION_OWNER_ELSEWHERE
+
+
+async def test_the_account_button_takes_the_session_back_in_one_sign_in(
+    hass: HomeAssistant,
+    mock_config_entry: MagicMock,
+) -> None:
+    """Pressing it signs in once, closes the window and re-reads the account."""
+    client = _scanning_client()
+    client.get_devices = AsyncMock(
+        side_effect=[DEVICE_LIST, SESSION_REFUSED, DEVICE_LIST]
+    )
+    coordinator = _coordinator(hass, mock_config_entry, client)
+
+    first = await coordinator.async_update_data()
+    assert "iot-001" in first
+
+    coordinator.force_refresh_devices()
+    with pytest.raises(UpdateFailed):
+        await coordinator.async_update_data()
+    assert coordinator.cloud_session_owner == SESSION_OWNER_ELSEWHERE
+
+    button = NeakasaRefreshDataButton(coordinator, MagicMock())
+    with patch(
+        "custom_components.neakasa.coordinator.force_reconnect_api",
+        new=AsyncMock(),
+    ) as reconnect:
+        await button.async_press()
+
     reconnect.assert_awaited_once()
     assert client.get_devices.call_count == 3
     assert coordinator.cloud_session_owner == SESSION_OWNER_OURS

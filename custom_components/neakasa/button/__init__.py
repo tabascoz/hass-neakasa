@@ -22,6 +22,7 @@ from .debug_token import (
 )
 from .feed_now import NeakasaFeedNowButton
 from .level import NeakasaLevelButton
+from .refresh_data import NeakasaRefreshDataButton
 
 
 async def async_setup_entry(
@@ -34,10 +35,24 @@ async def async_setup_entry(
     coordinator: NeakasaCoordinator = entry.runtime_data.coordinator
 
     _seen_iot_ids: set[str] = set()
+    _account_added = False
 
     @callback
     def _discover() -> None:
+        nonlocal _account_added
         entities: list = []
+        if not _account_added:
+            _account_added = True
+            entities.append(
+                NeakasaRefreshDataButton(
+                    coordinator,
+                    DeviceInfo(
+                        name="Neakasa account",
+                        manufacturer="Neakasa",
+                        identifiers={(DOMAIN, f"account:{coordinator.username}")},
+                    ),
+                ),
+            )
         for iot_id, snap in coordinator.data.items():
             if iot_id in _seen_iot_ids:
                 continue

@@ -57,6 +57,9 @@
             },
             "debug_token_invalidate": {
                 "name": "Debug invalidate token"
+            },
+            "refresh_data": {
+                "name": "Refresh data now"
             }
         },
         "number": {
@@ -132,6 +135,9 @@
             },
             "battery": {
                 "name": "Akku"
+            },
+            "cloud_session_status": {
+                "name": "Cloud session"
             }
         },
         "switch": {

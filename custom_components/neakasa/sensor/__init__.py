@@ -19,6 +19,7 @@ from .battery import NeakasaBatterySensor
 from .bin_state import NeakasaBinStateSensor
 from .bucket_status import NeakasaBucketStatusSensor
 from .cat_weight import NeakasaCatWeightSensor
+from .cloud_session import NeakasaCloudSessionStatusSensor
 from .food_level import NeakasaFoodLevelSensor
 from .label import NeakasaLabelSensor
 from .last_usage import NeakasaLastUsageSensor
@@ -39,10 +40,26 @@ async def async_setup_entry(
     coordinator: NeakasaCoordinator = entry.runtime_data.coordinator
 
     _seen_iot_ids: set[str] = set()
+    _account_added = False
 
     @callback
     def _discover() -> None:
+        nonlocal _account_added
         entities: list = []
+        if not _account_added:
+            # The account-level entities exist once per config entry, not once
+            # per device: what they describe is the account, not a machine.
+            _account_added = True
+            entities.append(
+                NeakasaCloudSessionStatusSensor(
+                    coordinator,
+                    DeviceInfo(
+                        name="Neakasa account",
+                        manufacturer="Neakasa",
+                        identifiers={(DOMAIN, f"account:{coordinator.username}")},
+                    ),
+                ),
+            )
         for iot_id, snap in coordinator.data.items():
             if iot_id in _seen_iot_ids:
                 continue
