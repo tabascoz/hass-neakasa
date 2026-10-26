@@ -67,13 +67,20 @@ build also names the fields it received, values never:
 Login fields: code data data.login_token data.user_info data.user_info.sid
 ```
 
-`api.py:_describe_fields` is the whole change. What to read for is a lifetime: a
-field under `data` or `data.user_info` whose name words a duration
-(`session_over_time`, `expires_in`, `ttl`, a seconds count). If one is there,
-`SESSION_EVIDENCE_HOLD_MINUTES` stops being a placeholder and becomes what the
-cloud says it is; if none is, the number stays as open as X9 says it is, and the
-only way to know it is to watch the app ask - which is also the only way that
-costs the account a session.
+`api.py:_describe_fields` is the whole change. It was read twice on the unit, at
+17:04:27 and 17:20:15, and the answer is that **no session lifetime is sent**:
+the payload carries `data.login_token`, `data.third_info` (the account's
+`apple_user_id`, `google_user_id`, `wechat_unionid` bindings), and a
+`data.user_info` block of account metadata - `ali_auth_expired_time` (the auth
+token's expiry, not the session's), `last_login_time`, `last_login_ip`,
+`last_update`, `login_count`, `register_from`, `user_app_version`, `create_time`
+and the account's own names. What that list does offer is a slow signal of
+another client *signing in*: `login_count` and `last_login_time` describe the
+account, and comparing them across our own sign-ins would show a login that was
+not ours. It says nothing about a client using a session, and our sign-ins are
+rare by design, so it is not a per-scan signal. X9 - sign into the app, leave
+both clients alone for 20 minutes, note the first minute the app asks again -
+remains the only way to learn the lifetime, and it is itself a cloud call.
 
 ## Running the matrix
 
@@ -164,8 +171,8 @@ What that settles:
   presents ages out on its own, minutes after being handed over.
 - A claim about the owner is only true near the observation that made it. The
   whole basis for reporting `home_assistant` at 16:29 is an accepted call at 16:20,
-  which is why the value now decays to `unknown` past `SESSION_EVIDENCE_HOLD_MINUTES`
-  and the attributes carry `last_presented_at`, `last_presented_call` and `refused_at`.
+  which is why the attributes carry `last_presented_at`, `last_presented_call` and
+  `refused_at`: the value states what was seen, the attributes state when.
 - What it opens: the lifetime itself. 16:2x shows minutes, the hour of 12:02-13:02
   shows less than an hour. X9 measures it; the constant stays a placeholder until
   then.
@@ -179,8 +186,16 @@ the accepted call at 11:19:43 did. A scan that attempted no account call left th
 app alone, which is what the two control runs measured. Writes from HA move it too
 (X2, X5). The machine's own physical action does not (XH), and the app's own
 activity does not hurt the app - it hurts our client, which is what the 401s are.
-So the lever is the number of account presentations per unit of time; the number of
-sign-ins is not a lever at all (one mint in the whole run, at the HA start).
+So the lever is the number of cloud calls per unit of time, of any kind:
+presentations, token exchanges (`/account/createSessionByAuthCode`) and writes.
+The number of sign-ins is not a lever at all (one mint in the whole run, at the
+HA start). What is *not* shown by these runs is a session dying on its own: the
+one apparent self-expiry at 17:14:10 is now explained by the device reads at
+17:10:14 being followed by the app noticing minutes later, and the control run
+with Home Assistant unloaded from 17:25 to 17:35 is your observation, not in the
+journal. Whether the app's session has any lifetime of its own is therefore
+still open, and X9 (sign into the app, leave both clients alone for 20 minutes,
+note the first minute it asks again) is what answers it.
 
 ## The hour with nobody using either client, 12:02 - 13:02
 
@@ -191,37 +206,48 @@ bin states that the cloud had refused, and nothing ever asked the session back. 
 `Reported state` line appeared in that hour: the writes at 11:55 (38) and 12:00 (0)
 differ only because the model changed in the first one.
 
-## The settings that followed the rule
+## What follows now
 
-Two options exist now, both per config entry (options flow, applied on a
-reload of the entry, which the integration already does for its update
-listener):
+The two settings a first version added - a back-off window for refusals and a
+policy for when control is taken back - were aimed at the wrong lever and are
+gone. What the runs of 2026-10-26 actually show is that the app is kicked by
+*any* touch of the cloud from our client: the device reads at 17:10:14 (two
+`/thing/properties/get` with the per-device iotToken) were followed by the app
+asking at 17:14:10, and the token exchange at 17:15:15 was followed 15 seconds
+later. Silencing only the account calls leaves the device reads at the scan
+cadence, so the number that matters is the total count of cloud calls - and the
+honest control for that is the scan interval, which the entry already has.
 
-Three things now set the rate at which the account is presented, all of them
-per config entry or in code where no user chooses it:
+What remains, deliberately:
 
-- `account_session_window_minutes` (5-720, default 30): how long a refusal keeps
-  the account from being presented again.
-- `session_regain_policy` (`never` | `window` | `always`, default `window`): how
-  control is taken back - never (the account button is the only way), at the end
-  of the window (default), or on every scan while the session is elsewhere.
+- Reading follows the configured `scan_interval`. Nothing is skipped because we
+  chose to be quiet: properties are always re-read (the properties cache carries
+  `refresh_after=0`), and records are re-read whenever the device reports a new
+  `catLeft.time` (`coordinator.py:_fetch_single_device`), which is the one signal
+  that can mean a new record exists.
+- A refusal is reported (`The account refused '…'`), the values we hold are served,
+  and `records_refused` plus the account sensor's attributes say so.
+- The device list is cached for six hours (`coordinator.py:DEVICE_LIST_REFRESH…`
+  see `DEVICE_LIST_REFRESH_MINUTES`), because listing the account is a cloud call
+  of its own; `Refresh data now` re-reads on demand.
+- The account sensor publishes the times behind its value
+  (`last_presented_at`, `last_presented_call`, `refused_at`, `records_as_cached`),
+  so a claim about the session is traceable to the call that made it.
 
-Expected sessions per hour while the app is being used, on the 5-minute cadence
-this entry runs (measured before the change: 12 account presentations an hour,
-0 sign-ins, and the records refused on all 12):
+The structural answer, under test now: give Home Assistant its own Neakasa
+account with the devices shared to it, so the app and Home Assistant no longer
+describe the same account at all. Measured on 2026-10-26 from 17:55: the entry
+was reconfigured to the second account, its `Account presentation:
+/uc/listBindingByAccount` was accepted and listed both iotIds, property reads
+were accepted, and a write was accepted -
+`17:56:40 Cloud write: /thing/service/invoke iotId=EUZLwdsC7Kr8D6I3v0Km000000
+identifier=cleanNow`. What decides this is whether the primary account's app
+stays signed in while Home Assistant reads the second one. If it does, there is
+no shared resource left to manage, and none of the machinery above is needed.
 
-| window | `never` | `window` | `always` |
-|--------|---------|----------|----------|
-| 30 min | 0 | <=2 | <=12 |
-| 5 min | 0 | <=12 | <=12 |
-
-The cadence no user chooses: the account device list is cached for six hours
-(`coordinator.py:DEVICE_LIST_REFRESH_MINUTES`) instead of ten minutes, because a
-list call is a presentation and ten minutes costs six an hour on its own. A device
-added to the account is found by the `Refresh data now` button or on a config
-reload, which is the manual path that already exists.
-
-Those are predictions to be measured, not measurements. The runs that set them are
-the ones above, and the `Account presentation:` lines are what turns them into
-measurements: count them with `grep -c 'Account presentation'` over a fixed period
-instead of inferring them from the app asking to sign in.
+Counting the calls an hour, which is what the app's re-asks follow:
+`grep -c 'Account presentation'`, `grep -c 'Session moved by a token exchange'`
+and `grep -c 'Getting device properties'` over a fixed window. The record
+presentations appear only because `api.py:_presentation_path` matches a URL
+suffix - an earlier draft cut the URL at the last slash and matched nothing,
+which is why the runs above could only count refusals for that path.

@@ -140,3 +140,37 @@ See [app-session-experiments.md](app-session-experiments.md) for that run, the
 readable instead of inferred, and the vocabulary the account sensor now uses
 (`unknown`, `home_assistant`, `not_home_assistant`) with the timestamps behind
 every claim in its attributes.
+
+## What was dropped, and what fixed the account device
+
+Two things this branch built were pointed at the wrong lever and were removed
+the same day: the back-off window for refusals
+(`account_session_window_minutes`) and the policy for taking control back
+(`session_regain_policy`), plus the decay that made the account sensor forget an
+old claim. They exist to trade freshness for silence about the account, and the
+measurements show the app is kicked by *any* cloud call - the device reads at
+17:10:14 were followed by the app asking at 17:14:10, and the token exchange at
+17:15:15 by one 15 seconds later - so keeping the reads at the configured
+`scan_interval` is what the entry does, and the only control that matters is
+that interval. The refusal is still reported and the values held are served, and
+`records_refused` plus the sensor's attributes say so; records are re-read only
+when the device reports a new `catLeft.time`, which cannot miss a change.
+
+What was kept from the same work is everything that does not trade freshness:
+the error classification (an account-token rejection goes to a sign-in, never to
+an IoT exchange), one client per scan, the device-list cache, the state-write
+guard, and the whole measurement instrument - `Account session minted` with its
+`cause=`, `Account presentation:`, `Cloud write:`, `Login fields:` and the new
+`Session moved by a token exchange:` line, since
+`/account/createSessionByAuthCode` moves the session too. The claim that the
+IoT exchange "adds no session to the account" was wrong, and the log at 17:15:15
+→ 17:15:30 is what proved it.
+
+The account device bug: reconfiguring the entry to a second Neakasa account left
+the previous account's device in the registry next to the current one, with an
+orphaned entity that could only read `unavailable` - the identifiers embedded the
+username (`account:{username}`, `{username}-cloud_session`). The device and the
+account entities are now named by the config entry instead, and the entry prunes
+devices it created and no longer describes, so changing credentials changes no
+device at all. The machines never duplicated because their identifiers are the
+stable iotIds, which is also why the second account keeps the same entity ids.

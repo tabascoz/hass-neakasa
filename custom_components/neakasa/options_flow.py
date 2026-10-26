@@ -15,12 +15,6 @@ from homeassistant.helpers.selector import (
     SelectSelectorMode,
 )
 
-from custom_components.neakasa.coordinator import (
-    ACCOUNT_SESSION_WINDOW_DEFAULT_MINUTES,
-    DEFAULT_SESSION_REGAIN_POLICY,
-    SESSION_REGAIN_POLICIES,
-)
-
 
 class NeakasaOptionsFlow(OptionsFlow):
     """Handle options for Neakasa integration."""
@@ -42,13 +36,6 @@ class NeakasaOptionsFlow(OptionsFlow):
         current_args = self.config_entry.options.get("debug_invoke_args_json", "{}")
         current_keep_defaults = self.config_entry.options.get(
             "feed_keep_as_new_defaults", False
-        )
-        current_window = self.config_entry.options.get(
-            "account_session_window_minutes",
-            ACCOUNT_SESSION_WINDOW_DEFAULT_MINUTES,
-        )
-        current_policy = self.config_entry.options.get(
-            "session_regain_policy", DEFAULT_SESSION_REGAIN_POLICY
         )
 
         schema = vol.Schema(
@@ -81,27 +68,6 @@ class NeakasaOptionsFlow(OptionsFlow):
                     "feed_keep_as_new_defaults",
                     default=current_keep_defaults,
                 ): bool,
-                vol.Required(
-                    "account_session_window_minutes",
-                    default=current_window,
-                ): NumberSelector(
-                    NumberSelectorConfig(
-                        min=5,
-                        max=720,
-                        step=5,
-                        unit_of_measurement="minutes",
-                        mode=NumberSelectorMode.BOX,
-                    ),
-                ),
-                vol.Required(
-                    "session_regain_policy",
-                    default=current_policy,
-                ): SelectSelector(
-                    SelectSelectorConfig(
-                        options=list(SESSION_REGAIN_POLICIES),
-                        mode=SelectSelectorMode.DROPDOWN,
-                    ),
-                ),
                 vol.Required(
                     "debug_probe",
                     default=current_probe,

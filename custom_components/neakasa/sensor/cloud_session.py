@@ -29,10 +29,9 @@ class NeakasaCloudSessionStatusSensor(
     maps in translations/. home_assistant says our last account call was
     accepted, not_home_assistant says it was refused (the mobile app holds
     the session, or the cloud let it age out on its own: a refusal cannot
-    tell those apart), and unknown says we have no proof left, which the
-    coordinator applies once nothing has proved a claim for a hold. The
-    attributes carry the timestamps, so any claim traces to the call that
-    made it.
+    tell those apart), and unknown says nothing has presented the account
+    since this entry started. The attributes carry the timestamps, so any
+    claim traces to the call that made it.
     """
 
     _attr_should_poll = False

@@ -32,7 +32,8 @@ _WRITE_PATHS: tuple[str, ...] = ("/thing/properties/set", "/thing/service/invoke
 # session-mover as a rejected one, and accepted ones log nothing at all - which
 # is why the runs of 2026-10-26 could only count refusals and infer the rest.
 # Naming every accepted presentation makes the number of presentations per hour,
-# the actual lever, measurable from the journal.
+# the actual lever, measurable from the journal. The IoT token exchange also
+# moves the session and is named where it happens, in _get_iot_token_by_sid.
 _PRESENTATION_PATHS: tuple[str, ...] = ("/uc/listBindingByAccount", "/catbox/record")
 
 
@@ -62,6 +63,14 @@ def _describe_fields(payload: object) -> str:
     a session lifetime is being sent at all, and where.
     """
     return " ".join(sorted(_field_names(payload)))
+
+
+def _presentation_path(url: str) -> str:
+    """Return the account path an URL presents, or "" when it does not."""
+    for candidate in _PRESENTATION_PATHS:
+        if url.endswith(candidate):
+            return candidate
+    return ""
 
 
 def _describe_presentation(pathname: str, params: dict[str, Any]) -> str:
@@ -370,6 +379,13 @@ class NeakasaAPI:
         if data["code"] != 200:
             self.connected = False
             raise APIAuthError("Error getting iot token: " + data["message"])
+        # The exchange resolves the account session, so it moves it: measured on
+        # 2026-10-26, an exchange at 17:15:15 was followed by the mobile app
+        # needing a sign-in at 17:15:30. Naming it is what makes the number of
+        # session-movers an hour countable instead of inferred.
+        _LOGGER.info(
+            "Session moved by a token exchange: /account/createSessionByAuthCode"
+        )
         return data["data"]["iotToken"]
 
     # ------------------------------------------------------------------
@@ -543,7 +559,7 @@ class NeakasaAPI:
 
     async def _signed_get(self, url: str, params: dict[str, Any]) -> Any:
         """Internal: signed GET to the Neakasa web API."""
-        path = url.rsplit("/", maxsplit=1)[-1]
+        presented = _presentation_path(url)
         try:
             timestamp = int(time.time())
             signature = base64.b64encode(
@@ -566,9 +582,10 @@ class NeakasaAPI:
                 data = await response.json()
                 if data["code"] != 0:
                     raise APIConnectionError("Error getting data: " + data["message"])
-                if path in _PRESENTATION_PATHS:
+                if presented:
                     _LOGGER.info(
-                        "Account presentation: %s", _describe_presentation(path, params)
+                        "Account presentation: %s",
+                        _describe_presentation(presented, params),
                     )
                 return data["data"]
         except ClientError:
