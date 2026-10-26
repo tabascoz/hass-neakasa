@@ -20,6 +20,25 @@ if TYPE_CHECKING:
     from aiohttp import ClientSession
 
 
+# The IoT Gateway calls that change a device instead of reading it. A write is
+# rare, always caused by a user action, and it is the one call whose effect on
+# the account we cannot see in the journal today: it returns 200 and logs
+# nothing at all, which makes "did this press touch the cloud" unanswerable.
+# Naming every accepted write is what the app-side tests need.
+_WRITE_PATHS: tuple[str, ...] = ("/thing/properties/set", "/thing/service/invoke")
+
+
+def _describe_write(pathname: str, params: dict[str, Any]) -> str:
+    """Return one line naming an accepted write, the device and the payload."""
+    target = str(params.get("iotId", ""))
+    if pathname == "/thing/service/invoke":
+        identifier = params.get("identifier", "")
+        args = params.get("args", {})
+        return f"{pathname} iotId={target} identifier={identifier} args={args}"
+    items = params.get("items", {})
+    return f"{pathname} iotId={target} items={items}"
+
+
 class NeakasaAPI:
     """Async client for Neakasa's cloud API over Aliyun IoT Gateway."""
 
@@ -340,6 +359,8 @@ class NeakasaAPI:
                 list(data.keys()),
             )
             raise APIConnectionError(f"Error in {pathname}: {error_msg}")
+        if pathname in _WRITE_PATHS:
+            _LOGGER.info("Cloud write: %s", _describe_write(pathname, params))
         return data["data"]
 
     async def _iot_request_once(

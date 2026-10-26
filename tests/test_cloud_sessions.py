@@ -9,7 +9,9 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
+from custom_components.neakasa.api import _describe_write
 from custom_components.neakasa.api_manager import (
+    _session_mints,
     _shared_clients,
     _shared_locks,
     clear_shared_api,
@@ -261,3 +263,53 @@ async def test_a_persistently_rejected_token_gives_up_early(
 
     reconnect.assert_awaited_once()
     assert client.refresh_session.call_count == 0
+
+
+# ---------------------------------------------------------------------------
+# What the cloud was asked for, as the journal says it
+# ---------------------------------------------------------------------------
+
+
+def test_write_lines_name_the_call_and_the_device() -> None:
+    """The line for an accepted write names the call, the device, the payload."""
+    service = {
+        "args": {"bStartClean": 1},
+        "identifier": "cleanNow",
+        "iotId": "iot-1",
+    }
+    assert _describe_write("/thing/service/invoke", service) == (
+        "/thing/service/invoke iotId=iot-1 identifier=cleanNow args={'bStartClean': 1}"
+    )
+
+    properties = {"items": {"autoClean": 1}, "iotId": "iot-1"}
+    assert _describe_write("/thing/properties/set", properties) == (
+        "/thing/properties/set iotId=iot-1 items={'autoClean': 1}"
+    )
+
+
+async def test_sign_ins_are_numbered_and_a_reuse_is_not() -> None:
+    """Two sign-ins for one account are numbered; a reused client adds none."""
+    session, api_cls, client_cls = _api_manager_patches()
+    # Other tests in this file already signed in for USER, so only the
+    # lines this test adds are asserted.
+    before = _session_mints.get(USER, 0)
+    clear_shared_api(USER, PASSWORD)
+    with (
+        patch(
+            "custom_components.neakasa.api_manager.async_get_clientsession",
+            return_value=session,
+        ),
+        patch("custom_components.neakasa.api_manager.NeakasaAPI", api_cls),
+        patch(
+            "custom_components.neakasa.api_manager.NeakasaApiClient",
+            client_cls,
+        ),
+    ):
+        await get_shared_api(MagicMock(), USER, PASSWORD, "first scan")
+        assert _session_mints[USER] == before + 1
+        await get_shared_api(MagicMock(), USER, PASSWORD)
+        assert _session_mints[USER] == before + 1
+        clear_shared_api(USER, PASSWORD)
+        await get_shared_api(MagicMock(), USER, PASSWORD, "session expired")
+        assert _session_mints[USER] == before + 2
+        assert api_cls.return_value.connect.await_count == 2

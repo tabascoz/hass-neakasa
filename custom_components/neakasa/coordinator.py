@@ -808,7 +808,12 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         """
         for step in range(1, cycles + 1):
             _LOGGER.info("Debug token churn %d/%d: signing in", step, cycles)
-            await force_reconnect_api(self.hass, self.username, self.password)
+            await force_reconnect_api(
+                self.hass,
+                self.username,
+                self.password,
+                f"debug token churn {step}/{cycles}",
+            )
         _LOGGER.info("Debug token churn complete: %d sign-ins", cycles)
 
     async def debug_invalidate_tokens(self) -> None:
@@ -827,9 +832,17 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    async def _get_client(self) -> NeakasaApiClient:
-        """Return the shared API client for this coordinator's credentials."""
-        return await get_shared_api(self.hass, self.username, self.password)
+    async def _get_client(
+        self,
+        cause: str = "coordinator asked for a client",
+    ) -> NeakasaApiClient:
+        """
+        Return the shared API client for this coordinator's credentials.
+
+        *cause* is passed on so that a sign-in this needs says why in the
+        journal.
+        """
+        return await get_shared_api(self.hass, self.username, self.password, cause)
 
     async def _discover_devices(
         self, client: NeakasaApiClient | None = None
@@ -1008,7 +1021,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                 return False
         self._last_full_auth = now
         try:
-            await force_reconnect_api(self.hass, self.username, self.password)
+            await force_reconnect_api(self.hass, self.username, self.password, reason)
         except NeakasaApiClientError as reconnect_err:
             msg = "Reconnection failed"
             raise UpdateFailed(msg) from reconnect_err

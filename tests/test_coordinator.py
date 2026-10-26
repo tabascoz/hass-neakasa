@@ -573,7 +573,9 @@ async def test_reconnect_and_retry_success(
     ) as reconnect:
         result = await coordinator._reconnect_and_retry()
 
-    reconnect.assert_awaited_once_with(hass, "test@example.com", "hunter2")
+    reconnect.assert_awaited_once_with(
+        hass, "test@example.com", "hunter2", "session expired"
+    )
     assert "iot-001" in result
 
 
