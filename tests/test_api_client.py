@@ -109,3 +109,12 @@ async def test_translate_connection_to_communication() -> None:
     with pytest.raises(NeakasaApiClientCommunicationError):
         async with _translate_errors():
             raise APIConnectionError("network down")
+
+
+async def test_translate_token_invalid_to_session_expired() -> None:
+    """The account web API words a rejected token differently."""
+    with pytest.raises(NeakasaApiClientSessionExpiredError):
+        async with _translate_errors():
+            raise APIConnectionError(
+                "Error getting data: TokenInvalid\ufffatoken is abnormal"
+            )

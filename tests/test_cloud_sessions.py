@@ -206,3 +206,58 @@ async def test_clearing_the_client_keeps_the_lock() -> None:
     credentials_key = f"{USER}:{PASSWORD}"
     assert credentials_key not in _shared_clients
     assert credentials_key in _shared_locks
+
+
+TOKEN_REJECTED = (
+    "Error in /catbox/record: Error getting data: TokenInvalid\ufffatoken is abnormal"
+)
+
+
+async def test_rejected_account_token_recovers_by_signing_in(
+    hass: HomeAssistant,
+    mock_config_entry: MagicMock,
+) -> None:
+    """The records token is only replaced by a sign-in, not a token exchange."""
+    client = _scanning_client()
+    client.get_records = AsyncMock(
+        side_effect=[
+            NeakasaApiClientSessionExpiredError(TOKEN_REJECTED),
+            {"cat_list": [], "record_list": []},
+        ]
+    )
+    coordinator = _coordinator(hass, mock_config_entry, client)
+
+    with patch(
+        "custom_components.neakasa.coordinator.force_reconnect_api",
+        new=AsyncMock(),
+    ) as reconnect:
+        payload = await coordinator.async_update_data()
+
+    assert "iot-001" in payload
+    assert client.get_records.call_count == 2
+    assert client.refresh_session.call_count == 0
+    reconnect.assert_awaited_once()
+
+
+async def test_a_persistently_rejected_token_gives_up_early(
+    hass: HomeAssistant,
+    mock_config_entry: MagicMock,
+) -> None:
+    """Repeated recovery attempts stop at the bound without minting sessions."""
+    client = _scanning_client()
+    client.get_records = AsyncMock(
+        side_effect=NeakasaApiClientSessionExpiredError(TOKEN_REJECTED)
+    )
+    coordinator = _coordinator(hass, mock_config_entry, client)
+
+    with (
+        patch(
+            "custom_components.neakasa.coordinator.force_reconnect_api",
+            new=AsyncMock(),
+        ) as reconnect,
+        pytest.raises(UpdateFailed),
+    ):
+        await coordinator.async_update_data()
+
+    reconnect.assert_awaited_once()
+    assert client.refresh_session.call_count == 0

@@ -45,6 +45,12 @@ DEVICE_LIST_REFRESH_MINUTES = 10
 # A full re-login mints a new session for the account, so it is done at most
 # once per window; renewing the IoT token (one call) is tried first.
 FULL_REAUTH_COOLDOWN_SECONDS = 600
+# The wordings the account web API uses when the login token aged; that token
+# is what /catbox/record sends, so only a sign-in replaces it.
+_TOKEN_INVALID_PHRASES: tuple[str, ...] = ("tokeninvalid", "token is abnormal")
+# Consecutive recoveries inside one update, so a persistently rejected token
+# cannot keep asking for sessions.
+MAX_SESSION_RECOVERY_ATTEMPTS = 2
 
 CATLITTER_EXPECTED_KEYS: tuple[str, ...] = (
     "binFullWaitReset",
@@ -412,6 +418,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             discard_after=None,
         )
         self._last_full_auth: float | None = None
+        self._recovery_attempts = 0
         self._pending_feed: dict[str, dict[str, int | None]] = {}
         self._feed_keep_as_new_defaults: dict[str, bool] = {}
         self._last_feed: dict[str, dict[str, Any]] = {}
@@ -979,24 +986,49 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             raise UpdateFailed(msg) from reconnect_err
         return True
 
+    def _needs_full_reauth(self, err: BaseException | None) -> bool:
+        """
+        Return whether *err* rejects the account token rather than the IoT one.
+
+        ``/catbox/record`` signs with the token the login response returned, so
+        a message matching `_TOKEN_INVALID_PHRASES` can only be repaired by
+        signing in again: exchanging the IoT token would leave that one stale.
+        """
+        if err is None:
+            return False
+        message = str(err).lower()
+        return any(phrase in message for phrase in _TOKEN_INVALID_PHRASES)
+
     async def _reconnect_and_retry(
-        self, reason: str = "session expired"
+        self, reason: str = "session expired", err: BaseException | None = None
     ) -> NeakasaPayload:
         """
         Recover from a session/auth failure, then retry the update.
 
-        Token renewal is preferred; a full re-auth is bounded by the cooldown
-        and the scan is reported as failed when recovery is not possible.
+        A rejected IoT token is renewed with one call; a rejected account
+        token goes straight to a sign-in, which the cooldown bounds. Recovery
+        inside one update is attempted at most `MAX_SESSION_RECOVERY_ATTEMPTS`
+        times, and the scan raises :class:`UpdateFailed` when it cannot recover.
         """
         self.force_refresh_devices()
-        if await self._renew_cloud_session():
+        self._recovery_attempts += 1
+        if self._recovery_attempts > MAX_SESSION_RECOVERY_ATTEMPTS:
+            msg = (
+                f"Session recovery attempted {self._recovery_attempts} times"
+                " in one update"
+            )
+            raise UpdateFailed(msg)
+        renew_without_signing_in = err is None or not self._needs_full_reauth(err)
+        if renew_without_signing_in and await self._renew_cloud_session():
             return await self.async_update_data()
         if not await self._force_full_reauth(reason):
             msg = f"Cloud session unusable and re-auth cooling down: {reason}"
             raise UpdateFailed(msg)
         return await self.async_update_data()
 
-    async def _reconnect_clear_and_retry(self) -> NeakasaPayload:
+    async def _reconnect_clear_and_retry(
+        self, err: BaseException | None = None
+    ) -> NeakasaPayload:
         """
         Fully clear the shared API and retry from scratch.
 
@@ -1004,7 +1036,26 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         insufficient.
         """
         clear_shared_api(self.username, self.password)
-        return await self._reconnect_and_retry("identityId is blank")
+        return await self._reconnect_and_retry("identityId is blank", err)
+
+    async def _recover_session_expired(self, err: BaseException) -> NeakasaPayload:
+        """
+        Log the expiry, try one recovery and retry the update.
+
+        Shared by a whole-update expiry and by devices that failed because the
+        session behind their token was gone, so both read the same in logs.
+        """
+        _LOGGER.warning("Session expired, reconnecting silently: %s", err)
+        try:
+            payload = await self._reconnect_and_retry("session expired", err)
+        except Exception as exc:
+            _LOGGER.warning("Reconnect+retry FAILED after session expiry: %s", exc)
+            raise
+        _LOGGER.info(
+            "Reconnect+retry SUCCEEDED after session expiry — %d devices",
+            len(payload),
+        )
+        return payload
 
     # ------------------------------------------------------------------
     # Main update loop
@@ -1026,34 +1077,33 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             )
 
             payload: NeakasaPayload = {}
+            session_failures: list[BaseException] = []
             for iot_id, result in zip(self._device_ids, snapshots, strict=False):
                 if isinstance(result, BaseException):
                     _LOGGER.error("Failed to fetch device %s: %s", iot_id, result)
+                    if isinstance(result, NeakasaApiClientSessionExpiredError):
+                        session_failures.append(result)
                     continue
                 payload[iot_id] = result
 
+            if session_failures:
+                # One device failing for its token says the session is gone for
+                # all of them, so it goes to the recovery path rather than being
+                # a per-device gap in this update.
+                return await self._recover_session_expired(session_failures[0])
+
             _LOGGER.debug("Coordinator update complete: %d devices", len(payload))
+            self._recovery_attempts = 0  # a finished update ends any recovery run
             await self._run_debug_probe(payload)
             return payload  # noqa: TRY300
 
         except NeakasaApiClientSessionExpiredError as err:
-            _LOGGER.warning("Session expired, reconnecting silently: %s", err)
-            try:
-                payload = await self._reconnect_and_retry("session expired")
-            except Exception as exc:
-                _LOGGER.warning("Reconnect+retry FAILED after session expiry: %s", exc)
-                raise
-            else:
-                _LOGGER.info(
-                    "Reconnect+retry SUCCEEDED after session expiry — %d devices",
-                    len(payload),
-                )
-                return payload
+            return await self._recover_session_expired(err)
 
         except NeakasaApiClientAuthenticationError as err:
             _LOGGER.warning("Authentication error, attempting reconnect: %s", err)
             try:
-                return await self._reconnect_and_retry("authentication error")
+                return await self._reconnect_and_retry("authentication error", err)
             except UpdateFailed:
                 _LOGGER.info(
                     "Starting reauth flow for entry %s", self.config_entry.entry_id
@@ -1066,7 +1116,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         except NeakasaApiClientCommunicationError as err:
             if "identityId is blank" in str(err):
                 _LOGGER.debug("IdentityId error, attempting automatic reconnection")
-                return await self._reconnect_clear_and_retry()
+                return await self._reconnect_clear_and_retry(err)
 
             _LOGGER.warning("API communication error (retrying): %s", err)
             for delay in (2, 4, 8, 16, 32):
