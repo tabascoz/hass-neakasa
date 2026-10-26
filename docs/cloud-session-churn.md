@@ -84,8 +84,42 @@ The account device list has no log line of its own; it is only visible when it
 errors (`/uc/listBindingByAccount`). Its caching is covered by
 `tests/test_cloud_sessions.py` instead.
 
+## Measured after (boot at 2026-10-26 00:00:46, read until 00:16:00)
+
+One boot of this build, counted with `journalctl -u homeassistant --since
+"2026-10-26 00:00:40"`. Home Assistant's debug logging comes from
+`configuration.yaml`; nothing on this branch writes `.storage`.
+
+Three completed fetches: 00:01:01, 00:04:43, 00:13:34 (2 devices, 0.375 s).
+
+| Marker | Count in the window | Per scan |
+| --- | --- | --- |
+| `Authenticating shared API client` (mints a session) | 2 | one at start, one at 00:04:43 |
+| `Reusing shared API client` | 3 | one for the idle scan, two from UI actions |
+| `Getting device properties` | 6 | 2 (one per device), as designed |
+| `Session expired`, renewals, cooldown refusals | 0 | nothing was rejected |
+| `Reported state for` | 115 | the other document breaks it down |
+
+The idle scan at 00:13:33 cost exactly one client acquisition, two property
+reads, no full sign-in and no account device list (the previous build asked for
+it every scan). Nothing in the window minted more than two sessions and neither
+came from a rejected session, so the recovery path never had to run.
+
+The sign-in at 00:04:43 is not one of our error paths: nothing logged
+`Session expired`, `Reconnect+retry`, `Cloud session renewal failed` or
+`Not signing in again`, and the only code that empties the shared registry
+without an error is `async_unload_entry → clear_shared_api` in `__init__.py`.
+It coincides with the moment `configuration.yaml` was applied, which reloads
+the entry, so it is attributed to that reload rather than to this change. It
+does mean one session per entry reload, which is the floor while the entry is
+reconfigured.
+
+Not proven yet: sessions per hour over a long window (this window is 16 minutes
+and contains a start), and whether the Neakasa app stays connected. Both need a
+day of running plus your observation.
+
 ## Decision
 
-Keep it if the app stays connected while the count of full sign-ins per hour is
-small, and if the entities still report after a press and after the machine is
-used. Discard it otherwise. Nothing on `main` refers to this file.
+Keep it if the app stays connected while full sign-ins stay around one per
+start rather than one per minute. Discard it otherwise. Nothing on `main` refers
+to this file.

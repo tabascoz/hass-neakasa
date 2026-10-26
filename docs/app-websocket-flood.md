@@ -86,12 +86,6 @@ Same commands, per hour, with the branch build running:
 
 - TODO
 
-## Decision
-
-Keep it if the reports stop while the device is idle and the entities still update
-when the machine is used (a press must still log Riko feedOnce, and the numbers
-must still show staged values). Discard the branch and re-publish the shipped beta
-otherwise. Nothing on main refers to this file.
 ## Counting what the guard still writes
 
 The guard logs one line per state it actually reports, tagged like the rest of
@@ -117,3 +111,57 @@ Window used: 23:06:30 until 23:08:26 on 2026-10-25, two of our own scans.
 
 The next day this file gets the steady-state numbers, both sides of the same
 command, before the branch is kept or discarded.
+
+## Measured after (boot at 2026-10-26 00:00:46, read until 00:16:00)
+
+One boot of this build, counted with `journalctl -u homeassistant --since
+"2026-10-26 00:00:40"`. Home Assistant's debug logging comes from
+`configuration.yaml`; nothing on this branch writes `.storage`.
+
+Three completed fetches: 00:01:01, 00:04:43, 00:13:34 (2 devices, 0.375 s).
+
+| Event | `Reported state for` | our requests |
+| --- | --- | --- |
+| first scan after start | 29 | one full sign-in, one client |
+| entry reload applied at 00:04:43 (your `configuration.yaml` edit) | 29 | one full sign-in (no session error of ours logged) |
+| two actions at 00:08:31 and 00:08:33 | 38 in total | client reused, not re-signed-in |
+| idle scan at 00:13:33 | 19 | 1 client reuse, 2 property reads, no sign-in |
+
+Total in the window: 115 state lines, 2 full sign-ins, 3 client reuses, 6
+property reads, **0** session errors.
+
+Websocket overflows in the same window: 4, at 00:05:13, 00:05:56, 00:15:13 and
+00:15:56 — two clients, twice. The same command for the previous builds
+measures 10 overflows in the 20 minutes of the first guarded build (22:46–23:06
+on 2026-10-25) and 6 in the 2 h 20 m before it was published (20:26–22:46).
+So the guard reduces what this integration adds and it no longer writes on
+nothing changing, but the queue still reaches 4096: the rest of this install's
+entities own most of it, as the earlier note expected.
+
+The important detail is which entities write during an idle scan. At 00:13:33
+the 19 are the litter box's whole entity set (its sensors, switches, buttons,
+its cat sensors and `garbage_can_full`) plus one label of the Riko feeder;
+the Riko's own values wrote nothing. The stamp `state_fingerprint` covers the
+device payload, so one field changing on the litter box (`wifi_rssi`,
+`last_usage`, `cat_litter_level`, the records) makes all 18 of its entities
+write, while a device whose payload is stable writes nothing at all.
+
+That is why this half shows a reduction, not silence: the stamp is per device,
+not per entity. A per-entity stamp (the value that entity is about to report)
+would move the residual from 19 to the entities whose own value changed.
+Not implemented, and not needed for the other half of the branch.
+
+## Decision
+
+This half is not enough on its own: an idle scan still writes 19 states because
+the stamp is per device, and the websocket queue still reaches 4096 for two
+clients twice in 16 minutes, which the rest of this install's entities explain.
+What it does prove is that this integration no longer writes 29 states per scan
+on an unchanged device and that presses still write, which is what the
+integration must keep doing.
+
+Keep or discard follows the other half (the cloud sessions in
+[cloud-session-churn.md](cloud-session-churn.md)): if the Neakasa app stays
+connected and the sign-in count stays near one per start, keep that half on its
+own merits and drop this one, or extend the guard to a per-entity stamp before
+deciding. Nothing on `main` refers to either file.
