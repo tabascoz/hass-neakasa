@@ -552,6 +552,12 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             case _:
                 msg = f"Unknown service: {service}"
                 raise ValueError(msg)
+        if self.data and iot_id in self.data:
+            # The machine ran a cycle, so the values that describe it are pushed
+            # now: waiting for the next scan leaves Home Assistant showing the
+            # state from before a press the user just made.
+            self._mark_state_changed(iot_id)
+            self.async_set_updated_data(self.data)
 
     def feed_values(self, iot_id: str) -> tuple[int, int]:
         """Return the portion (g) and water ratio the next feed would use."""

@@ -8,7 +8,10 @@ from custom_components.neakasa.button import async_setup_entry
 from custom_components.neakasa.button.clean import NeakasaCleanButton
 from custom_components.neakasa.button.level import NeakasaLevelButton
 from custom_components.neakasa.button.refresh_data import NeakasaRefreshDataButton
-from custom_components.neakasa.coordinator import NeakasaDeviceSnapshot
+from custom_components.neakasa.coordinator import (
+    NeakasaCoordinator,
+    NeakasaDeviceSnapshot,
+)
 
 FAKE_SNAPSHOT = NeakasaDeviceSnapshot(
     iot_id="iot-001",
@@ -127,3 +130,15 @@ async def test_async_setup_entry(hass) -> None:
     rediscover()
     # A second pass adds no account button: there is one account.
     assert len(collected) == 3
+
+
+async def test_a_press_pushes_the_state_it_changed(hass, mock_config_entry) -> None:
+    """A clean press marks the model changed and re-sets the data."""
+    coordinator = NeakasaCoordinator(hass, mock_config_entry)
+    coordinator._get_client = AsyncMock(return_value=AsyncMock())
+    coordinator.data = {"iot-001": FAKE_SNAPSHOT}
+    before = coordinator.state_fingerprint("iot-001")
+
+    await coordinator.invoke_service("iot-001", "clean")
+
+    assert coordinator.state_fingerprint("iot-001") != before
