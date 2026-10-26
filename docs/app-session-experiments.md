@@ -99,8 +99,34 @@ describes, but it is the same kind of noise; the fix is a stamp per entity rathe
 than per device model, so a new cat record refreshes `last_usage` and the cat
 sensors only.
 
-## Results
+## Results, filled from the runs of 2026-10-26
 
-| id | app: ok / re-ask | evidence from `check` | reproduced twice |
-|----|------------------|-----------------------|----------------|
-|    |                  |                       |                |
+| id | app | evidence from `check` | reproduced |
+|----|-----|------------------------|------------|
+| X1 / C0 / C0b | ok, data loads | our log empty between the sign-in and the read; the scans at 11:14:43 and 11:24:43 attempted no account call | twice, 11:15 and 11:25 |
+| XS - an ordinary scan | re-ask at 11:22, 11:29:55, ~11:36, ~11:41, ~11:56, 12:01:30 | `/uc/listBindingByAccount code=401` at 11:29:43, 11:35:43, 11:40:43, 11:55:45, 12:00:46 and an accepted call at 11:19:43, each scan `Finished fetching ... success: True`, no mint | six times |
+| X2 - Clean press in HA | re-ask 11:22 | `11:21:11.507 Cloud write: /thing/service/invoke ... cleanNow` | once |
+| X5 - switch flip in HA | re-ask 11:31:05 | `11:30:39.890 Cloud write: /thing/properties/set ... cleanCfg active:0` and `11:30:43.754 ... active:1` | once |
+| XH - the machine's own button | **ok, no re-ask**, and the app lists the manual event it created | nothing at all from our client between 11:51:00 and 11:55:30; the physical press at 11:51:30 made no `Cloud write` | once, in a window with no scan in it |
+| X7 - debug invalidate in HA | ok at 11:58:30, re-ask at 12:01:30 | `11:57:18.611 Debug tokens invalidated`; the next scan `12:00:46 ... code=401` + `TokenInvalid ... does not contain the @ sign` then `Finished fetching ... success: True` - no `Session expired, reconnecting silently`, no mint | once |
+
+## The rule the runs support
+
+Presenting the account to the cloud moves the session, whether the request is
+accepted or refused. Every scan that attempted `/uc/listBindingByAccount` left the
+mobile app needing a sign-in about a minute later - the refusals did it exactly as
+the accepted call at 11:19:43 did. A scan that attempted no account call left the
+app alone, which is what the two control runs measured. Writes from HA move it too
+(X2, X5). The machine's own physical action does not (XH), and the app's own
+activity does not hurt the app - it hurts our client, which is what the 401s are.
+So the lever is the number of account presentations per unit of time; the number of
+sign-ins is not a lever at all (one mint in the whole run, at the HA start).
+
+## The hour with nobody using either client, 12:02 - 13:02
+
+12 completed scans, all reporting `success: True`, and 0 mints. The records call
+was refused on all 12 (`Error getting data: TokenInvalid ... token does not contain
+the @ sign`), so for one hour Home Assistant reported cat weights, `last_usage` and
+bin states that the cloud had refused, and nothing ever asked the session back. No
+`Reported state` line appeared in that hour: the writes at 11:55 (38) and 12:00 (0)
+differ only because the model changed in the first one.
