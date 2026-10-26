@@ -394,7 +394,9 @@ async def test_the_account_sensor_names_the_client_that_holds_the_session(
     client.get_devices = AsyncMock(side_effect=[DEVICE_LIST, SESSION_REFUSED])
     coordinator = _coordinator(hass, mock_config_entry, client)
 
-    sensor = NeakasaCloudSessionStatusSensor(coordinator, MagicMock())
+    sensor = NeakasaCloudSessionStatusSensor(
+        coordinator, MagicMock(), "account:test-entry"
+    )
     first = await coordinator.async_update_data()
     assert "iot-001" in first
     assert sensor.native_value == SESSION_OWNER_HOME_ASSISTANT
@@ -422,7 +424,7 @@ async def test_the_account_button_takes_the_session_back_in_one_sign_in(
     assert (await coordinator.async_update_data()) != {}
     assert coordinator.records_refused is True
 
-    button = NeakasaRefreshDataButton(coordinator, MagicMock())
+    button = NeakasaRefreshDataButton(coordinator, MagicMock(), "account:test-entry")
     with patch(
         "custom_components.neakasa.coordinator.force_reconnect_api",
         new=AsyncMock(),
@@ -539,7 +541,7 @@ def test_the_account_sensor_is_declared_as_an_enum_status() -> None:
     """HA rejects a sensor offering options that is not declared as enum."""
     stub = MagicMock()
     stub.cloud_session_owner = SESSION_OWNER_UNKNOWN
-    sensor = NeakasaCloudSessionStatusSensor(stub, MagicMock())
+    sensor = NeakasaCloudSessionStatusSensor(stub, MagicMock(), "account:test-entry")
     assert sensor.device_class is SensorDeviceClass.ENUM
     assert list(sensor.options) == list(CLOUD_SESSION_OWNERS)
     assert sensor.native_value == SESSION_OWNER_UNKNOWN
@@ -589,7 +591,9 @@ async def test_the_account_sensor_publishes_the_evidence(
     """The sensor shows what the claim is based on, so the UI can be read."""
     client = _scanning_client()
     coordinator = _coordinator(hass, mock_config_entry, client)
-    sensor = NeakasaCloudSessionStatusSensor(coordinator, MagicMock())
+    sensor = NeakasaCloudSessionStatusSensor(
+        coordinator, MagicMock(), "account:test-entry"
+    )
 
     assert "iot-001" in await coordinator.async_update_data()
     assert sensor.native_value == SESSION_OWNER_HOME_ASSISTANT

@@ -27,11 +27,17 @@ class NeakasaRefreshDataButton(CoordinatorEntity[NeakasaCoordinator], ButtonEnti
         self,
         coordinator: NeakasaCoordinator,
         device_info: DeviceInfo,
+        account_id: str,
     ) -> None:
-        """Initialize the button for the account, not for a device."""
+        """
+        Initialize the button for the account, not for a device.
+
+        The identity comes from the config entry, so reconfiguring the
+        entry to another account keeps this button.
+        """
         super().__init__(coordinator)
         self.device_info = device_info
-        self._attr_unique_id = f"{coordinator.username}-refresh_data"
+        self._attr_unique_id = f"{account_id}-refresh_data"
 
     async def async_press(self) -> None:
         """

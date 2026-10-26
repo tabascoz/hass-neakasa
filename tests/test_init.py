@@ -8,9 +8,13 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 
 from custom_components.neakasa import (
+    DOMAIN,
     PLATFORMS,
     _async_update_listener,
+    _current_identifiers,
+    _prune_devices_this_entry_no_longer_describes,
     async_migrate_entry,
+    async_remove_config_entry_device,
     async_setup_entry,
     async_unload_entry,
 )
@@ -38,6 +42,7 @@ async def test_async_setup_entry(
         patch.object(hass.config_entries, "async_forward_entry_setups") as fwd,
     ):
         mock_coordinator = mock_coord_cls.return_value
+        mock_coordinator.data = {}
         mock_coordinator.async_config_entry_first_refresh.return_value = None
 
         result = await async_setup_entry(hass, mock_config_entry)
@@ -61,6 +66,7 @@ async def test_async_setup_entry_assigns_runtime_data(
         patch.object(hass.config_entries, "async_forward_entry_setups"),
     ):
         mock_coordinator = mock_coord_cls.return_value
+        mock_coordinator.data = {}
         mock_coordinator.async_config_entry_first_refresh.return_value = None
 
         await async_setup_entry(hass, mock_config_entry)
@@ -136,3 +142,85 @@ async def test_update_listener_reloads_entry() -> None:
     await _async_update_listener(hass, entry)
 
     hass.config_entries.async_reload.assert_awaited_once_with("entry-1")
+
+
+def _registry_device(identifiers: set[tuple[str, str]], entry: str) -> MagicMock:
+    """A device entry as the registry would hand one over."""
+    device = MagicMock()
+    device.identifiers = identifiers
+    device.config_entry_id = entry
+    device.name = "Neakasa account"
+    device.id = "device-" + ",".join(f"{kind}:{value}" for kind, value in identifiers)
+    return device
+
+
+def test_the_account_device_is_named_by_the_entry() -> None:
+    """The identifiers this entry describes now come from the entry."""
+    config_entry = MagicMock(entry_id="entry-1")
+    coordinator = MagicMock()
+    coordinator.data = {"iot-1": {}}
+    assert _current_identifiers(config_entry, coordinator) == {
+        (DOMAIN, "account:entry-1"),
+        (DOMAIN, "iot-1"),
+    }
+
+
+def test_other_credentials_describe_the_same_account_device() -> None:
+    """Reconfiguring to another Neakasa account changes no identifier."""
+    first = MagicMock(entry_id="entry-1")
+    first.data = {CONF_USERNAME: "tabascoz@gmail.com"}
+    second = MagicMock(entry_id="entry-1")
+    second.data = {CONF_USERNAME: "consultor.fcunha@gmail.com"}
+    coordinator = MagicMock()
+    coordinator.data = {"iot-1": {}}
+
+    assert _current_identifiers(first, coordinator) == _current_identifiers(
+        second, coordinator
+    )
+    for identifier in _current_identifiers(first, coordinator):
+        assert "tabascoz" not in str(identifier)
+        assert "consultor" not in str(identifier)
+
+
+def test_a_previous_accounts_device_is_pruned() -> None:
+    """Devices this entry made under other credentials are forgotten."""
+    config_entry = MagicMock(entry_id="entry-1")
+    coordinator = MagicMock()
+    coordinator.data = {"iot-1": {}}
+    registry = MagicMock()
+    current_account = _registry_device({(DOMAIN, "account:entry-1")}, "entry-1")
+    machine = _registry_device({(DOMAIN, "iot-1")}, "entry-1")
+    stale_account = _registry_device(
+        {(DOMAIN, "account:tabascoz@gmail.com")}, "entry-1"
+    )
+    other_entry = _registry_device({(DOMAIN, "account:entry-2")}, "entry-2")
+    registry.async_get_devices.return_value = [
+        machine,
+        other_entry,
+        stale_account,
+        current_account,
+    ]
+    with patch(
+        "custom_components.neakasa.get_device_registry",
+        return_value=registry,
+    ):
+        _prune_devices_this_entry_no_longer_describes(
+            MagicMock(), config_entry, coordinator
+        )
+
+    removed = [call.args[0] for call in registry.async_remove_device.call_args_list]
+    assert removed == [stale_account.id]
+
+
+async def test_the_removal_hook_accepts_only_stale_devices() -> None:
+    """Home Assistant may drop the account device, never one in use."""
+    config_entry = MagicMock(entry_id="entry-1")
+    config_entry.runtime_data = MagicMock()
+    config_entry.runtime_data.coordinator.data = {"iot-1": {}}
+    stale = _registry_device({(DOMAIN, "account:tabascoz@gmail.com")}, "entry-1")
+    current = _registry_device({(DOMAIN, "account:entry-1")}, "entry-1")
+
+    assert await async_remove_config_entry_device(MagicMock(), config_entry, stale)
+    assert not await async_remove_config_entry_device(
+        MagicMock(), config_entry, current
+    )

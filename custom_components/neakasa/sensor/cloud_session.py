@@ -45,11 +45,18 @@ class NeakasaCloudSessionStatusSensor(
         self,
         coordinator: NeakasaCoordinator,
         device_info: DeviceInfo,
+        account_id: str,
     ) -> None:
-        """Initialize the sensor for the account, not for a device."""
+        """
+        Initialize the sensor for the account, not for a device.
+
+        The identity comes from the config entry, so reconfiguring the
+        entry to another account keeps this entity rather than leaving
+        an orphan of the previous account behind.
+        """
         super().__init__(coordinator)
         self.device_info = device_info
-        self._attr_unique_id = f"{coordinator.username}-cloud_session"
+        self._attr_unique_id = f"{account_id}-cloud_session"
         self._attr_options = list(CLOUD_SESSION_OWNERS)
         self._last_owner = SESSION_OWNER_UNKNOWN
 

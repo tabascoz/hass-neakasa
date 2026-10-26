@@ -34,6 +34,11 @@ async def async_setup_entry(
     entry = cast("NeakasaConfigEntry", config_entry)
     coordinator: NeakasaCoordinator = entry.runtime_data.coordinator
 
+    # One name for the account device, shared by the platforms that add
+    # the account-level entities. It follows the config entry, not the
+    # credentials, so reconfiguring to another account keeps this device.
+    account_id = f"account:{config_entry.entry_id}"
+
     _seen_iot_ids: set[str] = set()
     _account_added = False
 
@@ -49,8 +54,9 @@ async def async_setup_entry(
                     DeviceInfo(
                         name="Neakasa account",
                         manufacturer="Neakasa",
-                        identifiers={(DOMAIN, f"account:{coordinator.username}")},
+                        identifiers={(DOMAIN, account_id)},
                     ),
+                    account_id,
                 ),
             )
         for iot_id, snap in coordinator.data.items():
