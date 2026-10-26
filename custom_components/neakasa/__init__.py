@@ -10,7 +10,12 @@ from homeassistant.const import (
     Platform,
 )
 from homeassistant.core import callback
-from homeassistant.helpers.device_registry import async_get as get_device_registry
+from homeassistant.helpers.device_registry import (
+    async_entries_for_config_entry,
+)
+from homeassistant.helpers.device_registry import (
+    async_get as get_device_registry,
+)
 
 from .api_manager import clear_shared_api
 from .const import _LOGGER, DOMAIN
@@ -59,12 +64,17 @@ def _prune_devices_this_entry_no_longer_describes(
     before would otherwise stay, shown with an entity that can only be
     unavailable; a device taken off the account would stay too. Only
     devices belonging to this entry are considered.
+
+    The enumeration has to be the one keyed by the config entry: `async_get_devices`
+    with no filters walks only the identifier and connection indexes
+    (`helpers/device_registry.py:1176 get_entries`), so it returned nothing
+    and nothing was ever forgotten - the unit carried two account devices from
+    earlier credentials for the whole of 2026-10-26. `async_entries_for_config_entry`
+    walks the index that is always present.
     """
     current = _current_identifiers(config_entry, coordinator)
     registry = get_device_registry(hass)
-    for device in list(registry.async_get_devices()):
-        if device.config_entry_id != config_entry.entry_id:
-            continue
+    for device in async_entries_for_config_entry(registry, config_entry.entry_id):
         if device.identifiers & current:
             continue
         _LOGGER.info(

@@ -193,23 +193,47 @@ def test_a_previous_accounts_device_is_pruned() -> None:
     stale_account = _registry_device(
         {(DOMAIN, "account:tabascoz@gmail.com")}, "entry-1"
     )
-    other_entry = _registry_device({(DOMAIN, "account:entry-2")}, "entry-2")
-    registry.async_get_devices.return_value = [
-        machine,
-        other_entry,
-        stale_account,
-        current_account,
-    ]
-    with patch(
-        "custom_components.neakasa.get_device_registry",
-        return_value=registry,
+    with (
+        patch(
+            "custom_components.neakasa.get_device_registry",
+            return_value=registry,
+        ),
+        patch(
+            "custom_components.neakasa.async_entries_for_config_entry",
+            return_value=[machine, current_account, stale_account],
+        ) as listed,
     ):
         _prune_devices_this_entry_no_longer_describes(
             MagicMock(), config_entry, coordinator
         )
 
+    listed.assert_called_once_with(registry, "entry-1")
     removed = [call.args[0] for call in registry.async_remove_device.call_args_list]
     assert removed == [stale_account.id]
+
+
+def test_the_prune_asks_only_for_this_entrys_devices() -> None:
+    """The enumeration is scoped by entry, so no other entry is ever offered."""
+    config_entry = MagicMock(entry_id="entry-1")
+    coordinator = MagicMock()
+    coordinator.data = {}
+    registry = MagicMock()
+    with (
+        patch(
+            "custom_components.neakasa.get_device_registry",
+            return_value=registry,
+        ),
+        patch(
+            "custom_components.neakasa.async_entries_for_config_entry",
+            return_value=[],
+        ) as listed,
+    ):
+        _prune_devices_this_entry_no_longer_describes(
+            MagicMock(), config_entry, coordinator
+        )
+
+    listed.assert_called_once_with(registry, "entry-1")
+    assert not registry.async_remove_device.call_args_list
 
 
 async def test_the_removal_hook_accepts_only_stale_devices() -> None:
