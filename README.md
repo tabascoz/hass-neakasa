@@ -17,7 +17,7 @@ The Neakasa Home Assistant Custom Integration allows you to integrate your Neaka
 
 ### Currently supported devices
 - Neakasa M1 (Cat Litter Box)
-- Neakasa Riko (Wet Meal Feeder) — read-write (beta, `v1.5.0-beta3`)
+- Neakasa Riko (Wet Meal Feeder) — read-write (beta, `v1.5.0-beta4`)
 
 #### Riko (wet meal feeder) features
 |Type|Name|Notes|
@@ -31,6 +31,23 @@ The Neakasa Home Assistant Custom Integration allows you to integrate your Neaka
 |Number|Food quantity|portion used by the next Feed now, 3–15 g|
 |Number|Water ratio|water-to-food ratio used by the next Feed now, 1–5 (water amount = portion × ratio)|
 |Switch|Save feed as default|whether a Feed now stores the amounts it used on the machine; default off|
+|Sensor|Bowl weight|grams the machine's own scale reads, the bowl included; the tare it states is shown beside it|
+|Sensor|Desiccant days left|the countdown the machine keeps for its desiccant pack|
+|Number|Desiccant days|the day budget for a fresh pack, 1–60|
+|Button|Desiccant pack is changed|restarts that countdown on the machine (`resetDrierTime`)|
+|Switch|Keep the meal fresh|the freshness manager: it watches the bowl and re-hydrates what is left (`freshMgrCfg.bOnOff`); the hours it watches and the leftover threshold stay as the machine states them|
+|Number|Rehydration time|minutes the machine takes to rehydrate a wet meal, 0–30 (`defFdCfg.mixMin`)|
+|Number|Meal sound volume|how loud the machine plays the sound of a delivered meal, 0–100; 0 is silence|
+|Switch|Show the display when idle|the front display while the machine is idle|
+|Selector|Standby display kind|what the front shows when idle; the kinds are named here, the machine's own codes for them have not been confirmed|
+|Text|Standby display message|the message the front display shows when idle, up to 50 characters|
+|Sensor|Device serial / Firmware version|the identifier the machine states for itself, and its firmware and hardware versions|
+|Sensor|Food delivered today|grams the machine recorded as delivered today; no delivery has been recorded on this account yet, so it shows nothing until one is|
+|Sensor / Button|Water tank last cleaned / Mark the water tank clean|the cleaning reminders: the mark the machine holds and a press that writes it now|
+|Sensor / Button|Food bin last cleaned / Mark the food bin clean|the same for the food bin|
+|Button|Zero the bowl scale|re-zero the scale with the bowl weight the machine states (`resetScaleZero`)|
+|Button|Calibrate the food scale|ask the machine to recalibrate how it reads food weight (`fdCalbration`)|
+|Switch|Do not disturb|the machine's quiet window (`DND_Mode`); its start, end and repeat days stay as the machine states them|
 |Sensor|Cloud session status|which client holds the account's session (`Unknown` / `Home Assistant` / `Not Home Assistant`), with `last_presented_at`, `last_presented_call`, `refused_at`, `records_as_cached` as state attributes; lives on the account device|
 |Button|Refresh data now|present the account to the cloud again so the next scan reads it; costs one session, so the Neakasa app has to sign in again afterwards|
 
@@ -38,8 +55,11 @@ The Neakasa Home Assistant Custom Integration allows you to integrate your Neaka
 > amount in grams is turned back into the ratio). Editing a number only stages the next
 > feed; the machine is never written by itself. The **Save feed as default**
 > switch on the Riko decides whether a Feed now stores the amounts it used; it starts
-> off and the account option `feed_keep_as_new_defaults` only seeds that default. Other Riko controls (`freshMgrCfg`,
-> `deepCleanCfg`, audio/display) are not exposed yet — see `docs/riko-protocol.md`.
+> off and the account option `feed_keep_as_new_defaults` only seeds that default.
+> The settings that name one part of a machine's own config write only that part and
+> keep the rest as the machine stated it. A control the machine has never stated a
+> value for shows nothing rather than a guess, and the presses whose effect on this
+> firmware has not been seen yet are labelled in `docs/riko-protocol.md`.
 
 ### Currently supported features
 #### Sensors:
@@ -78,17 +98,17 @@ The Neakasa Home Assistant Custom Integration allows you to integrate your Neaka
 
 ## Installation
 
-### Getting the Riko beta (`v1.5.0-beta3`)
+### Getting the Riko beta (`v1.5.0-beta4`)
 
 The Riko support ships as a pre-release. To try it before the next stable release:
 
 **Via HACS** — in Home Assistant, open HACS → *Integrations* → Neakasa → use the
-version selector to download `v1.5.0-beta3`, then restart Home Assistant.
+version selector to download `v1.5.0-beta4`, then restart Home Assistant.
 
 **Manually (zip)** — download this beta's asset and extract into your config dir:
 
 ```bash
-wget https://github.com/tabascoz/hass-neakasa/releases/download/v1.5.0-beta3/neakasa.zip
+wget https://github.com/tabascoz/hass-neakasa/releases/download/v1.5.0-beta4/neakasa.zip
 mkdir -p custom_components/neakasa && unzip neakasa.zip -d custom_components/neakasa && rm neakasa.zip
 ```
 
@@ -122,6 +142,23 @@ one account device in the UI rather than one per set-up. The two
 temporary debug buttons on the feeder (**Debug token churn**, **Debug invalidate
 token**) and the `debug_probe` option are still there to measure the token paths
 and will be dropped before `v1.5.0` ships.
+
+What `v1.5.0-beta4` adds is the rest of what the feeder holds, and it changes
+nothing about feeding: the numbers still only stage a meal, and the machine is
+written by a **Feed now** alone. The settings it exposes are the ones the machine
+states values for today - the freshness manager switch, the rehydration minutes of
+a wet meal (0-30, as the machine's own definition bounds it), the volume of the
+meal sound (this integration offers 0-100, where the definition allows 200, and 0
+is silence), the front display (whether it is up while idle, the message it shows,
+and the kind of display - the kinds are named here, their codes on this machine
+have not been confirmed), the machine's quiet window, the desiccant day budget and
+the countdown that reads it back, the bowl weight the scale reads, and the marks
+for cleaning the water tank and the food bin. The calibration presses (**Zero the
+bowl scale**, **Calibrate the food scale**) and the desiccant reset (**Desiccant
+pack is changed**) ask for the machine's own commands; those have not been run
+here, so a press is what says whether this firmware takes them. Nothing is
+invented: a control the machine has never answered with a value shows nothing,
+which is what the same section of `docs/riko-protocol.md` says for each key.
 
 ### HACS (recommended)
 

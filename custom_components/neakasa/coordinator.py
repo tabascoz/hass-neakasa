@@ -17,11 +17,16 @@ from .const import (
     _LOGGER,
     DEFAULT_FEED_FOOD_G,
     DEFAULT_FEED_WATER_RATIO,
+    DESICCANT_DAYS_MAX,
     DOMAIN,
     FEED_FOOD_MAX_G,
     FEED_FOOD_MIN_G,
+    FEED_SOUND_VOLUME_MAX,
+    FEED_SOUND_VOLUME_MIN,
     FEED_WATER_RATIO_MAX,
     FEED_WATER_RATIO_MIN,
+    MIX_MIN_MAX,
+    MIX_MIN_MIN,
     SUPPORTED_CATEGORY_KEYS,
 )
 from .exceptions import (
@@ -87,6 +92,16 @@ CLOUD_SESSION_OWNERS: tuple[str, ...] = (
 def _utc_stamp() -> str:
     """Return the current time as the account sensor will print it."""
     return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def _clean_stamp() -> str:
+    """
+    Return now as the shape the machine's own date records use.
+
+    A sibling device writes its dated records as `2026-10-19 07:18:49`, so a
+    cleaning mark is written in that shape rather than a guessed one.
+    """
+    return datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
 
 
 CATLITTER_EXPECTED_KEYS: tuple[str, ...] = (
@@ -179,11 +194,34 @@ class NeakasaDeviceSnapshot:
     bowl_present: bool = False
     cover_absent: bool = False
     desiccant_days_left: int | None = None
+    desiccant_days_effective: int | None = None
+    desiccant_reset_ts: str | None = None
     fresh_mgr_on: bool = False
+    fresh_mgr_cfg: dict[str, Any] | None = None
+    fresh_mgr_leftover_g: int | None = None
+    fresh_mgr_hours: int | None = None
     deep_clean_on: bool = False
     default_food_g: int | None = None
     default_water_ratio: int | None = None
     feed_cfg: dict[str, Any] | None = None
+    mix_min_minutes: int | None = None
+    bowl_weight_g: int | None = None
+    bowl_tare_g: int | None = None
+    display_type: int | None = None
+    display_param: str | None = None
+    display_when_idle: bool | None = None
+    display_cfg: dict[str, Any] | None = None
+    sound_index: int | None = None
+    sound_volume: int | None = None
+    feed_aud_cfg: dict[str, Any] | None = None
+    dnd_active: bool | None = None
+    dnd_cfg: dict[str, Any] | None = None
+    last_water_bin_clean: str | None = None
+    last_food_bin_clean: str | None = None
+    firmware_version: str | None = None
+    hardware_version: str | None = None
+    feed_today_g: int | None = None
+    device_serial: str = ""
 
 
 NeakasaPayload = dict[str, NeakasaDeviceSnapshot]
@@ -251,6 +289,56 @@ def _configured_feed_defaults(def_fd: dict[str, Any]) -> tuple[int | None, int |
     return food_g, ratio
 
 
+def _optional_int(value: Any) -> int | None:
+    """Return an int only when the machine actually answered with one."""
+    if value is None or isinstance(value, bool):
+        return None if value is None else int(value)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _feed_grams_today(records: Any) -> int | None:
+    """
+    Sum the grams the machine recorded as delivered meals for the current day.
+
+    The meal records the account-side endpoint answers with name each delivery
+    (`feed_weight` in grams at `feed_time`); nothing here has that shape yet -
+    no delivery has been recorded on this account - so an unrecognisable list
+    returns None rather than a guessed zero, and the sensor shows no value. The
+    day is the machine's clock read as UTC, because the record itself carries no
+    timezone.
+    """
+    if not isinstance(records, dict):
+        return None
+    entries = records.get("record_list")
+    if not isinstance(entries, list) or not entries:
+        return None
+    today = datetime.now(UTC).date()
+    total = 0
+    recognised = False
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        grams = _optional_int(entry.get("feed_weight", entry.get("weight")))
+        when_seconds = _optional_int(
+            entry.get("feed_time", entry.get("time", entry.get("ts")))
+        )
+        if grams is None or when_seconds is None:
+            continue
+        if when_seconds > 10**12:
+            when_seconds //= 1000
+        try:
+            when = datetime.fromtimestamp(when_seconds, tz=UTC).date()
+        except (OverflowError, ValueError, OSError):
+            continue
+        recognised = True
+        if when == today:
+            total += grams
+    return total if recognised else None
+
+
 def _build_device_snapshot(
     iot_id: str,
     device_name: str,
@@ -274,7 +362,7 @@ def _build_device_snapshot(
 
     if category_key == "petFeeder":
         return _build_pet_feeder_snapshot(
-            iot_id, device_name, devicedata, product_key, label
+            iot_id, device_name, devicedata, product_key, label, records
         )
 
     sand = _property_value(devicedata, "Sand", {})
@@ -331,6 +419,7 @@ def _build_pet_feeder_snapshot(
     devicedata: dict[str, Any],
     product_key: str,
     label: str,
+    records: dict[str, Any] | None = None,
 ) -> NeakasaDeviceSnapshot:
     """Build a snapshot for a Riko wet-meal feeder (categoryKey ``petFeeder``)."""
     _log_missing_property_keys(iot_id, devicedata, PETFEEDER_EXPECTED_KEYS)
@@ -355,6 +444,18 @@ def _build_pet_feeder_snapshot(
     device_state = _property_value(devicedata, "deviceState", {})
     if not isinstance(device_state, dict):
         device_state = {}
+    display = _property_value(devicedata, "displayCfg", {})
+    if not isinstance(display, dict):
+        display = {}
+    audio = _property_value(devicedata, "feedAudCfg", {})
+    if not isinstance(audio, dict):
+        audio = {}
+    versions = _property_value(devicedata, "DeviceVer", {})
+    if not isinstance(versions, dict):
+        versions = {}
+    dnd = _property_value(devicedata, "DND_Mode", {})
+    if not isinstance(dnd, dict):
+        dnd = {}
 
     battery_percent_raw = pwr.get("batPercentage")
     desiccant_raw = _property_value(devicedata, "leftDrierDays")
@@ -393,11 +494,40 @@ def _build_pet_feeder_snapshot(
         bowl_present=_to_int(bowl.get("bBowlIn", 0)) == 1,
         cover_absent=_property_value(devicedata, "bCoverAbsent", 1) == 0,
         desiccant_days_left=(None if desiccant_raw is None else _to_int(desiccant_raw)),
+        desiccant_days_effective=_optional_int(
+            _property_value(devicedata, "drierEffeDays")
+        ),
+        desiccant_reset_ts=_property_value(devicedata, "drierResetTs"),
         fresh_mgr_on=_to_int(fresh_mgr.get("bOnOff", 0)) == 1,
+        fresh_mgr_cfg=dict(fresh_mgr) if fresh_mgr else None,
+        fresh_mgr_leftover_g=_optional_int(fresh_mgr.get("leftOverTTH")),
+        fresh_mgr_hours=_optional_int(fresh_mgr.get("monitorTime")),
         deep_clean_on=_to_int(deep_clean.get("bOnOff", 0)) == 1,
         default_food_g=default_food_g,
         default_water_ratio=default_water_ratio,
         feed_cfg=dict(def_fd) if def_fd else None,
+        mix_min_minutes=_optional_int(def_fd.get("mixMin")),
+        bowl_weight_g=_optional_int(bowl.get("curWeight")),
+        bowl_tare_g=_optional_int(bowl.get("bowlGram")),
+        display_type=_optional_int(display.get("displayType")),
+        display_param=display.get("displayParam"),
+        display_when_idle=(
+            None
+            if "bDisplayIfIdle" not in display
+            else _to_int(display["bDisplayIfIdle"]) == 1
+        ),
+        display_cfg=dict(display) if display else None,
+        sound_index=_optional_int(audio.get("audIdx")),
+        sound_volume=_optional_int(audio.get("volume")),
+        feed_aud_cfg=dict(audio) if audio else None,
+        dnd_active=(None if "active" not in dnd else _to_int(dnd["active"]) == 1),
+        dnd_cfg=dict(dnd) if dnd else None,
+        last_water_bin_clean=_property_value(devicedata, "lastWaterBinCleanTime"),
+        last_food_bin_clean=_property_value(devicedata, "lastFoodBinCleanTime"),
+        firmware_version=versions.get("FW_Version"),
+        hardware_version=versions.get("HW_Version"),
+        feed_today_g=_feed_grams_today(records),
+        device_serial=device_name,
     )
 
 
@@ -414,6 +544,15 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         "b_intrpt_range_det": "bIntrptRangeDet",
         "clean_cfg": "cleanCfg",
         "bin_full": "binFullWaitReset",
+        "feed_cfg": "defFdCfg",
+        "fresh_mgr_cfg": "freshMgrCfg",
+        "display_cfg": "displayCfg",
+        "feed_aud_cfg": "feedAudCfg",
+        "desiccant_days_effective": "drierEffeDays",
+        "desiccant_days_left": "leftDrierDays",
+        "last_water_bin_clean": "lastWaterBinCleanTime",
+        "last_food_bin_clean": "lastFoodBinCleanTime",
+        "dnd_cfg": "DND_Mode",
     }
 
     # ------------------------------------------------------------------
@@ -434,6 +573,11 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         },
         "petFeeder": {
             "feed": "feed_once",  # /thing/service/invoke identifier feedOnce
+            "reset_desiccant": "resetDrierTime",
+            "reset_bowl_scale": "resetScaleZero",
+            "calibrate_food_scale": "fdCalbration",
+            "wash_bowl": "deepWashing",
+            "display_animation": "ledScreenDisplay",
         },
     }
 
@@ -583,6 +727,29 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             # The machine ran a cycle, so the values that describe it are pushed
             # now: waiting for the next scan leaves Home Assistant showing the
             # state from before a press the user just made.
+            self._mark_state_changed(iot_id)
+            self.async_set_updated_data(self.data)
+
+    async def invoke_device_service(
+        self, iot_id: str, service: str, args: dict[str, Any]
+    ) -> None:
+        """
+        Invoke one of the feeder's own commands with its arguments.
+
+        The command names and argument keys come from the machine's definition
+        for the product; only ``feedOnce`` has been seen working here, so the
+        answer of the others is whatever this firmware says. A refusal is not
+        turned into a silent success: it reaches the caller as an error.
+        """
+        snap = self.data.get(iot_id) if self.data else None
+        category = snap.category_key if snap is not None else "petFeeder"
+        identifier = self._SERVICE_DISPATCH.get(category, {}).get(service)
+        if identifier is None:
+            msg = f"Unknown service: {service}"
+            raise ValueError(msg)
+        client = await self._get_client()
+        await client.invoke_service(iot_id, identifier, args)
+        if self.data and iot_id in self.data:
             self._mark_state_changed(iot_id)
             self.async_set_updated_data(self.data)
 
@@ -751,6 +918,115 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                     "Failed to store the fed amounts as new defaults: %s", err
                 )
         elif self.data and iot_id in self.data:
+            self._mark_state_changed(iot_id)
+            self.async_set_updated_data(self.data)
+
+    async def set_rehydration_minutes(self, iot_id: str, minutes: int) -> None:
+        """
+        Write only the rehydration minutes of the machine's default meal.
+
+        ``defFdCfg`` is replaced as a whole by the gateway, so the portion and
+        water amount the machine currently stores are carried into the write
+        unchanged. A machine that has never been configured keeps its
+        ``{food:0,water:0}`` state rather than being given invented amounts.
+        """
+        if not MIX_MIN_MIN <= minutes <= MIX_MIN_MAX:
+            msg = (
+                f"Rehydration time out of range: {minutes} "
+                f"(expected {MIX_MIN_MIN}-{MIX_MIN_MAX})"
+            )
+            raise ValueError(msg)
+        snap = self.data.get(iot_id) if self.data else None
+        current = dict(snap.feed_cfg) if snap is not None and snap.feed_cfg else {}
+        payload = dict(current)
+        payload["mixMin"] = minutes
+        client = await self._get_client()
+        await client.set_device_properties(iot_id, {"defFdCfg": payload})
+        if snap is not None:
+            snap.feed_cfg = payload
+            snap.mix_min_minutes = minutes
+            self._mark_state_changed(iot_id)
+            self.async_set_updated_data(self.data)
+
+    async def set_feed_sound_volume(self, iot_id: str, volume: int) -> None:
+        """
+        Set the volume of the meal sound, keeping the clip the machine uses.
+
+        The definition allows a volume up to 200, and this unit states 100; the
+        integration offers 0-100 only, where 0 is silence, so a value here stays
+        inside what the machine has been seen to use.
+        """
+        if not FEED_SOUND_VOLUME_MIN <= volume <= FEED_SOUND_VOLUME_MAX:
+            msg = f"Sound volume out of range: {volume}"
+            raise ValueError(msg)
+        snap = self.data.get(iot_id) if self.data else None
+        payload = (
+            dict(snap.feed_aud_cfg) if snap is not None and snap.feed_aud_cfg else {}
+        )
+        payload["volume"] = volume
+        client = await self._get_client()
+        await client.set_device_properties(iot_id, {"feedAudCfg": payload})
+        if snap is not None:
+            snap.feed_aud_cfg = payload
+            snap.sound_volume = volume
+            self._mark_state_changed(iot_id)
+            self.async_set_updated_data(self.data)
+
+    async def request_desiccant_reset(self, iot_id: str) -> None:
+        """
+        Tell the machine a fresh desiccant pack is in place.
+
+        The command re-counts from the day budget given to it, so the budget is
+        the one the machine states now when it states one, and otherwise the
+        longest the definition allows rather than an invented number.
+        """
+        snap = self.data.get(iot_id) if self.data else None
+        days = (
+            (snap.desiccant_days_effective or DESICCANT_DAYS_MAX)
+            if snap
+            else DESICCANT_DAYS_MAX
+        )
+        await self.invoke_device_service(
+            iot_id, "reset_desiccant", {"drierEffeDays": days}
+        )
+
+    async def request_bowl_scale_reset(
+        self, iot_id: str, bowl_gram: int | None = None
+    ) -> None:
+        """Re-zero the scale against the bowl weight, keeping the machine's own."""
+        snap = self.data.get(iot_id) if self.data else None
+        grams = (
+            bowl_gram if bowl_gram is not None else (snap.bowl_tare_g if snap else None)
+        )
+        if grams is None:
+            msg = "No bowl weight to re-zero against"
+            raise ValueError(msg)
+        await self.invoke_device_service(
+            iot_id, "reset_bowl_scale", {"bowlGram": grams}
+        )
+
+    async def request_food_scale_calibration(self, iot_id: str) -> None:
+        """Ask the machine to recalibrate how it reads food weight."""
+        await self.invoke_device_service(iot_id, "calibrate_food_scale", {})
+
+    async def mark_bin_clean(self, iot_id: str, which: str) -> None:
+        """Record that the water tank or the food bin was cleaned now."""
+        wire_key = {
+            "water": "lastWaterBinCleanTime",
+            "food": "lastFoodBinCleanTime",
+        }.get(which)
+        if wire_key is None:
+            msg = f"Unknown bin: {which}"
+            raise ValueError(msg)
+        client = await self._get_client()
+        await client.set_device_properties(iot_id, {wire_key: _clean_stamp()})
+        snap = self.data.get(iot_id) if self.data else None
+        if snap is not None:
+            stamp = _clean_stamp()
+            if which == "water":
+                snap.last_water_bin_clean = stamp
+            else:
+                snap.last_food_bin_clean = stamp
             self._mark_state_changed(iot_id)
             self.async_set_updated_data(self.data)
 
@@ -1046,8 +1322,9 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         meta = self._device_meta.get(iot_id, {})
         category_key = meta.get("category_key", "CatLitter")
 
-        if category_key != "CatLitter":
-            # Only litter boxes expose cat/usage records; feeders do not.
+        if category_key not in ("CatLitter", "petFeeder"):
+            # An unknown product is read for its properties only: asking its
+            # records would be a call whose answer nobody can interpret.
             device_name = await self._get_device_name(iot_id)
             self._mark_state_changed(iot_id, devicedata, {})
             return _build_device_snapshot(

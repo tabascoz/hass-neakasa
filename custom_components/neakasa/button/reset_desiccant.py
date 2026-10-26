@@ -1,0 +1,61 @@
+"""Button recording that a fresh desiccant pack is in the machine."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from homeassistant.components.button import ButtonEntity
+from homeassistant.core import callback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
+from ..base_entity import write_state_if_changed
+from ..coordinator import NeakasaCoordinator
+
+if TYPE_CHECKING:
+    from homeassistant.helpers.device_registry import DeviceInfo
+
+
+class NeakasaResetDesiccantButton(CoordinatorEntity[NeakasaCoordinator], ButtonEntity):
+    """
+    Tell the machine the pack was changed, so its countdown restarts.
+
+    The command asked for is `resetDrierTime` with the day budget the machine
+    states; this unit has not been asked to run it before, so what it answers is
+    what this press finds out.
+    """
+
+    _attr_should_poll = False
+    _attr_has_entity_name = True
+    _attr_translation_key = "reset_desiccant"
+    _attr_icon = "mdi:restore"
+
+    def __init__(
+        self,
+        coordinator: NeakasaCoordinator,
+        device_info: DeviceInfo,
+        iot_id: str,
+    ) -> None:
+        """Initialize the button."""
+        super().__init__(coordinator)
+        self._iot_id = iot_id
+        self.device_info = device_info
+        self._attr_unique_id = f"{iot_id}-reset_desiccant"
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        write_state_if_changed(self, self._iot_id)
+
+    async def async_update(self) -> None:
+        """Update entity state from coordinator data."""
+        if self.entity_id is None:
+            return
+        self._handle_coordinator_update()
+
+    async def async_added_to_hass(self) -> None:
+        """Write initial state once entity_id is assigned."""
+        await super().async_added_to_hass()
+        self._handle_coordinator_update()
+
+    async def async_press(self) -> None:
+        """Restart the desiccant countdown with the machine's own budget."""
+        await self.coordinator.request_desiccant_reset(self._iot_id)

@@ -31,33 +31,107 @@ do when we call them. The product's own software is not quoted, named or referen
 Every property is wrapped as `{"time": <ms>, "value": …}` like CatLitter.
 
 ### Read-only / status
+
+Every key below is labelled by where the shape came from:
+
+| Tag | Meaning |
+|---|---|
+| `[this unit]` | read from the live machine on 2026-10-26 (`/thing/properties/get`) |
+| `[definition]` | the gateway's own product definition for `a1ccEqBcaUD`, which `/thing/tsl/get` answers with types and ranges |
+| `[unverified]` | named by the definition and never answered by this unit, so its behaviour here is not observed |
+
 | Key | Shape | Notes |
 |---|---|---|
-| `foodLvl` | int enum (observed `2`) | food hopper level state (0–N), not a percent |
-| `waterLvl` | int enum (observed `3`) | water tank level state |
-| `pwrStatus` | `{batPercentage, batLevel, batVoltage, batTemp, pwrType, batStatus}` | battery; `batPercentage`=90, `batLevel`=4, `batVoltage`=12209 (mV×?), `batStatus`=2 |
-| `bowlStatus` | `{bowlGram, curWeight, bBowlIn}` | bowl weight in grams; `bBowlIn`=1 bowl present |
-| `bCoverAbsent` | int 0/1 | cover/lid state — **inverted**: `1` = cover present/OK, `0` = absent (verified against device with cover in place) |
-| `deviceState` | `{state, param}` | operating state machine (observed 0/0) |
-| `drierEffeDays` / `leftDrierDays` | int days (observed 40) | desiccant pack effective / remaining days |
-| `drierResetTs` | str unix-seconds | last desiccant reset |
-| `NetWorkStatus` | `{WiFi_RSSI, WiFi_Name, IP_Addr, MAC_Addr}` | same key as CatLitter → reuse RSSI sensor |
-| `DeviceVer` | `{FW_Version, HW_Version, type, bRegionLock}` | firmware/HW versions |
-| `disconn` | `{lockCnt, rssi, disconnReason, reconnFailed, ts}` | connectivity diagnostics |
+| `foodLvl` | int enum (observed `2`) `[this unit]` | food hopper level state; the codes the machine uses are empty=0, lacking=1, full=2 — not a percent |
+| `waterLvl` | int enum (observed `3`) `[this unit]` | water tank level state; empty=0, lacking=1, low=2, middle=3, full=4 |
+| `pwrStatus` | `{batPercentage, batLevel, batVoltage, batTemp, pwrType, batStatus, batMsg}` | battery; observed `batPercentage`=90, `batLevel`=4, `batVoltage`=12159 mV, `batTemp`=25.0 °C, `batStatus`=2. The definition allows percentage 0–110 %, voltage 0–16000 mV, temperature −30…120 °C |
+| `bowlStatus` | `{bowlGram, curWeight, bBowlIn}` | the bowl on the scale: `curWeight` is **the bowl's actual weight in grams** (observed 67; the definition allows −3000…3000), `bowlGram` is the bowl's own tare (observed 68; 0…500 g), `bBowlIn`=1 bowl present |
+| `bCoverAbsent` | int 0/1 | cover/lid state — **inverted**: `1` = in place, `0` = absent (verified against the device with its cover in place) |
+| `deviceState` | `{state, param}` | operating state machine (observed 0/0); the state codes the machine uses are dormant=0, preparing food=1, delivering food=2, paused=3, faulting=4, sleeping=5, protecting=6, cleaning=7 |
+| `drierEffeDays` | int (observed 40) | desiccant pack's effective days; the definition allows 1…60 |
+| `leftDrierDays` | int (observed 38) | desiccant days left; the definition allows 0…120 |
+| `drierResetTs` | str unix-seconds (observed `1792757949`) | the last desiccant change the machine recorded |
+| `lastWaterBinCleanTime` `[definition]` | text ≤100 | when the water tank was last marked clean — this unit has never answered it, so no cleaning has been recorded on it |
+| `lastFoodBinCleanTime` `[definition]` | text ≤100 | the same for the food bin |
+| `NetWorkStatus` | `{WiFi_RSSI, WiFi_Name, IP_Addr, MAC_Addr}` | same key as CatLitter → the existing RSSI sensor covers it |
+| `DeviceVer` | `{FW_Version, HW_Version, type, bRegionLock}` | observed `FW_Version`=`1.0.0-0033`, `HW_Version`=`1.00.01`; the definition caps each version string at 16 characters. `/thing/info/get` repeats the firmware under `firmwareVersion` |
+| `disconn` | `{lockCnt, rssi, disconnReason, reconnFailed, ts}` | connectivity record (observed `disconnReason`=200, `rssi`=-62) |
 | `timestamp` | str ms | device clock |
-| `userOpenId`, `regionBaseurl`, `region`, `timeZoneMsg` | routing/identity metadata |
+| `userOpenId`, `regionBaseurl`, `region`, `timeZoneMsg`, `GenHighSvcEnv`, `httpData`, `catPermit`, `newbieProgress` `[definition]` | account/routing metadata and the onboarding walk-through |
+| `unit_pref`, `weightUnit` `[definition]` | the unit the front display and the app print food and water in; this unit has not answered either |
+| `is12HourFormat`, `battSavingMode`, `showDisplayAtIdle`, `pwrMode`, `scannerCfg` `[definition]` | clock format, long-battery mode, the display-while-idle switch as the definition spells it, power mode, the multi-pet recognition config |
 
-### Controls (settable — writable via `/thing/properties/set`)
-| Key | Shape | Likely control |
+### Controls (settable — writable through the `set` command of the definition)
+
+| Key | Shape | What it controls |
 |---|---|---|
-| `defFdCfg` | `{mixMin, water, food}` | the machine's default meal: `food` in grams, **`water` in grams of water** (portion × ratio), `mixMin` mixing minutes |
-| `feedAudCfg` | `{volume, audIdx}` | feed audio/sound config |
-| `freshMgrCfg` | `{monitorTime, leftOverTTH, bOnOff}` | freshness manager on/off + leftover thresholds |
-| `deepCleanCfg` | `{bOnOff, cleanState}` | deep-clean (bowl wash) toggle/state |
-| `displayCfg` | `{displayParam, displayType, bDisplayIfIdle}` | front display config |
-| `childLockOnOff` | int 0/1 | child lock — same key as CatLitter → reuse switch |
+| `defFdCfg` | `{food, water, mixMin}` | the machine's default meal. `food` 0…60 g, **`water` is an amount of water in grams** 0…600 g (never the ratio index: sending the index on 2026-10-25 made the machine keep adding water until it reported clogged water sprays), `mixMin` 0…30 **minutes** — the definition names it as the rehydration time of the wet meal, and this unit reports 3 |
+| `feedAudCfg` | `{audIdx, volume}` | the sound the machine plays when it delivers a meal: `audIdx` picks the clip (the machine holds a default clip and clips you record in the app), `volume` is 0…200 in the definition, and this unit reports 100; 0 is silence |
+| `freshMgrCfg` | `{bOnOff, monitorTime, leftOverTTH}` | the freshness manager: `bOnOff` starts or stops it, `monitorTime` is how long it watches the bowl in **hours** (definition 1…4, observed 4), `leftOverTTH` is the leftover threshold in **grams** (definition 0…300, observed 20) |
+| `leftover` | `{bOnOff, detGramTTh}` `[definition]` | a separate leftover detection switch with a 0…30 g threshold — this unit has never answered it |
+| `deepCleanCfg` | `{bOnOff, cleanState}` | the bowl wash: on/off and the state the wash is in (observed 0/0) |
+| `displayCfg` | `{displayType, displayParam, bDisplayIfIdle}` | the front display: which kind of standby display it shows (enum; the definition gives no value list), the text shown (`displayParam`, ≤50 characters in the definition) and whether the display is up while the machine is idle (`bDisplayIfIdle`, observed 1) |
+| `DND_Mode` | `{active, startTime, endTime, weekRept, bAudioDND, bDisplayDND}` | `[definition]` do-not-disturb: on/off, start and end as seconds of the day (0…86400), which days repeat as a 7-bit mask (0…127), and separately whether the silence applies to the sound and to the display |
+| `smartPlanCfg` | `{catId, drierFoodId}` | `[definition]` the plan bound to a pet and a desiccant brand (both 0…100000000) |
+| `fdPlanStr` | text ≤1024 | `[definition]` the feeding plan as one encoded string |
+| `childLockOnOff` | int 0/1 | child lock — same key as CatLitter, and this unit reports it for the feeder too (observed 0) |
+| `drierEffeDays`, `leftDrierDays` | int days | writing them is how the desiccant change is recorded; the reset is a command, see below |
+| `lastWaterBinCleanTime`, `lastFoodBinCleanTime`, `showDisplayAtIdle`, `unit_pref`, `weightUnit`, `is12HourFormat`, `battSavingMode` | see above | `[definition]` writable in the definition, not answered by this unit |
 
-## Feeding: observed operation
+
+## Commands (`/thing/service/invoke`)
+
+The definition answers with the commands the machine accepts and their arguments.
+Every name below is `[definition]`; only `feedOnce` has been seen working on this
+machine (`[this unit]`, see §Feeding).
+
+| Command | Arguments | What it does |
+|---|---|---|
+| `set` | any of the 39 writable keys above | the write path the integration uses for every setting |
+| `get` | — | ask the machine to read its state back |
+| `feedOnce` `[this unit]` | `{food 0…60 g, water 0…600 g, bSaveAsDef bool}` | deliver one meal; the flag keeps the amounts as the defaults |
+| `feedCtrl` | `{ctrlType enum}` | the auto-feeding control; asked with meal amounts it times out, so it is not one-meal feeding |
+| `bowlCtrl` | `{ctrlType enum}` | act on the bowl |
+| `resetScaleZero` | `{bowlGram int 0…200 g}` | re-zero the scale against a known bowl weight — the bowl-weight calibration |
+| `fdCalbration` | `{kVal 0…100, kX100 0…200, objVal/bkgVal/diffVal 0…2000}` | recalibrate the food scale's reading |
+| `resetDrierTime` | `{drierEffeDays 1…60}` | record a desiccant change and re-count from the new budget |
+| `deepWashing` | `{type enum}` | start the bowl wash |
+| `ledScreenDisplay` | `{animeType int 0…24}` | put an animation on the front display |
+| `foodProvide`, `waterProvide` | `{bOnOff bool}` | start or stop providing food / water |
+| `updateTime` | `{type enum}` | correct the device clock |
+| `errorBan` | `{errCode 0…1000, bCleanBan bool}` | mute or unmute a fault the machine keeps reporting |
+| `errPostDebug` | `{errCode 0…100, module ≤20, error ≤32, param 0…1000}` | report a fault on demand |
+| `getVoltage` | `{chanIdx enum, val 0…10000}` | read one of the machine's own measurements |
+| `iotRead` | `{readType enum}` | ask the machine to read state back |
+| `cfgRead`, `cfgWrite` | `{cfgFile ≤1024, cfgMsg ≤1024}` / `{cfgFile, cfgValStr, bCreate bool}` | read or write one of the machine's config files |
+| `fileSrv` | `{keepAliveSec 0…1000, bSW enum, bEncryption enum}` | the file service the machine talks to |
+| `udpCmd` | `{bOnOff bool}` | a raw machine command |
+| `updateBaseurl` | `{baseURL ≤64}` | re-fetch the regional endpoint |
+| `RmReboot` | — | restart the machine |
+
+Two events are defined as well: `post` and `ModuleErr{module, error, param, errCode}`.
+The job list the machine numbers cleaning and consumables with is
+litter-box clean=0, trash-can clean=1, trash-can wash=2, buy litter=3,
+**water-tank clean=4**, **food-bin clean=5**, **desiccant replacement=6**; meal
+records are typed meal=0, eating=1, plan=2.
+
+## What the definition says and this unit answers
+
+Measured on 2026-10-26 through this integration's own client: `/thing/properties/get`
+for the feeder returns **23 keys**; the definition names **42**. Every reported key is
+defined (none is undocumented); **19 are defined and never answered**:
+`BatteryPercentage`, `DND_Mode`, `GenHighSvcEnv`, `bRegionLock`,
+`battSavingMode`, `catPermit`, `fdPlanStr`, `httpData`, `is12HourFormat`,
+`lastFoodBinCleanTime`, `lastWaterBinCleanTime`, `leftover`,
+`newbieProgress`, `pwrMode`, `scannerCfg`, `showDisplayAtIdle`,
+`smartPlanCfg`, `unit_pref`, `weightUnit`.
+
+The reason matters for the controls being added: a key the machine has no value
+for is not a key the machine rejects. Writing it is how this firmware's answer is
+found out, so the integration reads these when present, shows nothing when not,
+and never claims one works before this unit has answered it.
+
+
 
 `/thing/service/invoke`, **identifier `feedOnce`**, args
 `{food: <g of food>, water: <g of water>, bSaveAsDef: 0|1}`.
@@ -129,14 +203,48 @@ Unique ids are `{iot_id}-{control}`.
 
 | Platform | Both categories | `petFeeder` (Riko) | `CatLitter` (M1) |
 |----------|-----------------|--------------------|------------------|
-| sensor | `label` | `food_level`, `water_level`, `battery`, `wifi_rssi` | `sand_percent`, `wifi_rssi`, `stay_time`, `last_usage`, `bucket_status`, `sand_level_state`, `bin_state`, `cat_weight` per cat |
+| sensor | `label` | `food_level`, `water_level`, `battery`, `wifi_rssi`, `bowl_weight`, `desiccant_days_left`, `device_serial`, `firmware_version`, `food_intake_today`, `last_bin_clean_water`, `last_bin_clean_food` | `sand_percent`, `wifi_rssi`, `stay_time`, `last_usage`, `bucket_status`, `sand_level_state`, `bin_state`, `cat_weight` per cat |
 | binary_sensor | — | `cover_absent` | `bin_full` |
-| button | — | `feed_now` | `clean`, `level` |
-| number | — | `food_grams`, `water_ratio` | — |
-| switch | — | `feed_keep_as_new_defaults` | `auto_clean`, `young_cat_mode`, `child_lock`, `auto_bury`, `auto_level`, `silent_mode`, `auto_recovery`, `unstoppable_cycle` |
+| button | — | `feed_now`, `reset_desiccant`, `reset_bowl_scale`, `calibrate_food_scale`, `mark_water_bin_clean`, `mark_food_bin_clean` | `clean`, `level` |
+| number | — | `food_grams`, `water_ratio`, `rehydration_minutes`, `desiccant_days`, `feed_sound_volume` | — |
+| switch | — | `feed_keep_as_new_defaults`, `fresh_meal_manager`, `display_standby`, `do_not_disturb` | `auto_clean`, `young_cat_mode`, `child_lock`, `auto_bury`, `auto_level`, `silent_mode`, `auto_recovery`, `unstoppable_cycle` |
+| select | — | `display_standby_kind` | — |
+| text | — | `display_custom_message` | — |
 
-`wifi_rssi` is deliberately offered for both categories: the same wire key is present on both
-devices.
+`wifi_rssi` is deliberately offered for both categories: the same wire key is present
+on both devices. The two new platforms are registered only for the feeder, and the
+entity names exist in all four translation files with the same key tree, which is
+what the translation test checks.
+
+## How the integration reads the rest (v1.5.0-beta4)
+
+Read is never invented. A control the machine answered with a value is shown as that
+value; a control it has never answered with one shows nothing - `None` for a sensor,
+off for a switch only when the machine says off, and unknown for the select and the
+text entity. The keys this unit has never answered are listed above, and the same
+marker is what the entities read.
+
+A setting that names one part of a nested config writes only that part and copies the
+machine's current sibling values into the write, because the gateway replaces the
+whole object: `freshMgrCfg` keeps `monitorTime` and `leftOverTTH` when the switch is
+moved, `displayCfg` keeps its kind and message when the display switch is moved,
+`feedAudCfg` keeps its clip when the volume is set, and `defFdCfg` keeps the portion
+and water amount when the rehydration minutes are set. The `set_property` path maps
+the internal name to the wire name so the same write shape the definition describes is
+what goes out.
+
+The commands are asked for, not assumed to work: `resetDrierTime{drierEffeDays}` uses
+the day budget the machine states (or the longest the definition allows when it states
+none), `resetScaleZero{bowlGram}` uses the bowl weight the machine states and refuses
+with a message when it states none, and `fdCalbration` is asked with no coefficients
+because this unit has never reported any. What each of those answers is what a press
+in Home Assistant finds out, and the answer is written in the journal at debug level
+by the same cloud-write line the feeding path already produces.
+
+The daily intake is read from the account's record endpoint, which is now asked for
+the feeder as well; no delivery has been recorded on this account, so it currently
+answers with nothing and the sensor shows nothing. That is also why the reading is
+kept separate from the definition: the record shape is described, not confirmed.
 
 ## Naming note
 

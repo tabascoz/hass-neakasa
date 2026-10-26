@@ -17,11 +17,18 @@ if TYPE_CHECKING:
 from ..const import DOMAIN
 from .battery import NeakasaBatterySensor
 from .bin_state import NeakasaBinStateSensor
+from .bowl_weight import NeakasaBowlWeightSensor
 from .bucket_status import NeakasaBucketStatusSensor
 from .cat_weight import NeakasaCatWeightSensor
 from .cloud_session import NeakasaCloudSessionStatusSensor
+from .desiccant_days_left import NeakasaDesiccantDaysLeftSensor
+from .device_serial import NeakasaDeviceSerialSensor
+from .firmware_version import NeakasaFirmwareVersionSensor
+from .food_intake_today import NeakasaFoodIntakeTodaySensor
 from .food_level import NeakasaFoodLevelSensor
 from .label import NeakasaLabelSensor
+from .last_bin_clean_food import NeakasaFoodBinCleanSensor
+from .last_bin_clean_water import NeakasaWaterBinCleanSensor
 from .last_usage import NeakasaLastUsageSensor
 from .sand_level_state import NeakasaSandLevelStateSensor
 from .sand_percent import NeakasaSandPercentSensor
@@ -84,6 +91,15 @@ async def async_setup_entry(
                         NeakasaWaterLevelSensor(coordinator, device_info, iot_id),
                         NeakasaBatterySensor(coordinator, device_info, iot_id),
                         NeakasaWifiRssiSensor(coordinator, device_info, iot_id),
+                        NeakasaBowlWeightSensor(coordinator, device_info, iot_id),
+                        NeakasaDesiccantDaysLeftSensor(
+                            coordinator, device_info, iot_id
+                        ),
+                        NeakasaDeviceSerialSensor(coordinator, device_info, iot_id),
+                        NeakasaFirmwareVersionSensor(coordinator, device_info, iot_id),
+                        NeakasaFoodIntakeTodaySensor(coordinator, device_info, iot_id),
+                        NeakasaWaterBinCleanSensor(coordinator, device_info, iot_id),
+                        NeakasaFoodBinCleanSensor(coordinator, device_info, iot_id),
                     ]
                 )
                 continue

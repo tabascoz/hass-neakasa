@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from ..data import NeakasaConfigEntry
 
 from ..const import DOMAIN
+from .calibrate_food_scale import NeakasaCalibrateFoodScaleButton
 from .clean import NeakasaCleanButton
 from .debug_token import (
     NeakasaDebugTokenChurnButton,
@@ -22,7 +23,11 @@ from .debug_token import (
 )
 from .feed_now import NeakasaFeedNowButton
 from .level import NeakasaLevelButton
+from .mark_food_bin_clean import NeakasaMarkFoodBinCleanButton
+from .mark_water_bin_clean import NeakasaMarkWaterBinCleanButton
 from .refresh_data import NeakasaRefreshDataButton
+from .reset_bowl_scale import NeakasaResetBowlScaleButton
+from .reset_desiccant import NeakasaResetDesiccantButton
 
 
 async def async_setup_entry(
@@ -79,6 +84,15 @@ async def async_setup_entry(
                             device_info,
                             iot_id,
                         ),
+                        NeakasaResetDesiccantButton(coordinator, device_info, iot_id),
+                        NeakasaResetBowlScaleButton(coordinator, device_info, iot_id),
+                        NeakasaCalibrateFoodScaleButton(
+                            coordinator, device_info, iot_id
+                        ),
+                        NeakasaMarkWaterBinCleanButton(
+                            coordinator, device_info, iot_id
+                        ),
+                        NeakasaMarkFoodBinCleanButton(coordinator, device_info, iot_id),
                     ]
                 )
                 continue

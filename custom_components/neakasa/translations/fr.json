@@ -60,6 +60,21 @@
             },
             "refresh_data": {
                 "name": "Actualiser les données"
+            },
+            "reset_desiccant": {
+                "name": "Desiccant pack is changed"
+            },
+            "reset_bowl_scale": {
+                "name": "Zero the scale of the bowl"
+            },
+            "calibrate_food_scale": {
+                "name": "Calibrate the scale of the food"
+            },
+            "mark_water_bin_clean": {
+                "name": "Tank of water was cleaned"
+            },
+            "mark_food_bin_clean": {
+                "name": "Bin of food was cleaned"
             }
         },
         "number": {
@@ -68,6 +83,15 @@
             },
             "water_ratio": {
                 "name": "Water ratio"
+            },
+            "rehydration_minutes": {
+                "name": "Rehydration time"
+            },
+            "desiccant_days": {
+                "name": "Days of the desiccant"
+            },
+            "feed_sound_volume": {
+                "name": "Volume of the meal sound"
             }
         },
         "binary_sensor": {
@@ -152,6 +176,27 @@
                         }
                     }
                 }
+            },
+            "bowl_weight": {
+                "name": "Weight of the bowl"
+            },
+            "desiccant_days_left": {
+                "name": "Days remaining of the desiccant"
+            },
+            "device_serial": {
+                "name": "Serial number of the device"
+            },
+            "firmware_version": {
+                "name": "Version of the firmware"
+            },
+            "food_intake_today": {
+                "name": "Food delivered today"
+            },
+            "water_bin_clean": {
+                "name": "Tank of water was last cleaned"
+            },
+            "food_bin_clean": {
+                "name": "Bin of food was last cleaned"
             }
         },
         "switch": {
@@ -181,6 +226,25 @@
             },
             "feed_keep_as_new_defaults": {
                 "name": "Ration par défaut"
+            },
+            "fresh_meal_manager": {
+                "name": "Keep the meal fresh"
+            },
+            "display_standby": {
+                "name": "Display when idle"
+            },
+            "do_not_disturb": {
+                "name": "Do not disturb"
+            }
+        },
+        "select": {
+            "display_standby_kind": {
+                "name": "Kind of the standby display"
+            }
+        },
+        "text": {
+            "display_custom_message": {
+                "name": "Message of the standby display"
             }
         }
     }
