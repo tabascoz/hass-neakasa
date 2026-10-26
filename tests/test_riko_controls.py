@@ -335,7 +335,8 @@ async def test_a_display_that_states_no_message_still_takes_one(
     snap = coordinator.data["riko-001"]
 
     message = NeakasaDisplayCustomMessageText(coordinator, DEVICE_INFO, "riko-001")
-    assert message.value == ""
+    assert message.native_value == ""
+    assert message.state == ""
     await message.async_set_value("Neakasa")
     assert snap.display_cfg == {
         "displayType": 2,

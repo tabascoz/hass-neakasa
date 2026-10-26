@@ -67,16 +67,17 @@ class NeakasaDisplayCustomMessageText(
         return self.coordinator.device_snapshot(self._iot_id)
 
     @property
-    def value(self) -> str | None:
+    def native_value(self) -> str | None:
         """
         Return the message the display shows, or `""` when it shows none.
 
-        A device that is not in the model at all stays `None`, because an empty
-        message would be a claim about a machine that was never read. A device
-        that states its display config with nothing in the message field is shown
-        empty, which is what lets a message be typed into it: Home Assistant
-        offers no typing for an entity that has no state, so a machine that holds
-        no standby message would otherwise be unreachable.
+        `native_value` is the name the text platform reads, so this is what puts
+        a state on the entity. A device that is not in the model at all stays
+        `None`, because an empty message would be a claim about a machine that
+        was never read. A device that states its display config with nothing in
+        the message field is shown empty, which is what lets a message be typed
+        into it: Home Assistant offers no typing for an entity that has no state,
+        so a machine that holds no standby message would otherwise be unreachable.
         """
         snap = self._snap
         if snap is None:
