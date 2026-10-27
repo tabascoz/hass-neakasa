@@ -9,7 +9,9 @@ from custom_components.neakasa.coordinator import CLOUD_SESSION_OWNERS
 
 TRANSLATIONS_DIR = Path("custom_components/neakasa/translations")
 
-EXPECTED_FILES = sorted(["en.json", "de.json", "fr.json", "pl.json"])
+EXPECTED_FILES = sorted(
+    ["en.json", "de.json", "fr.json", "pl.json", "pt.json", "pt-BR.json"]
+)
 
 
 def _load_json(path: Path) -> dict:

@@ -1,0 +1,281 @@
+{
+    "title": "Neakasa",
+    "config": {
+        "step": {
+            "user": {
+                "title": "Configuração Neakasa",
+                "description": "As credenciais serão usadas para obter os dados do servidor.",
+                "data": {
+                    "username": "Nome de usuário",
+                    "password": "Senha"
+                }
+            },
+            "reauth_confirm": {
+                "title": "Autenticar novamente o Neakasa",
+                "description": "As credenciais Neakasa de {username} não são mais válidas. Insira as novas credenciais para restabelecer o acesso.",
+                "data": {
+                    "username": "Nome de usuário",
+                    "password": "Senha"
+                }
+            },
+            "reconfigure": {
+                "title": "Reconfigurar o Neakasa",
+                "description": "Atualize as credenciais da sua conta Neakasa.",
+                "data": {
+                    "username": "Nome de usuário",
+                    "password": "Senha"
+                }
+            }
+        },
+        "abort": {
+            "authentication": "Erro durante a autenticação.",
+            "unknown": "Erro desconhecido",
+            "connection": "Erro durante a conexão.",
+            "no_devices_found": "Nenhum dispositivo Neakasa suportado foi encontrado nesta conta.",
+            "reauth_successful": "Reautenticação realizada com sucesso.",
+            "reconfigure_successful": "Reconfiguração realizada com sucesso."
+        },
+        "error": {
+            "authentication": "Nome de usuário ou senha inválidos.",
+            "connection": "Não foi possível conectar aos servidores do Neakasa. Verifique sua rede.",
+            "no_devices_found": "Nenhum dispositivo Neakasa suportado foi encontrado para esta conta."
+        }
+    },
+    "entity": {
+        "button": {
+            "clean": {
+                "name": "Limpar"
+            },
+            "level": {
+                "name": "Nivelar"
+            },
+            "feed_now": {
+                "name": "Servir ração agora"
+            },
+            "refresh_data": {
+                "name": "Atualizar dados agora"
+            },
+            "reset_desiccant": {
+                "name": "Sílica gel foi trocada"
+            },
+            "reset_bowl_scale": {
+                "name": "Zerar a balança da tigela"
+            },
+            "calibrate_food_scale": {
+                "name": "Calibrar a balança de ração"
+            },
+            "mark_water_bin_clean": {
+                "name": "Tanque de água foi limpo"
+            },
+            "mark_food_bin_clean": {
+                "name": "Recipiente de ração foi limpo"
+            }
+        },
+        "number": {
+            "food_grams": {
+                "name": "Quantidade de ração"
+            },
+            "water_ratio": {
+                "name": "Proporção de água"
+            },
+            "rehydration_minutes": {
+                "name": "Tempo de reidratação da ração"
+            },
+            "desiccant_days": {
+                "name": "Dias de sílica gel"
+            },
+            "feed_sound_volume": {
+                "name": "Volume do som da refeição"
+            }
+        },
+        "binary_sensor": {
+            "bin_full": {
+                "name": "Cesto de lixo cheio"
+            },
+            "cover_absent": {
+                "name": "Tampa ausente"
+            },
+            "serving_food": {
+                "name": "Servindo comida"
+            },
+            "bowl_in_place": {
+                "name": "Tigela no lugar"
+            }
+        },
+        "sensor": {
+            "cat_sensor": {
+                "name": "Gato {name}"
+            },
+            "sand_percent": {
+                "name": "Nível de areia"
+            },
+            "wifi_rssi": {
+                "name": "RSSI do Wi-Fi"
+            },
+            "stay_time": {
+                "name": "Tempo da última permanência"
+            },
+            "last_usage": {
+                "name": "Último uso"
+            },
+            "current_status": {
+                "name": "Estado do dispositivo",
+                "state": {
+                    "idle": "Ocioso",
+                    "cleaning": "Limpando",
+                    "leveling": "Nivelando",
+                    "flipover": "De cabeça para baixo",
+                    "cat_present": "Gato presente",
+                    "paused": "Pausado",
+                    "side_bin_locking_panels_missing": "Painéis laterais de travamento do recipiente ausentes",
+                    "cleaning_interrupted": "Limpeza interrompida"
+                }
+            },
+            "sand_state": {
+                "name": "Estado da areia",
+                "state": {
+                    "insufficient": "Insuficiente",
+                    "moderate": "Moderado",
+                    "sufficient": "Suficiente",
+                    "overfilled": "Areia cheia demais"
+                }
+            },
+            "bin_state": {
+                "name": "Estado do cesto de lixo",
+                "state": {
+                    "normal": "Normal",
+                    "full": "Cesto cheio",
+                    "missing": "Fora da posição"
+                }
+            },
+            "device_label": {
+                "name": "Etiqueta do dispositivo"
+            },
+            "food_level": {
+                "name": "Nível de ração"
+            },
+            "water_level": {
+                "name": "Nível de água"
+            },
+            "battery": {
+                "name": "Bateria"
+            },
+            "cloud_session_status": {
+                "name": "Status da sessão na nuvem",
+                "state": {
+                    "unknown": "Desconhecido",
+                    "home_assistant": "Home Assistant",
+                    "not_home_assistant": "Não é o Home Assistant"
+                },
+                "state_attributes": {
+                    "options": {
+                        "state": {
+                            "unknown": "Desconhecido",
+                            "home_assistant": "Home Assistant",
+                            "not_home_assistant": "Não é o Home Assistant"
+                        }
+                    }
+                }
+            },
+            "bowl_weight": {
+                "name": "Peso da tigela"
+            },
+            "desiccant_days_left": {
+                "name": "Dias restantes de sílica gel"
+            },
+            "device_serial": {
+                "name": "Número de série do dispositivo"
+            },
+            "firmware_version": {
+                "name": "Versão do firmware"
+            },
+            "food_intake_today": {
+                "name": "Ração servida hoje"
+            },
+            "water_bin_clean": {
+                "name": "Última limpeza do tanque de água"
+            },
+            "food_bin_clean": {
+                "name": "Última limpeza do recipiente de ração"
+            },
+            "device_status": {
+                "name": "Estado do dispositivo",
+                "state": {
+                    "idle": "Ocioso",
+                    "preparing_food": "Preparando a refeição",
+                    "serving_food": "Servindo a refeição",
+                    "paused": "Pausado",
+                    "fault": "Falha",
+                    "sleeping": "Dormindo",
+                    "freshness_protection": "Proteção do frescor",
+                    "deep_cleaning": "Limpeza profunda"
+                }
+            },
+            "deep_clean_state": {
+                "name": "Estado da limpeza profunda",
+                "state": {
+                    "not_washing": "Não está lavando",
+                    "washing_water_channel": "Lavando o canal de água",
+                    "water_channel_washed": "Canal de água lavado",
+                    "rinsing_water_channel": "Enxaguando o canal de água"
+                }
+            },
+            "battery_state": {
+                "name": "Estado da bateria",
+                "state": {
+                    "not_fitted": "Bateria não instalada",
+                    "charging": "Carregando",
+                    "in_use": "Em uso"
+                }
+            }
+        },
+        "switch": {
+            "auto_clean": {
+                "name": "Limpeza automática"
+            },
+            "young_cat_mode": {
+                "name": "Modo filhote"
+            },
+            "child_lock": {
+                "name": "Trava infantil"
+            },
+            "auto_bury": {
+                "name": "Cobertura automática"
+            },
+            "auto_level": {
+                "name": "Nivelamento automático"
+            },
+            "silent_mode": {
+                "name": "Modo silencioso"
+            },
+            "auto_recovery": {
+                "name": "Recuperação automática"
+            },
+            "unstoppable_cycle": {
+                "name": "Ciclo ininterruptível"
+            },
+            "feed_keep_as_new_defaults": {
+                "name": "Salvar ração como padrão"
+            },
+            "fresh_meal_manager": {
+                "name": "Preservar a ração fresca"
+            },
+            "display_standby": {
+                "name": "Mostrar a tela quando ocioso"
+            },
+            "do_not_disturb": {
+                "name": "Não incomodar"
+            }
+        },
+        "select": {
+            "display_standby_kind": {
+                "name": "Tipo de tela de espera"
+            }
+        },
+        "text": {
+            "display_custom_message": {
+                "name": "Mensagem personalizada na tela"
+            }
+        }
+    }
+}

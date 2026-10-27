@@ -31,7 +31,8 @@ PR that satisfies (or removes) a rule.
 
 - Code is written in **English**: file names, class names, function names,
   variable names, dictionary keys, identifier strings.
-- User-facing strings live in `custom_components/neakasa/translations/{en,de,fr,pl}.json`
+- User-facing strings live in
+  `custom_components/neakasa/translations/{en,de,fr,pl,pt,pt-BR}.json`
   only — never hardcoded in Python.
 
 ## File organization
