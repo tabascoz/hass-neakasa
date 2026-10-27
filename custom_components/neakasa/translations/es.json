@@ -11,8 +11,8 @@
                 }
             },
             "reauth_confirm": {
-                "title": "Volver a autenticar a Neakasa",
-                "description": "Tus credenciales de Neakasa para {username} ya no son válidas. Ingrese nuevas credenciales para restaurar el acceso.",
+                "title": "Reautenticar Neakasa",
+                "description": "Tus credenciales de Neakasa para {username} ya no son válidas. Introduce nuevas credenciales para restablecer el acceso.",
                 "data": {
                     "username": "Nombre de usuario",
                     "password": "Contraseña"
@@ -20,7 +20,7 @@
             },
             "reconfigure": {
                 "title": "Reconfigurar Neakasa",
-                "description": "Actualice las credenciales de su cuenta Neakasa.",
+                "description": "Actualiza las credenciales de tu cuenta de Neakasa.",
                 "data": {
                     "username": "Nombre de usuario",
                     "password": "Contraseña"
@@ -31,23 +31,23 @@
             "authentication": "Error durante la autenticación.",
             "unknown": "Error desconocido",
             "connection": "Error durante la conexión.",
-            "no_devices_found": "No se encontraron dispositivos Neakasa compatibles en esta cuenta.",
+            "no_devices_found": "No se han encontrado dispositivos Neakasa compatibles en esta cuenta.",
             "reauth_successful": "Reautenticación exitosa.",
             "reconfigure_successful": "Reconfiguración exitosa."
         },
         "error": {
-            "authentication": "Nombre de usuario o contraseña no válidos.",
+            "authentication": "Nombre de usuario o contraseña incorrectos.",
             "connection": "No se pudo conectar a los servidores de Neakasa. Comprueba tu red.",
-            "no_devices_found": "No se encontraron dispositivos Neakasa compatibles para esta cuenta."
+            "no_devices_found": "No se han encontrado dispositivos Neakasa compatibles para esta cuenta."
         }
     },
     "entity": {
         "button": {
             "clean": {
-                "name": "limpio"
+                "name": "Limpiar"
             },
             "level": {
-                "name": "Nivel"
+                "name": "Nivelar"
             },
             "feed_now": {
                 "name": "Alimentar ahora"
@@ -56,19 +56,19 @@
                 "name": "Actualizar datos ahora"
             },
             "reset_desiccant": {
-                "name": "Se cambia el paquete desecante"
+                "name": "Sustituido el paquete desecante"
             },
             "reset_bowl_scale": {
-                "name": "Pon a cero la báscula del tazón"
+                "name": "Tarar la báscula del cuenco"
             },
             "calibrate_food_scale": {
-                "name": "Calibrar la báscula de alimentos."
+                "name": "Calibrar la báscula de comida"
             },
             "mark_water_bin_clean": {
-                "name": "Se limpió el tanque de agua"
+                "name": "Depósito de agua limpiado"
             },
             "mark_food_bin_clean": {
-                "name": "Se limpió el contenedor de comida."
+                "name": "Contenedor de comida limpiado"
             }
         },
         "number": {
@@ -79,27 +79,27 @@
                 "name": "Proporción de agua"
             },
             "rehydration_minutes": {
-                "name": "tiempo de rehidratación"
+                "name": "Tiempo de rehidratación"
             },
             "desiccant_days": {
-                "name": "Días desecantes"
+                "name": "Días del desecante"
             },
             "feed_sound_volume": {
-                "name": "Volumen del sonido de la comida"
+                "name": "Volumen del sonido de comida"
             }
         },
         "binary_sensor": {
             "bin_full": {
-                "name": "bote de basura lleno"
+                "name": "Cubo de basura lleno"
             },
             "cover_absent": {
-                "name": "Falta portada"
+                "name": "Tapa ausente"
             },
             "serving_food": {
-                "name": "sirviendo comida"
+                "name": "Sirviendo comida"
             },
             "bowl_in_place": {
-                "name": "Cuenco en su lugar"
+                "name": "Cuenco en su sitio"
             }
         },
         "sensor": {
@@ -110,10 +110,10 @@
                 "name": "Nivel de arena para gatos"
             },
             "wifi_rssi": {
-                "name": "Wi-Fi RSSI"
+                "name": "RSSI de WiFi"
             },
             "stay_time": {
-                "name": "última hora de estancia"
+                "name": "Tiempo de la última estancia"
             },
             "last_usage": {
                 "name": "Último uso"
@@ -121,41 +121,41 @@
             "current_status": {
                 "name": "Estado del dispositivo",
                 "state": {
-                    "idle": "inactivo",
-                    "cleaning": "Limpieza",
-                    "leveling": "nivelación",
-                    "flipover": "Al revés",
+                    "idle": "Inactivo",
+                    "cleaning": "Limpiando",
+                    "leveling": "Nivelando",
+                    "flipover": "Boca abajo",
                     "cat_present": "Gato presente",
                     "paused": "En pausa",
-                    "side_bin_locking_panels_missing": "Faltan paneles de bloqueo del contenedor lateral",
+                    "side_bin_locking_panels_missing": "Faltan los paneles de bloqueo del contenedor lateral",
                     "cleaning_interrupted": "Limpieza interrumpida"
                 }
             },
             "sand_state": {
                 "name": "Estado de la arena para gatos",
                 "state": {
-                    "insufficient": "insuficiente",
-                    "moderate": "moderado",
-                    "sufficient": "suficiente",
-                    "overfilled": "Sobrellenado"
+                    "insufficient": "Insuficiente",
+                    "moderate": "Moderado",
+                    "sufficient": "Suficiente",
+                    "overfilled": "Sobrecargado"
                 }
             },
             "bin_state": {
                 "name": "Estado del contenedor",
                 "state": {
-                    "normal": "normales",
-                    "full": "bote de basura lleno",
-                    "missing": "No en posición"
+                    "normal": "Normal",
+                    "full": "Cubo de basura lleno",
+                    "missing": "Fuera de posición"
                 }
             },
             "device_label": {
                 "name": "Etiqueta del dispositivo"
             },
             "food_level": {
-                "name": "nivel de comida"
+                "name": "Nivel de comida"
             },
             "water_level": {
-                "name": "nivel de agua"
+                "name": "Nivel de agua"
             },
             "battery": {
                 "name": "Batería"
@@ -164,15 +164,15 @@
                 "name": "Estado de la sesión en la nube",
                 "state": {
                     "unknown": "Desconocido",
-                    "home_assistant": "Asistente de hogar",
-                    "not_home_assistant": "No asistente de casa"
+                    "home_assistant": "Home Assistant",
+                    "not_home_assistant": "No es Home Assistant"
                 },
                 "state_attributes": {
                     "options": {
                         "state": {
                             "unknown": "Desconocido",
-                            "home_assistant": "Asistente de hogar",
-                            "not_home_assistant": "No asistente de casa"
+                            "home_assistant": "Home Assistant",
+                            "not_home_assistant": "No es Home Assistant"
                         }
                     }
                 }
@@ -181,43 +181,43 @@
                 "name": "Peso del cuenco"
             },
             "desiccant_days_left": {
-                "name": "Quedan días desecantes"
+                "name": "Días restantes del desecante"
             },
             "device_serial": {
-                "name": "Serie del dispositivo"
+                "name": "Número de serie del dispositivo"
             },
             "firmware_version": {
                 "name": "Versión de firmware"
             },
             "food_intake_today": {
-                "name": "Comida entregada hoy"
+                "name": "Comida dispensada hoy"
             },
             "water_bin_clean": {
-                "name": "Tanque de agua limpiado por última vez"
+                "name": "Depósito de agua limpiado por última vez"
             },
             "food_bin_clean": {
-                "name": "El contenedor de alimentos se limpió por última vez"
+                "name": "Contenedor de comida limpiado por última vez"
             },
             "device_status": {
                 "name": "Estado del dispositivo",
                 "state": {
-                    "idle": "inactivo",
+                    "idle": "Inactivo",
                     "preparing_food": "Preparando una comida",
-                    "serving_food": "Dispensar una comida",
+                    "serving_food": "Dispensando una comida",
                     "paused": "En pausa",
                     "fault": "Fallo",
-                    "sleeping": "durmiendo",
+                    "sleeping": "Durmiendo",
                     "freshness_protection": "Protección de frescura",
-                    "deep_cleaning": "limpieza profunda"
+                    "deep_cleaning": "Limpieza profunda"
                 }
             },
             "deep_clean_state": {
                 "name": "Estado de limpieza profunda",
                 "state": {
-                    "not_washing": "No lavar",
-                    "washing_water_channel": "Lavar el canal de agua.",
+                    "not_washing": "Sin lavar",
+                    "washing_water_channel": "Lavando el canal de agua",
                     "water_channel_washed": "Canal de agua lavado",
-                    "rinsing_water_channel": "Enjuague del canal de agua."
+                    "rinsing_water_channel": "Enjuagando el canal de agua"
                 }
             },
             "battery_state": {
@@ -231,13 +231,13 @@
         },
         "switch": {
             "auto_clean": {
-                "name": "limpieza automática"
+                "name": "Limpieza automática"
             },
             "young_cat_mode": {
-                "name": "modo gatito"
+                "name": "Modo gatito"
             },
             "child_lock": {
-                "name": "Bloqueo para niños"
+                "name": "Bloqueo infantil"
             },
             "auto_bury": {
                 "name": "Cobertura automática"
@@ -255,26 +255,26 @@
                 "name": "Ciclo imparable"
             },
             "feed_keep_as_new_defaults": {
-                "name": "Guardar feed como predeterminado"
+                "name": "Guardar alimentación como predeterminada"
             },
             "fresh_meal_manager": {
-                "name": "Mantenga la comida fresca"
+                "name": "Mantener la comida fresca"
             },
             "display_standby": {
-                "name": "Mostrar la pantalla cuando está inactivo"
+                "name": "Mostrar pantalla en reposo"
             },
             "do_not_disturb": {
-                "name": "no molestar"
+                "name": "No molestar"
             }
         },
         "select": {
             "display_standby_kind": {
-                "name": "Tipo de pantalla en espera"
+                "name": "Tipo de pantalla en reposo"
             }
         },
         "text": {
             "display_custom_message": {
-                "name": "Mensaje personalizado en pantalla en espera"
+                "name": "Mensaje personalizado en pantalla de reposo"
             }
         }
     }
