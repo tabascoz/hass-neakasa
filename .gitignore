@@ -15,3 +15,7 @@ htmlcov/
 *~
 .venv/
 
+# Dev scratch: probes, experiments and unreviewed translation placeholders.
+# Nothing under here is publishable, so none of it is tracked.
+/tmp/
+

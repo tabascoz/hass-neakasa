@@ -1,4 +1,4 @@
-"""Ensure translations keys are symmetric across all languages."""
+"""Keep published translations complete and unreviewed placeholders unpublished."""
 
 from __future__ import annotations
 
@@ -9,10 +9,10 @@ from custom_components.neakasa.coordinator import CLOUD_SESSION_OWNERS
 
 TRANSLATIONS_DIR = Path("custom_components/neakasa/translations")
 
-# Languages Home Assistant offers (frontend translationMetadata.json) plus
-# `ne`, which core integrations ship. Untranslated ones hold English
-# placeholders until real translations land, so the key trees must stay in
-# lockstep with en.json.
+# Every language Home Assistant itself offers (its frontend translation
+# metadata plus `ne`, which core integrations ship). Only the published ones
+# hold a real translation; the rest wait as English copies in the git-excluded
+# PENDING_DIR until they are actually translated.
 SUPPORTED_LANGUAGES = [
     "af",
     "ar",
@@ -81,7 +81,13 @@ SUPPORTED_LANGUAGES = [
     "zh-Hant",
 ]
 
-EXPECTED_FILES = sorted(f"{language}.json" for language in SUPPORTED_LANGUAGES)
+PUBLISHED_LANGUAGES = ["de", "en", "fr", "pl", "pt", "pt-BR"]
+PENDING_LANGUAGES = [
+    language for language in SUPPORTED_LANGUAGES if language not in PUBLISHED_LANGUAGES
+]
+
+EXPECTED_FILES = sorted(f"{language}.json" for language in PUBLISHED_LANGUAGES)
+PENDING_DIR = Path("tmp/translations")
 
 
 def _load_json(path: Path) -> dict:
@@ -111,6 +117,34 @@ def test_translations_files_present() -> None:
     assert actual == EXPECTED_FILES, (
         f"Translation files mismatch. Expected {EXPECTED_FILES}, got {actual}"
     )
+
+
+def test_no_english_placeholder_is_published() -> None:
+    """A file that is just an English copy must never ship in the published tree."""
+    en_bytes = (TRANSLATIONS_DIR / "en.json").read_bytes()
+    published = sorted(
+        path.name for path in TRANSLATIONS_DIR.glob("*.json") if path.name != "en.json"
+    )
+    copies = [
+        name for name in published if (TRANSLATIONS_DIR / name).read_bytes() == en_bytes
+    ]
+    assert not copies, f"English copies published: {copies}"
+
+
+def test_pending_placeholders_stay_publishable() -> None:
+    """Local scaffolding in the excluded dir must match en.json structurally."""
+    pending = sorted(path.name for path in PENDING_DIR.glob("*.json"))
+    if not pending:
+        return
+    expected = sorted(f"{language}.json" for language in PENDING_LANGUAGES)
+    assert pending == expected, (
+        f"Pending placeholders differ: expected {expected}, got {pending}"
+    )
+
+    en_keys = _collect_keys(_load_json(TRANSLATIONS_DIR / "en.json"))
+    for name in pending:
+        keys = _collect_keys(_load_json(PENDING_DIR / name))
+        assert keys == en_keys, f"{name} key tree drifted from en.json"
 
 
 def test_translations_symmetric_keys() -> None:

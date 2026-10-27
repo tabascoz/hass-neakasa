@@ -32,10 +32,12 @@ PR that satisfies (or removes) a rule.
 - Code is written in **English**: file names, class names, function names,
   variable names, dictionary keys, identifier strings.
 - User-facing strings live in `custom_components/neakasa/translations/`
-  only — never hardcoded in Python. `en.json` is the source of truth; every
-  other language Home Assistant offers has one file with the same key tree,
-  and untranslated ones hold English placeholders until real translations
-  land.
+  only — never hardcoded in Python. `en.json` is the source of truth, and a
+  language file is published only when it holds a real translation of that
+  language (`{en,de,fr,pl,pt,pt-BR}` today). Unreviewed placeholders for the
+  other languages Home Assistant offers wait in `tmp/translations/`, which is
+  git-excluded, and must keep the key tree of `en.json` until they are
+  translated and moved in.
 
 ## File organization
 
