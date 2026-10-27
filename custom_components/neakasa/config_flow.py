@@ -16,6 +16,7 @@ from .exceptions import (
     NeakasaApiClientAuthenticationError,
     NeakasaApiClientCommunicationError,
 )
+from .log_redact import account_label
 from .options_flow import NeakasaOptionsFlow
 
 
@@ -76,7 +77,7 @@ class NeakasaConfigFlow(ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]  #
             else:
                 _LOGGER.debug(
                     "Account %s validated — credentials accepted",
-                    username,
+                    account_label(username),
                 )
                 return self.async_create_entry(
                     title=f"Neakasa ({username})",

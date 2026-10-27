@@ -3,27 +3,27 @@
     "config": {
         "step": {
             "user": {
-                "title": "Konto Neakasa",
-                "description": "Dane logowanie zostaną użyte do pobrania danych z serwera.",
+                "title": "Konfiguracja Neakasa",
+                "description": "Dane logowania zostaną użyte do pobrania danych z serwera.",
                 "data": {
                     "username": "Nazwa użytkownika",
                     "password": "Hasło"
                 }
             },
             "reauth_confirm": {
-                "title": "Reauthenticate Neakasa",
-                "description": "Your Neakasa credentials for {username} are no longer valid. Enter new credentials to restore access.",
+                "title": "Ponowna uwierzytelnienie Neakasa",
+                "description": "Twoje dane logowania Neakasa dla {username} nie są już prawidłowe. Wprowadź nowe dane, aby przywrócić dostęp.",
                 "data": {
-                    "username": "Username",
-                    "password": "Password"
+                    "username": "Nazwa użytkownika",
+                    "password": "Hasło"
                 }
             },
             "reconfigure": {
-                "title": "Reconfigure Neakasa",
-                "description": "Update your Neakasa account credentials.",
+                "title": "Zmieniaj konfigurację Neakasa",
+                "description": "Zaktualizuj dane logowania do swojego konta Neakasa.",
                 "data": {
-                    "username": "Username",
-                    "password": "Password"
+                    "username": "Nazwa użytkownika",
+                    "password": "Hasło"
                 }
             }
         },
@@ -32,13 +32,13 @@
             "unknown": "Nieznany błąd.",
             "connection": "Błąd połączenia.",
             "no_devices_found": "Nie znaleziono urządzeń Neakasa CatLitter na tym koncie.",
-            "reauth_successful": "Reauthentication successful.",
-            "reconfigure_successful": "Reconfiguration successful."
+            "reauth_successful": "Ponowne uwierzytelnienie powiodło się.",
+            "reconfigure_successful": "Zmiana konfiguracji powiodła się."
         },
         "error": {
-            "authentication": "Invalid username or password.",
-            "connection": "Could not connect to Neakasa servers. Check your network.",
-            "no_devices_found": "No CatLitter devices found for this account."
+            "authentication": "Nieprawidłowa nazwa użytkownika lub hasło.",
+            "connection": "Nie można połączyć się z serwerami Neakasa. Sprawdź swoje połączenie sieciowe.",
+            "no_devices_found": "Nie znaleziono urządzeń CatLitter na tym koncie."
         }
     },
     "entity": {
@@ -50,15 +50,42 @@
                 "name": "Wypoziomuj"
             },
             "feed_now": {
-                "name": "Feeding now"
+                "name": "Nakarm teraz"
+            },
+            "refresh_data": {
+                "name": "Odśwież dane"
+            },
+            "reset_desiccant": {
+                "name": "Wymieniono pochłaniacz wilgoci"
+            },
+            "reset_bowl_scale": {
+                "name": "Wyzeruj wagę miski"
+            },
+            "calibrate_food_scale": {
+                "name": "Skalibruj wagę karmy"
+            },
+            "mark_water_bin_clean": {
+                "name": "Zbiornik na wodę został wyczyszczony"
+            },
+            "mark_food_bin_clean": {
+                "name": "Pojemnik na karmę został wyczyszczony"
             }
         },
         "number": {
             "food_grams": {
-                "name": "Food quantity"
+                "name": "Ilość karmy"
             },
             "water_ratio": {
-                "name": "Water ratio"
+                "name": "Stosunek wody"
+            },
+            "rehydration_minutes": {
+                "name": "Czas nawadniania"
+            },
+            "desiccant_days": {
+                "name": "Dni działania pochłaniacza wilgoci"
+            },
+            "feed_sound_volume": {
+                "name": "Głośność dźwięku posiłku"
             }
         },
         "binary_sensor": {
@@ -66,18 +93,24 @@
                 "name": "Pojemnik pełen"
             },
             "cover_absent": {
-                "name": "Abda missing"
+                "name": "Brak pokrywy"
+            },
+            "serving_food": {
+                "name": "Wydawanie karmy"
+            },
+            "bowl_in_place": {
+                "name": "Miska na miejscu"
             }
         },
         "sensor": {
             "cat_sensor": {
-                "name": "kot {name}"
+                "name": "Kot {name}"
             },
             "sand_percent": {
                 "name": "Poziom żwirku"
             },
             "wifi_rssi": {
-                "name": "WiFi RSSI"
+                "name": "Wi-Fi RSSI"
             },
             "stay_time": {
                 "name": "Długość ostatniego pobytu"
@@ -86,9 +119,9 @@
                 "name": "Ostatni pobyt"
             },
             "current_status": {
-                "name": "Status kuwety",
+                "name": "Status urządzenia",
                 "state": {
-                    "idle": "Oczekiwanie",
+                    "idle": "Bezczynny",
                     "cleaning": "Czyszczenie",
                     "leveling": "Poziomowanie",
                     "flipover": "Do góry dnem",
@@ -112,20 +145,88 @@
                 "state": {
                     "normal": "Normalny",
                     "full": "Pełny",
-                    "missing": "Poza podstawą"
+                    "missing": "Brak pojemnika"
                 }
             },
             "device_label": {
-                "name": "Etyquette device"
+                "name": "Etykieta urządzenia"
             },
             "food_level": {
-                "name": "Level food"
+                "name": "Poziom karmy"
             },
             "water_level": {
-                "name": "Level water"
+                "name": "Poziom wody"
             },
             "battery": {
-                "name": "Akku"
+                "name": "Bateria"
+            },
+            "cloud_session_status": {
+                "name": "Status sesji w chmurze",
+                "state": {
+                    "unknown": "Nieznany",
+                    "home_assistant": "Home Assistant",
+                    "not_home_assistant": "Poza Home Assistant"
+                },
+                "state_attributes": {
+                    "options": {
+                        "state": {
+                            "unknown": "Nieznany",
+                            "home_assistant": "Home Assistant",
+                            "not_home_assistant": "Poza Home Assistant"
+                        }
+                    }
+                }
+            },
+            "bowl_weight": {
+                "name": "Waga miski"
+            },
+            "desiccant_days_left": {
+                "name": "Pozostałe dni pochłaniacza wilgoci"
+            },
+            "device_serial": {
+                "name": "Numer seryjny urządzenia"
+            },
+            "firmware_version": {
+                "name": "Wersja oprogramowania układowego"
+            },
+            "food_intake_today": {
+                "name": "Karma wydana dzisiaj"
+            },
+            "water_bin_clean": {
+                "name": "Ostatnie czyszczenie zbiornika na wodę"
+            },
+            "food_bin_clean": {
+                "name": "Ostatnie czyszczenie pojemnika na karmę"
+            },
+            "device_status": {
+                "name": "Status urządzenia",
+                "state": {
+                    "idle": "Bezczynny",
+                    "preparing_food": "Przygotowywanie posiłku",
+                    "serving_food": "Wydawanie posiłku",
+                    "paused": "Wstrzymano",
+                    "fault": "Awarie / Błąd",
+                    "sleeping": "Tryb uśpienia",
+                    "freshness_protection": "Ochrona świeżości",
+                    "deep_cleaning": "Głębokie czyszczenie"
+                }
+            },
+            "deep_clean_state": {
+                "name": "Stan głębokiego czyszczenia",
+                "state": {
+                    "not_washing": "Nie myje",
+                    "washing_water_channel": "Mycie kanału wodnego",
+                    "water_channel_washed": "Kanał wodny umyty",
+                    "rinsing_water_channel": "Płukanie kanału wodnego"
+                }
+            },
+            "battery_state": {
+                "name": "Stan baterii",
+                "state": {
+                    "not_fitted": "Bateria niezamontowana",
+                    "charging": "Ładowanie",
+                    "in_use": "W użyciu"
+                }
             }
         },
         "switch": {
@@ -136,10 +237,10 @@
                 "name": "Tryb dla kociąt"
             },
             "child_lock": {
-                "name": "Blokada panelu"
+                "name": "Blokada rodzicielska"
             },
             "auto_bury": {
-                "name": "Automatyczne czyszczenie"
+                "name": "Automatyczne przykrywanie"
             },
             "auto_level": {
                 "name": "Automatyczne poziomowanie"
@@ -155,6 +256,25 @@
             },
             "feed_keep_as_new_defaults": {
                 "name": "Domyślna porcja karmy"
+            },
+            "fresh_meal_manager": {
+                "name": "Utrzymuj świeżość posiłku"
+            },
+            "display_standby": {
+                "name": "Wyświetlacz w trybie bezczynności"
+            },
+            "do_not_disturb": {
+                "name": "Nie przeszkadzać"
+            }
+        },
+        "select": {
+            "display_standby_kind": {
+                "name": "Rodzaj ekranu gotowości"
+            }
+        },
+        "text": {
+            "display_custom_message": {
+                "name": "Własna wiadomość na ekranie gotowości"
             }
         }
     }

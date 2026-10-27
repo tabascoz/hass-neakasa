@@ -15,7 +15,10 @@ if TYPE_CHECKING:
     from ..data import NeakasaConfigEntry
 
 from ..const import DOMAIN
+from .desiccant_days import NeakasaDesiccantDaysNumber
+from .feed_sound_volume import NeakasaFeedSoundVolumeNumber
 from .food_grams import NeakasaFoodGramsNumber
+from .rehydration_minutes import NeakasaRehydrationMinutesNumber
 from .water_ratio import NeakasaWaterRatioNumber
 
 
@@ -49,6 +52,9 @@ async def async_setup_entry(
                 [
                     NeakasaFoodGramsNumber(coordinator, device_info, iot_id),
                     NeakasaWaterRatioNumber(coordinator, device_info, iot_id),
+                    NeakasaRehydrationMinutesNumber(coordinator, device_info, iot_id),
+                    NeakasaDesiccantDaysNumber(coordinator, device_info, iot_id),
+                    NeakasaFeedSoundVolumeNumber(coordinator, device_info, iot_id),
                 ]
             )
         async_add_entities(entities)

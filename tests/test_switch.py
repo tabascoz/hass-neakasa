@@ -536,7 +536,7 @@ async def test_feed_keep_defaults_turn_off() -> None:
 
 
 async def test_feed_keep_defaults_async_setup_entry(hass: HomeAssistant) -> None:
-    """A Riko gets this switch only; cat devices keep their eight switches."""
+    """A Riko gets its own switches; cat devices keep their eight."""
     from custom_components.neakasa.const import DOMAIN
     from custom_components.neakasa.switch import async_setup_entry as switch_setup
 
@@ -552,5 +552,5 @@ async def test_feed_keep_defaults_async_setup_entry(hass: HomeAssistant) -> None
     collected: list = []
     await switch_setup(hass, config_entry, collected.extend)
 
-    assert len(collected) == 1
+    assert len(collected) == 4
     assert isinstance(collected[0], NeakasaFeedKeepDefaultsSwitch)

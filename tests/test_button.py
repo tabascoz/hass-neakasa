@@ -7,7 +7,11 @@ from unittest.mock import AsyncMock, MagicMock
 from custom_components.neakasa.button import async_setup_entry
 from custom_components.neakasa.button.clean import NeakasaCleanButton
 from custom_components.neakasa.button.level import NeakasaLevelButton
-from custom_components.neakasa.coordinator import NeakasaDeviceSnapshot
+from custom_components.neakasa.button.refresh_data import NeakasaRefreshDataButton
+from custom_components.neakasa.coordinator import (
+    NeakasaCoordinator,
+    NeakasaDeviceSnapshot,
+)
 
 FAKE_SNAPSHOT = NeakasaDeviceSnapshot(
     iot_id="iot-001",
@@ -99,7 +103,7 @@ async def test_button_lifecycle(hass) -> None:
 
 
 async def test_async_setup_entry(hass) -> None:
-    """Test that setup registers clean and level buttons per device."""
+    """Setup registers the device buttons and the account button once."""
     from custom_components.neakasa.const import DOMAIN
 
     coordinator = MagicMock()
@@ -115,12 +119,26 @@ async def test_async_setup_entry(hass) -> None:
 
     await async_setup_entry(hass, config_entry, collected.extend)
 
-    assert len(collected) == 2
+    assert len(collected) == 3  # clean, level and the account button
     assert any(isinstance(e, NeakasaCleanButton) for e in collected)
     assert any(isinstance(e, NeakasaLevelButton) for e in collected)
+    assert sum(isinstance(e, NeakasaRefreshDataButton) for e in collected) == 1
     assert config_entry.async_on_unload.called
 
     # A second discovery pass must not duplicate the entities
     rediscover = coordinator.async_add_listener.call_args.args[0]
     rediscover()
-    assert len(collected) == 2
+    # A second pass adds no account button: there is one account.
+    assert len(collected) == 3
+
+
+async def test_a_press_pushes_the_state_it_changed(hass, mock_config_entry) -> None:
+    """A clean press marks the model changed and re-sets the data."""
+    coordinator = NeakasaCoordinator(hass, mock_config_entry)
+    coordinator._get_client = AsyncMock(return_value=AsyncMock())
+    coordinator.data = {"iot-001": FAKE_SNAPSHOT}
+    before = coordinator.state_fingerprint("iot-001")
+
+    await coordinator.invoke_service("iot-001", "clean")
+
+    assert coordinator.state_fingerprint("iot-001") != before

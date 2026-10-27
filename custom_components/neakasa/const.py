@@ -25,4 +25,23 @@ FEED_WATER_RATIO_MAX = 5
 DEFAULT_FEED_FOOD_G = 5
 DEFAULT_FEED_WATER_RATIO = 1
 
+# The wet-meal defaults carry a rehydration time as well: the machine's own
+# definition names `defFdCfg.mixMin` in minutes and allows 0-30.
+MIX_MIN_MIN = 0
+MIX_MIN_MAX = 30
+
+# The sound the machine plays when it delivers a meal. Its definition allows a
+# volume up to 200, and the unit reports 100; the integration offers 0-100 only,
+# where 0 is silence, so a setting here is inside what the machine has seen.
+FEED_SOUND_VOLUME_MIN = 0
+FEED_SOUND_VOLUME_MAX = 100
+
+# The desiccant pack's day budget. The definition allows 1-60 days.
+DESICCANT_DAYS_MIN = 1
+DESICCANT_DAYS_MAX = 60
+
+# The text the front display shows when the machine is idle. The definition
+# allows 50 characters.
+DISPLAY_PARAM_MAX_CHARS = 50
+
 LOGGER = _LOGGER = logging.getLogger(__package__)

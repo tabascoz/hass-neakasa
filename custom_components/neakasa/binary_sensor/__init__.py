@@ -16,7 +16,9 @@ if TYPE_CHECKING:
 
 from ..const import DOMAIN
 from .bin_full import NeakasaBinFullBinarySensor
+from .bowl_in_place import NeakasaBowlInPlaceBinarySensor
 from .cover_absent import NeakasaCoverAbsentBinarySensor
+from .serving_food import NeakasaServingFoodBinarySensor
 
 
 async def async_setup_entry(
@@ -44,8 +46,18 @@ async def async_setup_entry(
                 identifiers={(DOMAIN, iot_id)},
             )
             if snap.category_key == "petFeeder":
-                entities.append(
-                    NeakasaCoverAbsentBinarySensor(coordinator, device_info, iot_id)
+                entities.extend(
+                    [
+                        NeakasaCoverAbsentBinarySensor(
+                            coordinator, device_info, iot_id
+                        ),
+                        NeakasaBowlInPlaceBinarySensor(
+                            coordinator, device_info, iot_id
+                        ),
+                        NeakasaServingFoodBinarySensor(
+                            coordinator, device_info, iot_id
+                        ),
+                    ]
                 )
                 continue
             entities.append(

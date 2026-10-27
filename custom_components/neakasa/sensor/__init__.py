@@ -16,11 +16,22 @@ if TYPE_CHECKING:
 
 from ..const import DOMAIN
 from .battery import NeakasaBatterySensor
+from .battery_state import NeakasaBatteryStateSensor
 from .bin_state import NeakasaBinStateSensor
+from .bowl_weight import NeakasaBowlWeightSensor
 from .bucket_status import NeakasaBucketStatusSensor
 from .cat_weight import NeakasaCatWeightSensor
+from .cloud_session import NeakasaCloudSessionStatusSensor
+from .deep_clean_state import NeakasaDeepCleanStateSensor
+from .desiccant_days_left import NeakasaDesiccantDaysLeftSensor
+from .device_serial import NeakasaDeviceSerialSensor
+from .device_status import NeakasaDeviceStatusSensor
+from .firmware_version import NeakasaFirmwareVersionSensor
+from .food_intake_today import NeakasaFoodIntakeTodaySensor
 from .food_level import NeakasaFoodLevelSensor
 from .label import NeakasaLabelSensor
+from .last_bin_clean_food import NeakasaFoodBinCleanSensor
+from .last_bin_clean_water import NeakasaWaterBinCleanSensor
 from .last_usage import NeakasaLastUsageSensor
 from .sand_level_state import NeakasaSandLevelStateSensor
 from .sand_percent import NeakasaSandPercentSensor
@@ -38,11 +49,33 @@ async def async_setup_entry(
     entry = cast("NeakasaConfigEntry", config_entry)
     coordinator: NeakasaCoordinator = entry.runtime_data.coordinator
 
+    # One name for the account device, shared by the platforms that add
+    # the account-level entities. It follows the config entry, not the
+    # credentials, so reconfiguring to another account keeps this device.
+    account_id = f"account:{config_entry.entry_id}"
+
     _seen_iot_ids: set[str] = set()
+    _account_added = False
 
     @callback
     def _discover() -> None:
+        nonlocal _account_added
         entities: list = []
+        if not _account_added:
+            # The account-level entities exist once per config entry, not once
+            # per device: what they describe is the account, not a machine.
+            _account_added = True
+            entities.append(
+                NeakasaCloudSessionStatusSensor(
+                    coordinator,
+                    DeviceInfo(
+                        name="Neakasa account",
+                        manufacturer="Neakasa",
+                        identifiers={(DOMAIN, account_id)},
+                    ),
+                    account_id,
+                ),
+            )
         for iot_id, snap in coordinator.data.items():
             if iot_id in _seen_iot_ids:
                 continue
@@ -60,7 +93,19 @@ async def async_setup_entry(
                         NeakasaFoodLevelSensor(coordinator, device_info, iot_id),
                         NeakasaWaterLevelSensor(coordinator, device_info, iot_id),
                         NeakasaBatterySensor(coordinator, device_info, iot_id),
+                        NeakasaBatteryStateSensor(coordinator, device_info, iot_id),
                         NeakasaWifiRssiSensor(coordinator, device_info, iot_id),
+                        NeakasaDeviceStatusSensor(coordinator, device_info, iot_id),
+                        NeakasaBowlWeightSensor(coordinator, device_info, iot_id),
+                        NeakasaDeepCleanStateSensor(coordinator, device_info, iot_id),
+                        NeakasaDesiccantDaysLeftSensor(
+                            coordinator, device_info, iot_id
+                        ),
+                        NeakasaDeviceSerialSensor(coordinator, device_info, iot_id),
+                        NeakasaFirmwareVersionSensor(coordinator, device_info, iot_id),
+                        NeakasaFoodIntakeTodaySensor(coordinator, device_info, iot_id),
+                        NeakasaWaterBinCleanSensor(coordinator, device_info, iot_id),
+                        NeakasaFoodBinCleanSensor(coordinator, device_info, iot_id),
                     ]
                 )
                 continue

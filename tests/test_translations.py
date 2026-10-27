@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from custom_components.neakasa.coordinator import CLOUD_SESSION_OWNERS
+
 TRANSLATIONS_DIR = Path("custom_components/neakasa/translations")
 
 EXPECTED_FILES = sorted(["en.json", "de.json", "fr.json", "pl.json"])
@@ -82,3 +84,19 @@ def test_translations_config_flow_keys() -> None:
     actual_abort_keys = set(en_data.get("config", {}).get("abort", {}).keys())
     missing_abort = required_abort_keys - actual_abort_keys
     assert not missing_abort, f"en.json missing config.abort keys: {missing_abort}"
+
+
+def test_the_session_states_are_labelled_in_every_language() -> None:
+    """Every state the account sensor can report has a label everywhere."""
+    for name in EXPECTED_FILES:
+        entity = _load_json(TRANSLATIONS_DIR / name)["entity"]["sensor"][
+            "cloud_session_status"
+        ]
+        labels = entity["state"]
+        assert sorted(labels) == sorted(CLOUD_SESSION_OWNERS), (
+            f"{name}: states differ from what the sensor reports"
+        )
+        assert all(label.strip() for label in labels.values()), f"{name}: empty label"
+        assert entity["state_attributes"]["options"]["state"] == labels, (
+            f"{name}: the picker and the state disagree"
+        )

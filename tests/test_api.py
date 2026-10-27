@@ -12,6 +12,7 @@ from custom_components.neakasa.api import (
     APIAuthError,
     APIConnectionError,
     NeakasaAPI,
+    _describe_fields,
 )
 from custom_components.neakasa.iot_gateway import IoTResponse
 
@@ -252,6 +253,30 @@ def _login_payload() -> dict:
             "login_token": "encrypted-login-token",
         },
     }
+
+
+def test_field_names_reach_the_journal_without_the_values() -> None:
+    """The instrument names the fields the cloud sent, never their contents."""
+    assert _describe_fields(_login_payload()) == (
+        "code data data.login_token data.user_info "
+        "data.user_info.ali_authentication_token"
+    )
+    assert "ali-token" not in _describe_fields(_login_payload())
+    assert "encrypted-login-token" not in _describe_fields(_login_payload())
+
+
+async def test_the_login_answer_is_named_by_its_fields() -> None:
+    """A sign-in publishes the shape of the answer it got back."""
+    api = _make_api()
+    api.baseurl = "https://web.example.com"
+    api._encryption = MagicMock()
+    api._encryption.decodeLoginToken = AsyncMock()
+    api._session.post = MagicMock(
+        return_value=_FakeJSONResponse(json_data=_login_payload())
+    )
+    with patch("custom_components.neakasa.api._LOGGER") as log:
+        await api._load_auth_tokens("user@example.com", "password")
+        log.info.assert_any_call("Login fields: %s", _describe_fields(_login_payload()))
 
 
 async def test_load_auth_tokens_happy() -> None:

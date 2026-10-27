@@ -19,6 +19,7 @@ from custom_components.neakasa.coordinator import (
 from custom_components.neakasa.exceptions import (
     NeakasaApiClientCommunicationError,
 )
+from custom_components.neakasa.log_redact import device_label
 from custom_components.neakasa.number.food_grams import NeakasaFoodGramsNumber
 from custom_components.neakasa.number.water_ratio import NeakasaWaterRatioNumber
 from custom_components.neakasa.sensor.battery import NeakasaBatterySensor
@@ -74,6 +75,10 @@ def test_build_pet_feeder_reads_levels() -> None:
     assert snap.desiccant_days_left == 40
     assert snap.fresh_mgr_on is True
     assert snap.deep_clean_on is False
+    assert snap.deep_clean_state == 0
+    assert snap.battery_state == 2
+    assert snap.device_state == 0
+    assert snap.bucket_status == 0, "a feeder keeps its own state, not the litter box's"
     assert snap.wifi_rssi == -43
     assert snap.label == "TestLabel"
     assert snap.default_food_g == 5
@@ -91,6 +96,9 @@ def test_build_pet_feeder_missing_optional_keys() -> None:
     assert snap.bowl_present is False
     assert snap.desiccant_days_left is None
     assert snap.bucket_status == 0
+    assert snap.battery_state is None
+    assert snap.device_state_ts is None
+    assert snap.device_state_param is None
 
 
 def test_build_pet_feeder_empty_properties() -> None:
@@ -323,7 +331,7 @@ async def test_feed_once_logs_and_records_the_last_feed(
 
     logger.debug.assert_any_call(
         "Riko feedOnce %s: %s",
-        "riko-1",
+        device_label("riko-1"),
         {"food": 6, "water": 12, "bSaveAsDef": 0},
     )
     assert coordinator.last_feed("riko-1") == {

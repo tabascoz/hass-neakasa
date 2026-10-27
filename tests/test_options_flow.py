@@ -28,6 +28,8 @@ async def test_options_flow_show_form(hass: HomeAssistant) -> None:
     assert "stats_lookback_days" in schema
     assert "debug_probe" in schema
     assert "feed_keep_as_new_defaults" in schema
+    assert "account_session_window_minutes" not in schema
+    assert "session_regain_policy" not in schema
 
 
 async def test_options_flow_uses_existing_options(hass: HomeAssistant) -> None:
@@ -40,7 +42,8 @@ async def test_options_flow_uses_existing_options(hass: HomeAssistant) -> None:
             "scan_interval": 120,
             "stats_lookback_days": 14,
             "feed_keep_as_new_defaults": False,
-            "debug_probe": "set_fresh_mgr_on",
+            "account_session_window_minutes": 45,
+            "session_regain_policy": "never",
             "debug_invoke_identifier": "",
             "debug_invoke_args_json": "{}",
         },

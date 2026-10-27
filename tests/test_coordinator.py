@@ -558,9 +558,14 @@ async def test_reconnect_and_retry_success(
     mock_config_entry: MagicMock,
     mock_get_shared_api: MagicMock,
 ) -> None:
-    """Test that _reconnect_and_retry reconnects and re-runs the update."""
+    """Test that a failed token renewal falls back to a full reconnect."""
     coordinator = _make_coordinator(hass, mock_config_entry)
     coordinator.async_update_data = AsyncMock(return_value={"iot-001": MagicMock()})
+    client = AsyncMock()
+    client.refresh_session = AsyncMock(
+        side_effect=NeakasaApiClientSessionExpiredError("rejected")
+    )
+    coordinator._get_client = AsyncMock(return_value=client)
 
     with patch(
         "custom_components.neakasa.coordinator.force_reconnect_api",
@@ -568,7 +573,9 @@ async def test_reconnect_and_retry_success(
     ) as reconnect:
         result = await coordinator._reconnect_and_retry()
 
-    reconnect.assert_awaited_once_with(hass, "test@example.com", "hunter2")
+    reconnect.assert_awaited_once_with(
+        hass, "test@example.com", "hunter2", "session expired"
+    )
     assert "iot-001" in result
 
 
@@ -577,8 +584,13 @@ async def test_reconnect_and_retry_failure(
     mock_config_entry: MagicMock,
     mock_get_shared_api: MagicMock,
 ) -> None:
-    """Test that failing reconnection raises UpdateFailed."""
+    """Test that a failing re-authentication after a failed renewal raises."""
     coordinator = _make_coordinator(hass, mock_config_entry)
+    client = AsyncMock()
+    client.refresh_session = AsyncMock(
+        side_effect=NeakasaApiClientSessionExpiredError("rejected")
+    )
+    coordinator._get_client = AsyncMock(return_value=client)
 
     with (
         patch(

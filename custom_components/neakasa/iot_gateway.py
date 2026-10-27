@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from email.utils import formatdate
 from typing import TYPE_CHECKING, Any
 
+from .log_redact import redact_text
+
 if TYPE_CHECKING:
     from aiohttp import ClientSession
 
@@ -186,7 +188,7 @@ class AliyunIoTClient:
                     "IoT gateway HTTP %s on %s: %s",
                     resp.status,
                     pathname,
-                    body_bytes[:500],
+                    redact_text(body_bytes[:500]),
                 )
             return IoTResponse(
                 status_code=resp.status,

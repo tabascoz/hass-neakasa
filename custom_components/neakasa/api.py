@@ -15,9 +15,82 @@ from aiohttp import ClientError
 from .api_encryption import APIEncryption
 from .const import _LOGGER
 from .iot_gateway import AliyunIoTClient, IoTConfig, IoTResponse
+from .log_redact import device_label, redact_text
 
 if TYPE_CHECKING:
     from aiohttp import ClientSession
+
+
+# The IoT Gateway calls that change a device instead of reading it. A write is
+# rare, always caused by a user action, and it is the one call whose effect on
+# the account we cannot see in the journal today: it returns 200 and logs
+# nothing at all, which makes "did this press touch the cloud" unanswerable.
+# Naming every accepted write is what the app-side tests need.
+_WRITE_PATHS: tuple[str, ...] = ("/thing/properties/set", "/thing/service/invoke")
+
+
+# The calls that present the account to the cloud: an accepted one is as good a
+# session-mover as a rejected one, and accepted ones log nothing at all - which
+# is why the runs of 2026-10-26 could only count refusals and infer the rest.
+# Naming every accepted presentation makes the number of presentations per hour,
+# the actual lever, measurable from the journal. The IoT token exchange also
+# moves the session and is named where it happens, in _get_iot_token_by_sid.
+_PRESENTATION_PATHS: tuple[str, ...] = ("/uc/listBindingByAccount", "/catbox/record")
+
+
+def _field_names(payload: object, prefix: str = "") -> list[str]:
+    """Return the dotted names of the fields a decoded response carries."""
+    if not isinstance(payload, dict):
+        return [prefix] if prefix else []
+    names: list[str] = []
+    for key, value in payload.items():
+        path = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict):
+            names.append(path)
+            names.extend(_field_names(value, path))
+        else:
+            names.append(path)
+    return names
+
+
+def _describe_fields(payload: object) -> str:
+    """
+    Name what the cloud returned, one space-separated line, values never.
+
+    The lifetime of a session is the one thing about the account we have had to
+    guess, and the login answer is the only place the cloud could state it for
+    free: every start already pays one sign-in. Naming the fields - not their
+    values, which are tokens, an address and a name - is what tells us whether
+    a session lifetime is being sent at all, and where.
+    """
+    return " ".join(sorted(_field_names(payload)))
+
+
+def _presentation_path(url: str) -> str:
+    """Return the account path an URL presents, or "" when it does not."""
+    for candidate in _PRESENTATION_PATHS:
+        if url.endswith(candidate):
+            return candidate
+    return ""
+
+
+def _describe_presentation(pathname: str, params: dict[str, Any]) -> str:
+    """Return one line naming an accepted account call and what it was about."""
+    device = params.get("device_name")
+    if device is None:
+        return pathname
+    return f"{pathname} device={device_label(str(device))}"
+
+
+def _describe_write(pathname: str, params: dict[str, Any]) -> str:
+    """Return one line naming an accepted write, the device and the payload."""
+    target = device_label(str(params.get("iotId", "")))
+    if pathname == "/thing/service/invoke":
+        identifier = params.get("identifier", "")
+        args = params.get("args", {})
+        return f"{pathname} iotId={target} identifier={identifier} args={args}"
+    items = params.get("items", {})
+    return f"{pathname} iotId={target} items={items}"
 
 
 class NeakasaAPI:
@@ -114,7 +187,7 @@ class NeakasaAPI:
                     _LOGGER.error(
                         "Base URL failed with status %s: %s",
                         response.status,
-                        text[:400],
+                        redact_text(text[:400]),
                     )
                     raise APIConnectionError("Error connecting to api.")
 
@@ -123,7 +196,9 @@ class NeakasaAPI:
                 except Exception as e:
                     text = await response.text()
                     _LOGGER.error(
-                        "Failed to parse base URL JSON: %s. Body: %s", e, text[:400]
+                        "Failed to parse base URL JSON: %s. Body: %s",
+                        e,
+                        redact_text(text[:400]),
                     )
                     raise APIConnectionError("Error connecting to api.") from e
 
@@ -170,13 +245,12 @@ class NeakasaAPI:
                     response.status,
                     response.content_type or "EMPTY",
                 )
-
                 if response.status != 200:
                     text = await response.text()
                     _LOGGER.error(
                         "Login failed with status %s: %s",
                         response.status,
-                        text[:500],
+                        redact_text(text[:500]),
                     )
                     raise APIConnectionError("Error connecting to api.")
 
@@ -185,9 +259,13 @@ class NeakasaAPI:
                 except Exception as e:
                     text = await response.text()
                     _LOGGER.error(
-                        "Failed to parse login JSON: %s. Body: %s", e, text[:500]
+                        "Failed to parse login JSON: %s. Body: %s",
+                        e,
+                        redact_text(text[:500]),
                     )
                     raise APIConnectionError("Error connecting to api.") from e
+
+                _LOGGER.info("Login fields: %s", _describe_fields(response_json))
 
                 if response_json["code"] != 0:
                     raise APIAuthError(
@@ -306,6 +384,13 @@ class NeakasaAPI:
         if data["code"] != 200:
             self.connected = False
             raise APIAuthError("Error getting iot token: " + data["message"])
+        # The exchange resolves the account session, so it moves it: measured on
+        # 2026-10-26, an exchange at 17:15:15 was followed by the mobile app
+        # needing a sign-in at 17:15:30. Naming it is what makes the number of
+        # session-movers an hour countable instead of inferred.
+        _LOGGER.info(
+            "Session moved by a token exchange: /account/createSessionByAuthCode"
+        )
         return data["data"]["iotToken"]
 
     # ------------------------------------------------------------------
@@ -336,10 +421,16 @@ class NeakasaAPI:
                 "IoT cloud error — path=%s code=%s message=%r data_keys=%s",
                 pathname,
                 data["code"],
-                error_msg,
+                redact_text(error_msg),
                 list(data.keys()),
             )
             raise APIConnectionError(f"Error in {pathname}: {error_msg}")
+        if pathname in _WRITE_PATHS:
+            _LOGGER.info("Cloud write: %s", _describe_write(pathname, params))
+        elif pathname in _PRESENTATION_PATHS:
+            _LOGGER.info(
+                "Account presentation: %s", _describe_presentation(pathname, params)
+            )
         return data["data"]
 
     async def _iot_request_once(
@@ -379,6 +470,26 @@ class NeakasaAPI:
         except APIAuthError as err:
             _LOGGER.warning("IoT token refresh rejected: %s", err)
 
+    async def refresh_session(self) -> None:
+        """Exchange the current session for a fresh IoT token, keeping errors.
+
+        One call instead of the six a full re-login needs, so a recovered
+        session does not stack new sessions on the account. Raises where
+        :meth:`_refresh_iot_token` would log, so callers can fall back.
+        """
+        self._iot_token = await self._get_iot_token_by_sid(self._sid)
+
+    async def debug_invalidate_tokens(self) -> None:
+        """Temporary debug tool: break both tokens this client holds.
+
+        The account token is the one ``/catbox/record`` signs with and the
+        IoT token is the one the device calls use, so the next scan must fail
+        for a token and take the session-recovery path. Removed with the test.
+        """
+        unusable = "invalid"
+        self._iot_token = unusable
+        self._encryption._token = unusable
+
     async def get_product_list(self) -> Any:
         """Fetch the product list for the account."""
         return await self._iot_request(
@@ -403,7 +514,7 @@ class NeakasaAPI:
 
     async def get_device_properties(self, iot_id: str) -> Any:
         """Fetch live device properties from Aliyun IoT."""
-        _LOGGER.debug("Getting device properties for iotId: %s", iot_id)
+        _LOGGER.debug("Getting device properties for iotId: %s", device_label(iot_id))
         _LOGGER.debug(
             "API connected: %s, iotToken present: %s",
             self.connected,
@@ -425,9 +536,9 @@ class NeakasaAPI:
 
     async def _invoke_service(
         self, iot_id: str, identifier: str, args: dict[str, Any]
-    ) -> None:
-        """Invoke a device service (clean, level, etc)."""
-        await self._iot_request(
+    ) -> Any:
+        """Invoke a device service (clean, level, etc) and return what it answers."""
+        return await self._iot_request(
             "1.0.5",
             "/thing/service/invoke",
             {"args": args, "identifier": identifier, "iotId": iot_id},
@@ -443,9 +554,9 @@ class NeakasaAPI:
 
     async def invoke_service(
         self, iot_id: str, identifier: str, args: dict[str, Any]
-    ) -> None:
-        """Invoke an arbitrary device service by wire identifier."""
-        await self._invoke_service(iot_id, identifier, args)
+    ) -> Any:
+        """Invoke an arbitrary device service by wire identifier; the reply is returned."""
+        return await self._invoke_service(iot_id, identifier, args)
 
     # ------------------------------------------------------------------
     # Neakasa web API (pure aiohttp — no Aliyun SDK)
@@ -453,6 +564,7 @@ class NeakasaAPI:
 
     async def _signed_get(self, url: str, params: dict[str, Any]) -> Any:
         """Internal: signed GET to the Neakasa web API."""
+        presented = _presentation_path(url)
         try:
             timestamp = int(time.time())
             signature = base64.b64encode(
@@ -475,6 +587,11 @@ class NeakasaAPI:
                 data = await response.json()
                 if data["code"] != 0:
                     raise APIConnectionError("Error getting data: " + data["message"])
+                if presented:
+                    _LOGGER.info(
+                        "Account presentation: %s",
+                        _describe_presentation(presented, params),
+                    )
                 return data["data"]
         except ClientError:
             raise APIConnectionError("Error connecting to api.")

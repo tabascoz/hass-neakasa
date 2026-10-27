@@ -9,6 +9,9 @@ from custom_components.neakasa.sensor import async_setup_entry
 from custom_components.neakasa.sensor.bin_state import NeakasaBinStateSensor
 from custom_components.neakasa.sensor.bucket_status import NeakasaBucketStatusSensor
 from custom_components.neakasa.sensor.cat_weight import NeakasaCatWeightSensor
+from custom_components.neakasa.sensor.cloud_session import (
+    NeakasaCloudSessionStatusSensor,
+)
 from custom_components.neakasa.sensor.label import NeakasaLabelSensor
 from custom_components.neakasa.sensor.last_usage import NeakasaLastUsageSensor
 from custom_components.neakasa.sensor.sand_level_state import (
@@ -432,7 +435,7 @@ async def test_sensor_lifecycle_methods(hass) -> None:
 
 
 async def test_sensor_async_setup_entry(hass) -> None:
-    """Test that setup registers base + per-cat sensors per device."""
+    """Setup registers the per-device sensors and the account sensor once."""
     from custom_components.neakasa.const import DOMAIN
 
     snap = _cat_weight_snap([])
@@ -451,9 +454,10 @@ async def test_sensor_async_setup_entry(hass) -> None:
 
     await async_setup_entry(hass, config_entry, collected.extend)
 
-    assert len(collected) == 9  # 8 base sensors (incl. label) + 1 cat sensor
+    assert len(collected) == 10  # 1 account sensor + 8 base + 1 cat sensor
     assert any(isinstance(e, NeakasaCatWeightSensor) for e in collected)
     assert any(isinstance(e, NeakasaLabelSensor) for e in collected)
+    assert sum(isinstance(e, NeakasaCloudSessionStatusSensor) for e in collected) == 1
 
     # Second discovery pass with a new device adds its entities only
     second_snap = _cat_weight_snap([])

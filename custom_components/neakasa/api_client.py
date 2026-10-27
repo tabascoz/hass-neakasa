@@ -12,11 +12,35 @@ from .exceptions import (
     NeakasaApiClientCommunicationError,
     NeakasaApiClientSessionExpiredError,
 )
+from .log_redact import redact_text
 
 _LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+
+
+_EXPIRED_TOKEN_PHRASES: tuple[str, ...] = (
+    "session",
+    "expired",
+    "auth",
+    "tokeninvalid",
+    "token is abnormal",
+)
+
+
+def _is_expired_token(message: str) -> bool:
+    """
+    Return whether *message* words a rejected token or session.
+
+    The IoT gateway answers with ``request auth error`` and its session words,
+    while the account web API behind ``/catbox/record`` answers with
+    ``TokenInvalid`` followed by ``token is abnormal``. All of them mean the
+    session we signed into is gone rather than the network having failed, so
+    they must take the session-recovery path and not the communication ladder.
+    """
+    lowered = message.lower()
+    return any(phrase in lowered for phrase in _EXPIRED_TOKEN_PHRASES)
 
 
 @asynccontextmanager
@@ -26,32 +50,32 @@ async def _translate_errors() -> AsyncIterator[None]:
         yield
     except APIAuthError as err:
         message = str(err)
-        if "session" in message.lower() or "expired" in message.lower():
+        if _is_expired_token(message):
             _LOGGER.info(
                 "Error translation: APIAuthError -> SessionExpired"
-                " (matched session/expired in: %r)",
-                message,
+                " (matched a token/auth phrase in: %r)",
+                redact_text(message),
             )
             raise NeakasaApiClientSessionExpiredError(message) from err
         _LOGGER.info(
             "Error translation: APIAuthError -> AuthenticationError"
-            " (no session keyword in: %r)",
-            message,
+            " (no token/auth phrase in: %r)",
+            redact_text(message),
         )
         raise NeakasaApiClientAuthenticationError(message) from err
     except APIConnectionError as err:
         message = str(err)
-        if "auth" in message.lower():
+        if _is_expired_token(message):
             _LOGGER.info(
                 "Error translation: APIConnectionError -> SessionExpired"
-                " (matched auth in: %r)",
-                message,
+                " (matched a token/auth phrase in: %r)",
+                redact_text(message),
             )
             raise NeakasaApiClientSessionExpiredError(message) from err
         _LOGGER.info(
             "Error translation: APIConnectionError -> CommunicationError"
-            " (no auth keyword in: %r)",
-            message,
+            " (no token/auth phrase in: %r)",
+            redact_text(message),
         )
         raise NeakasaApiClientCommunicationError(message) from err
 
@@ -71,6 +95,15 @@ class NeakasaApiClient:
     async def connect(self, username: str, password: str) -> None:
         """Delegate connect call without translation (used during initial setup)."""
         await self._api.connect(username, password)
+
+    async def refresh_session(self) -> None:
+        """Renew the IoT session token without a full re-login, translating errors."""
+        async with _translate_errors():
+            await self._api.refresh_session()
+
+    async def debug_invalidate_tokens(self) -> None:
+        """Break the tokens this client holds, so the next scan must recover them."""
+        await self._api.debug_invalidate_tokens()
 
     async def get_devices(self, page_no: int = 1, page_size: int = 20) -> Any:
         """Fetch devices, translating errors."""
@@ -109,10 +142,10 @@ class NeakasaApiClient:
 
     async def invoke_service(
         self, iot_id: str, identifier: str, args: dict[str, Any]
-    ) -> None:
-        """Invoke an arbitrary device service by wire identifier."""
+    ) -> Any:
+        """Invoke a device service; the machine's reply is returned."""
         async with _translate_errors():
-            await self._api.invoke_service(iot_id, identifier, args)
+            return await self._api.invoke_service(iot_id, identifier, args)
 
     async def get_product_list(self) -> Any:
         """Fetch the account's product schema (commands/properties)."""
