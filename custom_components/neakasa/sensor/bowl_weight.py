@@ -17,15 +17,15 @@ if TYPE_CHECKING:
 
 class NeakasaBowlWeightSensor(CoordinatorEntity[NeakasaCoordinator], SensorEntity):
     """
-    Grams on the feeder's own scale, including the bowl it is weighing.
+    Grams of contents in the bowl, from the machine's own scale and tare.
 
-    The number is what the cloud holds for the machine's scale, and that copy is
-    only as fresh as the machine's last push of that key - asking the cloud does
-    not refresh it - so the reading's own age travels with it in
-    `extra_state_attributes`: `scale_state_as_of` names the moment the machine
-    stated it and `scale_state_age_minutes` says how long ago that was, beside
-    the raw reading, the bowl's weight the machine states and whether the bowl is
-    in place. A reading two days old is shown as such rather than as the present.
+    The scale states one weight that includes the bowl, and the machine states
+    the bowl's tare beside it, so the value published is the difference clamped
+    at zero - what the app shows for the same bowl. The raw reading and the
+    tare are not hidden: they travel in `extra_state_attributes` with
+    `scale_state_as_of` and `scale_state_age_minutes`, because the cloud only
+    holds the state the machine last pushed for that key and asking it changes
+    nothing - this unit's copy kept the same value and stamp for two days.
     """
 
     _attr_should_poll = False
@@ -73,8 +73,21 @@ class NeakasaBowlWeightSensor(CoordinatorEntity[NeakasaCoordinator], SensorEntit
 
     @property
     def native_value(self) -> int | None:
-        """Return the grams the scale reads, or None when it does not report."""
+        """
+        Return what the bowl holds, or None when the scale does not report.
+
+        The scale's number includes the bowl (`curWeight`, 67 g observed here)
+        and the machine states the bowl's own tare beside it (`bowlGram`, 68 g
+        observed here), so the contents are the difference clamped at zero -
+        the scale sits a gram light, and an empty bowl is empty rather than
+        negative. That is the figure the Neakasa app shows for the same bowl.
+        With no tare stated there is nothing to subtract, so the raw reading is
+        what is shown; both parts and the moment they were stated are in
+        `extra_state_attributes` either way.
+        """
         snap = self._snap
-        if snap is None:
+        if snap is None or snap.bowl_weight_g is None:
             return None
-        return snap.bowl_weight_g
+        if snap.bowl_tare_g is None:
+            return snap.bowl_weight_g
+        return max(0, snap.bowl_weight_g - snap.bowl_tare_g)

@@ -31,7 +31,7 @@ The Neakasa Home Assistant Custom Integration allows you to integrate your Neaka
 |Number|Food quantity|portion used by the next Feed now, 3–15 g|
 |Number|Water ratio|water-to-food ratio used by the next Feed now, 1–5 (water amount = portion × ratio)|
 |Switch|Save feed as default|whether a Feed now stores the amounts it used on the machine; default off|
-|Sensor|Bowl weight|grams the machine's own scale reads, the bowl included; the tare it states is shown beside it|
+|Sensor|Bowl weight|grams the bowl holds - the machine's scale reading with its own tare subtracted, the raw reading and the tare shown beside it|
 |Sensor|Desiccant days left|the countdown the machine keeps for its desiccant pack|
 |Number|Desiccant days|the day budget for a fresh pack, 1–60|
 |Button|Desiccant pack is changed|restarts that countdown on the machine (`resetDrierTime`)|
@@ -193,13 +193,13 @@ of a copy that is up to five minutes old.
 
 **Bowl weight** now travels with the age of its reading. The cloud only holds the
 last state the machine pushed for `bowlStatus`, and asking it does not refresh that
-copy: this unit's reading stayed at 67 g with a stamp of two days earlier while the
-machine's own display moved, `get` is answered with "service not found" and `iotRead`
-is accepted but leaves the stamp put. The sensor reports the number the cloud holds
-together with `scale_state_as_of` and `scale_state_age_minutes` (beside the raw
-reading and the bowl's own tare), so an old number is shown as old rather than as the
-present. The app's own figure is not comparable at this moment: it reads the machine
-through its own channel, not the cloud's snapshot.
+copy: this unit's reading stayed at a scale value with a stamp of two days earlier while
+the machine's own display moved, `get` is answered with "service not found" and `iotRead`
+is accepted but leaves the stamp put. The sensor now publishes the bowl's **contents** -
+the scale reading with the machine's own tare subtracted, clamped at zero, so this unit's
+67 g on the scale against a 68 g tare is an empty bowl, the figure the app shows - and
+carries `scale_state_as_of`, `scale_state_age_minutes`, the raw reading and the tare as
+attributes, so an old number is read as old rather than as the present.
 
 What that release also records is the one thing it cannot make better: with the
 integration running, the Neakasa mobile app (iOS and the Android APK) reports the

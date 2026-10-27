@@ -211,7 +211,7 @@ async def test_the_bowl_reading_carries_its_own_age(
 def test_read_only_sensors_show_what_the_machine_states() -> None:
     snap = _snapshot(_answered())
     weight = NeakasaBowlWeightSensor(_mock_coord(snap), DEVICE_INFO, "riko-001")
-    assert weight.native_value == 67
+    assert weight.native_value == 0, "the bowl's contents, not the scale's raw reading"
     assert weight.translation_key == "bowl_weight"
     assert weight.unique_id == "riko-001-bowl_weight"
 
