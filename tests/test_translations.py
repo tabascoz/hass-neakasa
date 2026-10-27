@@ -9,9 +9,79 @@ from custom_components.neakasa.coordinator import CLOUD_SESSION_OWNERS
 
 TRANSLATIONS_DIR = Path("custom_components/neakasa/translations")
 
-EXPECTED_FILES = sorted(
-    ["en.json", "de.json", "fr.json", "pl.json", "pt.json", "pt-BR.json"]
-)
+# Languages Home Assistant offers (frontend translationMetadata.json) plus
+# `ne`, which core integrations ship. Untranslated ones hold English
+# placeholders until real translations land, so the key trees must stay in
+# lockstep with en.json.
+SUPPORTED_LANGUAGES = [
+    "af",
+    "ar",
+    "bg",
+    "bn",
+    "bs",
+    "ca",
+    "cs",
+    "cy",
+    "da",
+    "de",
+    "el",
+    "en",
+    "en-GB",
+    "eo",
+    "es",
+    "es-419",
+    "et",
+    "eu",
+    "fa",
+    "fi",
+    "fr",
+    "fy",
+    "ga",
+    "gl",
+    "gsw",
+    "he",
+    "hi",
+    "hr",
+    "hu",
+    "hy",
+    "id",
+    "is",
+    "it",
+    "ja",
+    "ka",
+    "ko",
+    "lb",
+    "lt",
+    "lv",
+    "mk",
+    "ml",
+    "nb",
+    "ne",
+    "nl",
+    "nn",
+    "pl",
+    "pt",
+    "pt-BR",
+    "ro",
+    "ru",
+    "sk",
+    "sl",
+    "sq",
+    "sr",
+    "sr-Latn",
+    "sv",
+    "ta",
+    "te",
+    "th",
+    "tr",
+    "uk",
+    "ur",
+    "vi",
+    "zh-Hans",
+    "zh-Hant",
+]
+
+EXPECTED_FILES = sorted(f"{language}.json" for language in SUPPORTED_LANGUAGES)
 
 
 def _load_json(path: Path) -> dict:
