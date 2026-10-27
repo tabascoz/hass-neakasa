@@ -45,7 +45,7 @@ Every key below is labelled by where the shape came from:
 | `foodLvl` | int enum (observed `2`) `[this unit]` | food hopper level state; the codes the machine uses are empty=0, lacking=1, full=2 — not a percent |
 | `waterLvl` | int enum (observed `3`) `[this unit]` | water tank level state; empty=0, lacking=1, low=2, middle=3, full=4 |
 | `pwrStatus` | `{batPercentage, batLevel, batVoltage, batTemp, pwrType, batStatus, batMsg}` | battery; observed `batPercentage`=90, `batLevel`=4, `batVoltage`=12159 mV, `batTemp`=25.0 °C, `batStatus`=2. The definition allows percentage 0–110 %, voltage 0–16000 mV, temperature −30…120 °C |
-| `bowlStatus` | `{bowlGram, curWeight, bBowlIn}` | the bowl on the scale: `curWeight` is **the bowl's actual weight in grams** (observed 67; the definition allows −3000…3000), `bowlGram` is the bowl's own tare (observed 68; 0…500 g), `bBowlIn`=1 bowl present |
+| `bowlStatus` | `{bowlGram, curWeight, bBowlIn}` | the bowl on the scale: `curWeight` is **the bowl's actual weight in grams** (observed 67; the definition allows −3000…3000), `bowlGram` is the bowl's own tare (observed 68; 0…500 g), `bBowlIn`=1 bowl present. The wrapper's `time` is the moment the machine last pushed this key, and the cloud only holds that copy: it moved during a cycle (§Feeding, 67→139 g) but stayed at the same value and stamp for two days afterwards while the machine's own display moved, so Home Assistant carries the stamp with the number as `scale_state_as_of` and `scale_state_age_minutes` rather than presenting it as the present |
 | `bCoverAbsent` | int 0/1 | cover/lid state — **inverted**: `1` = in place, `0` = absent (verified against the device with its cover in place) |
 | `deviceState` | `{state, param}` | operating state machine (observed 0/0); the state codes the machine uses are dormant=0, preparing food=1, delivering food=2, paused=3, faulting=4, sleeping=5, protecting=6, cleaning=7 |
 | `drierEffeDays` | int (observed 40) | desiccant pack's effective days; the definition allows 1…60 |
@@ -88,7 +88,7 @@ machine (`[this unit]`, see §Feeding).
 | Command | Arguments | What it does |
 |---|---|---|
 | `set` | any of the 39 writable keys above | the write path the integration uses for every setting |
-| `get` | — | ask the machine to read its state back |
+| `get` | — | ask the machine to read its state back — this unit answers `/thing/service/invoke` `get` with "service not found", so the name is not a service on this gateway |
 | `feedOnce` `[this unit]` | `{food 0…60 g, water 0…600 g, bSaveAsDef bool}` | deliver one meal; the flag keeps the amounts as the defaults |
 | `feedCtrl` | `{ctrlType enum}` | the auto-feeding control; asked with meal amounts it times out, so it is not one-meal feeding |
 | `bowlCtrl` | `{ctrlType enum}` | act on the bowl |
@@ -102,7 +102,7 @@ machine (`[this unit]`, see §Feeding).
 | `errorBan` | `{errCode 0…1000, bCleanBan bool}` | mute or unmute a fault the machine keeps reporting |
 | `errPostDebug` | `{errCode 0…100, module ≤20, error ≤32, param 0…1000}` | report a fault on demand |
 | `getVoltage` | `{chanIdx enum, val 0…10000}` | read one of the machine's own measurements |
-| `iotRead` | `{readType enum}` | ask the machine to read state back |
+| `iotRead` | `{readType enum}` | ask the machine to read state back — accepted here with `readType` 0, 1 and 2 and no error, but the cloud's copy of `bowlStatus` keeps its old value and stamp, so it does not refresh what `/thing/properties/get` returns |
 | `cfgRead`, `cfgWrite` | `{cfgFile ≤1024, cfgMsg ≤1024}` / `{cfgFile, cfgValStr, bCreate bool}` | read or write one of the machine's config files |
 | `fileSrv` | `{keepAliveSec 0…1000, bSW enum, bEncryption enum}` | the file service the machine talks to |
 | `udpCmd` | `{bOnOff bool}` | a raw machine command |

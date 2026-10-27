@@ -187,7 +187,19 @@ debug buttons are
 gone: they existed only to watch the token path for these notes. Nothing else moved:
 no
 unique id, unit, default or wire call changed, so an install that already has the
-entities keeps every one of them and only re-files them.
+entities keeps every one of them and only re-files them. Presses now cost one extra
+read of the machine, which is what makes them carry the machine's own state instead
+of a copy that is up to five minutes old.
+
+**Bowl weight** now travels with the age of its reading. The cloud only holds the
+last state the machine pushed for `bowlStatus`, and asking it does not refresh that
+copy: this unit's reading stayed at 67 g with a stamp of two days earlier while the
+machine's own display moved, `get` is answered with "service not found" and `iotRead`
+is accepted but leaves the stamp put. The sensor reports the number the cloud holds
+together with `scale_state_as_of` and `scale_state_age_minutes` (beside the raw
+reading and the bowl's own tare), so an old number is shown as old rather than as the
+present. The app's own figure is not comparable at this moment: it reads the machine
+through its own channel, not the cloud's snapshot.
 
 What that release also records is the one thing it cannot make better: with the
 integration running, the Neakasa mobile app (iOS and the Android APK) reports the

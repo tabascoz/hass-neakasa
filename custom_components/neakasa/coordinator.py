@@ -205,6 +205,7 @@ class NeakasaDeviceSnapshot:
     mix_min_minutes: int | None = None
     bowl_weight_g: int | None = None
     bowl_tare_g: int | None = None
+    scale_state_ts: str | None = None
     display_type: int | None = None
     display_param: str | None = None
     display_when_idle: bool | None = None
@@ -430,6 +431,14 @@ def _build_pet_feeder_snapshot(
     bowl = _property_value(devicedata, "bowlStatus", {})
     if not isinstance(bowl, dict):
         bowl = {}
+    # The wrapper's own stamp is the moment the machine last pushed this key to
+    # the cloud. Asking the cloud never refreshes it: on this unit the copy of
+    # `bowlStatus` stayed at the same value and the same stamp for two days while
+    # the machine's display moved, `get` is answered with "service not found" and
+    # `iotRead` is accepted but leaves the stamp put. So the age of the reading,
+    # not a claim about the present, is what can honestly be said.
+    bowl_entry = devicedata.get("bowlStatus") if isinstance(devicedata, dict) else None
+    scale_stamp = bowl_entry.get("time") if isinstance(bowl_entry, dict) else None
     fresh_mgr = _property_value(devicedata, "freshMgrCfg", {})
     if not isinstance(fresh_mgr, dict):
         fresh_mgr = {}
@@ -507,6 +516,7 @@ def _build_pet_feeder_snapshot(
         mix_min_minutes=_optional_int(def_fd.get("mixMin")),
         bowl_weight_g=_optional_int(bowl.get("curWeight")),
         bowl_tare_g=_optional_int(bowl.get("bowlGram")),
+        scale_state_ts=str(scale_stamp) if scale_stamp is not None else None,
         display_type=_optional_int(display.get("displayType")),
         display_param=display.get("displayParam"),
         display_when_idle=(
@@ -681,6 +691,39 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
     def device_ids(self) -> list[str]:
         """Return the list of known device IOT IDs."""
         return self._device_ids
+
+    def scale_state_evidence(self, iot_id: str) -> dict[str, Any]:
+        """
+        Return the evidence behind a bowl reading, so its age can be checked.
+
+        The cloud's copy of `bowlStatus` is only as fresh as the machine's last
+        push of that key, and asking the cloud does not refresh it: this unit's
+        copy kept the same value and the same stamp for two days while the
+        machine's own display moved, `get` is answered with "service not found"
+        and `iotRead` is accepted but leaves the stamp put. So the evidence names
+        the moment that reading was taken and how long ago it was, instead of
+        presenting the number as if it were the present.
+        """
+        snap = self.device_snapshot(iot_id)
+        if snap is None:
+            return {}
+        evidence: dict[str, Any] = {
+            "scale_reading_g": snap.bowl_weight_g,
+            "bowl_tare_g": snap.bowl_tare_g,
+            "bowl_in_place": snap.bowl_present,
+        }
+        if snap.scale_state_ts is None:
+            return evidence
+        try:
+            stamp = int(float(snap.scale_state_ts)) / 1000
+            when = datetime.fromtimestamp(stamp, tz=UTC)
+        except (ValueError, OverflowError, OSError):
+            return evidence
+        evidence["scale_state_as_of"] = when.isoformat()
+        evidence["scale_state_age_minutes"] = max(
+            0, int((datetime.now(UTC) - when).total_seconds() // 60)
+        )
+        return evidence
 
     def device_category(self, iot_id: str) -> str:
         """Return the ``categoryKey`` for *iot_id*, e.g. ``"CatLitter"``."""

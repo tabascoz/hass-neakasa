@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import callback
@@ -16,7 +16,17 @@ if TYPE_CHECKING:
 
 
 class NeakasaBowlWeightSensor(CoordinatorEntity[NeakasaCoordinator], SensorEntity):
-    """Grams on the feeder's own scale, including the bowl it is weighing."""
+    """
+    Grams on the feeder's own scale, including the bowl it is weighing.
+
+    The number is what the cloud holds for the machine's scale, and that copy is
+    only as fresh as the machine's last push of that key - asking the cloud does
+    not refresh it - so the reading's own age travels with it in
+    `extra_state_attributes`: `scale_state_as_of` names the moment the machine
+    stated it and `scale_state_age_minutes` says how long ago that was, beside
+    the raw reading, the bowl's weight the machine states and whether the bowl is
+    in place. A reading two days old is shown as such rather than as the present.
+    """
 
     _attr_should_poll = False
     _attr_has_entity_name = True
@@ -55,6 +65,11 @@ class NeakasaBowlWeightSensor(CoordinatorEntity[NeakasaCoordinator], SensorEntit
     @property
     def _snap(self) -> NeakasaDeviceSnapshot | None:
         return self.coordinator.device_snapshot(self._iot_id)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """The reading's age and the parts it is made of, so it can be checked."""
+        return self.coordinator.scale_state_evidence(self._iot_id)
 
     @property
     def native_value(self) -> int | None:

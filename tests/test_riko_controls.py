@@ -99,7 +99,10 @@ ANSWERED: dict = {
 BASE: dict = {
     "foodLvl": {"value": 2},
     "waterLvl": {"value": 3},
-    "bowlStatus": {"value": {"bowlGram": 68, "curWeight": 67, "bBowlIn": 1}},
+    "bowlStatus": {
+        "time": 1792872600147,
+        "value": {"bowlGram": 68, "curWeight": 67, "bBowlIn": 1},
+    },
     "leftDrierDays": {"value": 38},
     "defFdCfg": {"value": {"mixMin": 3, "water": 4, "food": 4}},
     "freshMgrCfg": {"value": {"monitorTime": 4, "leftOverTTH": 20, "bOnOff": 0}},
@@ -128,6 +131,7 @@ def test_definition_named_controls_are_read_when_answered() -> None:
     snap = _snapshot(_answered())
     assert snap.bowl_weight_g == 67
     assert snap.bowl_tare_g == 68
+    assert snap.scale_state_ts == "1792872600147"
     assert snap.desiccant_days_effective == 40
     assert snap.display_type == 1
     assert snap.display_when_idle is True
@@ -187,6 +191,21 @@ def _make_coordinator(
 
 
 DEVICE_INFO = {"identifiers": {("neakasa", "riko-001")}}
+
+
+async def test_the_bowl_reading_carries_its_own_age(
+    hass: HomeAssistant, mock_config_entry: MagicMock
+) -> None:
+    """A cloud reading that is old says how old it is, instead of posing as now."""
+    coordinator = _make_coordinator(hass, mock_config_entry, _snapshot(_answered()))
+    evidence = coordinator.scale_state_evidence("riko-001")
+    assert evidence["scale_state_as_of"].startswith("2026-10-24T20:10")
+    assert evidence["scale_state_age_minutes"] > 60 * 24
+    assert evidence["scale_reading_g"] == 67
+    assert evidence["bowl_tare_g"] == 68
+
+    weight = NeakasaBowlWeightSensor(coordinator, DEVICE_INFO, "riko-001")
+    assert weight.extra_state_attributes == evidence
 
 
 def test_read_only_sensors_show_what_the_machine_states() -> None:
