@@ -17,7 +17,7 @@ The Neakasa Home Assistant Custom Integration allows you to integrate your Neaka
 
 ### Currently supported devices
 - Neakasa M1 (Cat Litter Box)
-- Neakasa Riko (Wet Meal Feeder) — read-write (beta, `v1.5.0-beta5`)
+- Neakasa Riko (Wet Meal Feeder) — read-write (`v1.5.0`)
 
 #### Riko (wet meal feeder) features
 |Type|Name|Notes|
@@ -103,22 +103,20 @@ The Neakasa Home Assistant Custom Integration allows you to integrate your Neaka
 
 ## Installation
 
-### Getting the Riko beta (`v1.5.0-beta5`)
+### Getting the Riko support (`v1.5.0`)
 
-The Riko support ships as a pre-release. To try it before the next stable release:
-
-**Via HACS** — in Home Assistant, open HACS → *Integrations* → Neakasa → use the
-version selector to download `v1.5.0-beta5`, then restart Home Assistant.
-
-**Manually (zip)** — download this beta's asset and extract into your config dir:
+The Riko support is in the current stable release, so HACS hands it to you as the
+default version and there is nothing to opt into. To take it manually:
 
 ```bash
-wget https://github.com/tabascoz/hass-neakasa/releases/download/v1.5.0-beta5/neakasa.zip
+wget https://github.com/tabascoz/hass-neakasa/releases/download/v1.5.0/neakasa.zip
 mkdir -p custom_components/neakasa && unzip neakasa.zip -d custom_components/neakasa && rm neakasa.zip
 ```
 
-Then restart Home Assistant. The beta is opt-in — HACS keeps the latest *stable*
-(`v1.4.2`) as default until `v1.5.0` is released; pick the beta explicitly to test Riko now.
+Then restart Home Assistant. The pre-releases `v1.5.0-beta1` … `v1.5.0-beta6` stay
+downloadable if you want to compare a machine against the step that changed it;
+`v1.5.0` carries that whole line, so the notes below are history rather than
+something to install.
 
 **Beta notes** — `v1.5.0-beta1` sent the water amount as a ratio index, which made the
 machine keep adding water and report an error of clogged water sprays. `v1.5.0-beta2`
@@ -145,8 +143,9 @@ logged. And a device that the config entry no longer describes is forgotten when
 the entry is set up again, so configuring the entry with other credentials leaves
 one account device in the UI rather than one per set-up. The two
 temporary debug buttons on the feeder (**Debug token churn**, **Debug invalidate
-token**) and the `debug_probe` option are still there to measure the token paths
-and will be dropped before `v1.5.0` ships.
+token**) and the `debug_probe` option are still there to measure the token
+paths; `v1.5.0-beta5` dropped the two token-press buttons, and `debug_probe`
+remains as an advanced option for measuring one command on a machine.
 
 What `v1.5.0-beta4` adds is the rest of what the feeder holds, and it changes
 nothing about feeding: the numbers still only stage a meal, and the machine is
@@ -230,7 +229,7 @@ the app and Home Assistant then describe different accounts and there is no sess
 left to fight over. If that split is not yours and the app's stability matters more
 than the integration, disabling this entry is the switch that keeps the app normal.
 
-### The state the machine reports for itself (working tree, `v1.5.0-beta6` — not released)
+### The state the machine reports for itself (`v1.5.0`)
 
 What the feeder says about its own working state is now read and shown, from the
 keys its own definition names and this unit answers: a **Device status** sensor
@@ -247,9 +246,9 @@ Unlike the scale, these keys are re-pushed while the machine works: this unit's
 2026-10-27T00:56:40Z and 2026-10-27T09:44:57Z while the value stayed at idle, so
 each of these values carries its own `*_as_of` and `*_age_minutes` naming the
 moment the machine stated that key, rather than presenting it as the present. The
-bowl number is unchanged for the reason given above - the channel the mobile app
-reads the scale through is still being looked for, and a re-echoed reading is not
-offered as the present. No control writes the machine: these are reads.
+bowl number stayed at the replay for the reason given above until the read command
+below answered it; these keys are reads either way, and none of them writes the
+machine.
 
 The bowl number, however, was wrong for a reason we can now answer. The cloud's
 copy of `bowlStatus` is a replay: seven reads across 2026-10-27 all restated 67
