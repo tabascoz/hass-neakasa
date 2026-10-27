@@ -46,7 +46,7 @@ jobs:
           enable-cache: true
           python-version: "3.14"
       - run: uv sync --group dev
-      - run: uv run pytest --cov-fail-under=90 -v
+      - run: uv run pytest --cov-branch --cov-fail-under=90 -v
 
   hassfest:
     name: Hassfest

@@ -60,6 +60,7 @@ from custom_components.neakasa.number.rehydration_minutes import (
 from custom_components.neakasa.select.display_standby_kind import (
     NeakasaDisplayStandbyKindSelect,
 )
+from custom_components.neakasa.sensor.battery import NeakasaBatterySensor
 from custom_components.neakasa.sensor.battery_state import (
     NeakasaBatteryStateSensor,
 )
@@ -80,12 +81,15 @@ from custom_components.neakasa.sensor.firmware_version import (
 from custom_components.neakasa.sensor.food_intake_today import (
     NeakasaFoodIntakeTodaySensor,
 )
+from custom_components.neakasa.sensor.food_level import NeakasaFoodLevelSensor
+from custom_components.neakasa.sensor.label import NeakasaLabelSensor
 from custom_components.neakasa.sensor.last_bin_clean_food import (
     NeakasaFoodBinCleanSensor,
 )
 from custom_components.neakasa.sensor.last_bin_clean_water import (
     NeakasaWaterBinCleanSensor,
 )
+from custom_components.neakasa.sensor.water_level import NeakasaWaterLevelSensor
 from custom_components.neakasa.switch.display_standby import NeakasaDisplayStandbySwitch
 from custom_components.neakasa.switch.do_not_disturb import NeakasaDoNotDisturbSwitch
 from custom_components.neakasa.switch.fresh_meal_manager import (
@@ -715,3 +719,94 @@ async def test_a_bowl_weight_the_machine_never_stated_is_refused(
         await NeakasaResetBowlScaleButton(
             coordinator, DEVICE_INFO, "riko-001"
         ).async_press()
+
+
+def test_riko_sensors_answer_nothing_without_a_snapshot() -> None:
+    """A device the coordinator has no model for reports no value."""
+    sensor_classes = [
+        NeakasaBatterySensor,
+        NeakasaBatteryStateSensor,
+        NeakasaBowlWeightSensor,
+        NeakasaDeepCleanStateSensor,
+        NeakasaDesiccantDaysLeftSensor,
+        NeakasaDeviceSerialSensor,
+        NeakasaDeviceStatusSensor,
+        NeakasaFirmwareVersionSensor,
+        NeakasaFoodIntakeTodaySensor,
+        NeakasaFoodBinCleanSensor,
+        NeakasaWaterBinCleanSensor,
+        NeakasaFoodLevelSensor,
+        NeakasaLabelSensor,
+        NeakasaWaterLevelSensor,
+    ]
+    coordinator = _mock_coord(None)
+    for sensor_cls in sensor_classes:
+        sensor = sensor_cls(coordinator, DEVICE_INFO, "riko-001")
+        sensor.hass = MagicMock()
+        assert sensor.native_value is None
+
+
+def test_a_battery_state_the_definition_never_named_stays_the_number_it_is() -> None:
+    """An unknown code is passed through; a state never stated is none."""
+    props = copy.deepcopy(_answered())
+    props["pwrStatus"] = {"time": 1, "value": {"batPercentage": 90, "batStatus": 7}}
+    answered_state = _mock_coord(_snapshot(props))
+    stated = NeakasaBatteryStateSensor(answered_state, DEVICE_INFO, "riko-001")
+    assert stated.native_value == 7, "an unknown code is not given an invented name"
+
+    never_stated = _mock_coord(_snapshot(BASE))
+    never = NeakasaBatteryStateSensor(never_stated, DEVICE_INFO, "riko-001")
+    assert never.native_value is None, "no state was stated, so none is shown"
+
+
+def _fake_platform_data() -> MagicMock:
+    """Enough of an EntityPlatform.platform_data to let a state write run."""
+    platform_data = MagicMock()
+    platform_data.platform_name = "sensor"
+    platform_data.domain = "sensor"
+    platform_data.platform_translations = {}
+    platform_data.component_translations = {}
+    platform_data.object_id_platform_translations = {}
+    platform_data.object_id_component_translations = {}
+    return platform_data
+
+
+async def test_riko_entities_write_only_once_registered(hass: HomeAssistant) -> None:
+    """An entity stays silent until it has an entity_id to write to."""
+    sensor_classes = [
+        NeakasaBatterySensor,
+        NeakasaBatteryStateSensor,
+        NeakasaBowlWeightSensor,
+        NeakasaDeepCleanStateSensor,
+        NeakasaDesiccantDaysLeftSensor,
+        NeakasaDeviceSerialSensor,
+        NeakasaDeviceStatusSensor,
+        NeakasaFirmwareVersionSensor,
+        NeakasaFoodIntakeTodaySensor,
+        NeakasaFoodBinCleanSensor,
+        NeakasaWaterBinCleanSensor,
+        NeakasaFoodLevelSensor,
+        NeakasaLabelSensor,
+        NeakasaWaterLevelSensor,
+    ]
+    for index, sensor_cls in enumerate(sensor_classes):
+        coordinator = _mock_coord(_snapshot(_answered()))
+        sensor = sensor_cls(coordinator, DEVICE_INFO, "riko-001")
+        sensor.hass = hass
+        sensor.platform_data = _fake_platform_data()
+        fake_platform = MagicMock()
+        fake_platform.platform_name = "sensor"
+        fake_platform.entity_platform = MagicMock()
+        sensor.platform = fake_platform
+        sensor.entity_id = f"sensor.neakasa_{index}"
+        await sensor.async_added_to_hass()
+        sensor._handle_coordinator_update()
+        await sensor.async_update()
+        assert coordinator.state_fingerprint.called
+
+        before = coordinator.state_fingerprint.call_count
+        sensor.entity_id = None
+        await sensor.async_update()
+        assert coordinator.state_fingerprint.call_count == before, (
+            "an entity with no entity_id writes no state"
+        )

@@ -53,7 +53,7 @@ rules:
     comment: Reauth flow triggers on persistent auth failure via async_start_reauth.
   test-coverage:
     status: done
-    comment: 90%+ line coverage with pytest --cov-fail-under=90 enforced in CI.
+    comment: Branch and line coverage measured with pytest --cov-branch; CI enforces --cov-fail-under=90.
   devices: done
   diagnostics:
     status: done

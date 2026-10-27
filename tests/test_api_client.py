@@ -118,3 +118,31 @@ async def test_translate_token_invalid_to_session_expired() -> None:
             raise APIConnectionError(
                 "Error getting data: TokenInvalid\ufffatoken is abnormal"
             )
+
+
+async def test_refresh_session_delegates() -> None:
+    client, api = _make_client()
+    api.refresh_session = AsyncMock()
+    await client.refresh_session()
+    api.refresh_session.assert_awaited_once_with()
+
+
+async def test_debug_invalidate_tokens_delegates() -> None:
+    client, api = _make_client()
+    api.debug_invalidate_tokens = AsyncMock()
+    await client.debug_invalidate_tokens()
+    api.debug_invalidate_tokens.assert_awaited_once_with()
+
+
+async def test_invoke_service_returns_the_reply() -> None:
+    client, api = _make_client()
+    api.invoke_service = AsyncMock(return_value={"ok": 1})
+    assert await client.invoke_service("iot", "svc", {"a": 1}) == {"ok": 1}
+    api.invoke_service.assert_awaited_once_with("iot", "svc", {"a": 1})
+
+
+async def test_get_product_list_returns_the_schema() -> None:
+    client, api = _make_client()
+    api.get_product_list = AsyncMock(return_value=[{"cmd": 1}])
+    assert await client.get_product_list() == [{"cmd": 1}]
+    api.get_product_list.assert_awaited_once_with()

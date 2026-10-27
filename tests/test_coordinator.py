@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.neakasa.coordinator import (
+    MAX_SESSION_RECOVERY_ATTEMPTS,
     NeakasaCoordinator,
     _build_device_snapshot,
     _get_last_use_date,
@@ -741,3 +742,47 @@ async def test_update_data_identity_id_blank(
 
     retry.assert_awaited_once()
     assert "iot-001" in data
+
+
+async def test_only_an_account_token_rejection_forces_a_sign_in(
+    hass: HomeAssistant,
+    mock_config_entry: MagicMock,
+    mock_get_shared_api: MagicMock,
+) -> None:
+    """The record endpoint signs with the account token; an IoT refusal does not."""
+    coordinator = _make_coordinator(hass, mock_config_entry)
+    assert coordinator._needs_full_reauth(None) is False
+    assert (
+        coordinator._needs_full_reauth(
+            NeakasaApiClientSessionExpiredError("code: TokenInvalid")
+        )
+        is True
+    )
+    assert (
+        coordinator._needs_full_reauth(
+            NeakasaApiClientCommunicationError("the token IS ABNORMAL now")
+        )
+        is True
+    )
+    assert (
+        coordinator._needs_full_reauth(
+            NeakasaApiClientCommunicationError("the IoT token expired")
+        )
+        is False
+    )
+
+
+async def test_session_recovery_stops_at_its_bound(
+    hass: HomeAssistant,
+    mock_config_entry: MagicMock,
+    mock_get_shared_api: MagicMock,
+) -> None:
+    """A scan that cannot recover gives up rather than looping forever."""
+    coordinator = _make_coordinator(hass, mock_config_entry)
+    coordinator._recovery_attempts = MAX_SESSION_RECOVERY_ATTEMPTS
+    with pytest.raises(UpdateFailed) as failed:
+        await coordinator._reconnect_and_retry("session expired")
+    assert str(failed.value) == (
+        f"Session recovery attempted {MAX_SESSION_RECOVERY_ATTEMPTS + 1} times"
+        " in one update"
+    )

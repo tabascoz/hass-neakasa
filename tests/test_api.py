@@ -13,6 +13,8 @@ from custom_components.neakasa.api import (
     APIConnectionError,
     NeakasaAPI,
     _describe_fields,
+    _field_names,
+    _presentation_path,
 )
 from custom_components.neakasa.iot_gateway import IoTResponse
 
@@ -730,3 +732,21 @@ async def test_get_records() -> None:
     args = signed.await_args.args
     assert args[0] == "https://web.example.com/catbox/record"
     assert args[1]["device_name"] == "dev-1"
+
+
+def test_fields_are_named_even_when_the_answer_is_not_a_dict() -> None:
+    """A field is named by where it sits; the answer being no dict names nothing."""
+    assert _field_names(None) == []
+    assert _field_names("not-a-dict", prefix="data") == ["data"]
+    assert _field_names({"a": {"b": 1}}) == ["a", "a.b"]
+
+
+def test_only_the_calls_that_present_the_account_are_named() -> None:
+    """A write is not a presentation, so it names nothing."""
+    assert _presentation_path("https://x/uc/listBindingByAccount") == (
+        "/uc/listBindingByAccount"
+    )
+    assert _presentation_path("https://x/catbox/record") == "/catbox/record"
+    assert _presentation_path("https://x/thing/properties/set") == "", (
+        "a write presents nothing"
+    )

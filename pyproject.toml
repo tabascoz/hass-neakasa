@@ -27,6 +27,7 @@ testpaths = ["tests"]
 pythonpath = ["."]
 addopts = [
     "--cov=custom_components/neakasa",
+    "--cov-branch",
     "--cov-report=term-missing",
 ]
 
