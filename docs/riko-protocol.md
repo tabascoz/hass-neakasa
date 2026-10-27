@@ -273,14 +273,23 @@ Measured through this integration's own write path, with a probe that sends the
 of putting a built-in animation ("Led点阵显示") on the front display; it is a
 different feature and is not how the custom text is carried.
 
-A setting that names one part of a nested config writes only that part and copies the
-machine's current sibling values into the write, because the gateway replaces the
-whole object: `freshMgrCfg` keeps `monitorTime` and `leftOverTTH` when the switch is
-moved, `displayCfg` keeps its kind and message when the display switch is moved,
-`feedAudCfg` keeps its clip when the volume is set, and `defFdCfg` keeps the portion
-and water amount when the rehydration minutes are set. The `set_property` path maps
-the internal name to the wire name so the same write shape the definition describes is
-what goes out.
+A setting that names one part of a nested config writes only that part and takes the
+other parts from a read of the machine taken at that moment, because the gateway
+replaces the whole object: `freshMgrCfg` keeps `monitorTime` and `leftOverTTH` when
+the switch is moved, `displayCfg` keeps its kind and message when the display switch
+is moved, `feedAudCfg` keeps its clip when the volume is set, and `defFdCfg` keeps
+the portion and water amount when the rehydration minutes are set. The values come
+from `coordinator.set_property` reading the device first, not from the model: the
+model is only as fresh as the last scan, and this unit showed what that costs. The
+app set the display to time at 23:39 while the model still held `custom`/`N/A` from
+before, and presses at 22:47 and 23:07 pushed that older pair back onto the machine,
+which then went back to a kind nobody had asked for. Reading first is what the app
+does before writing; it costs one extra GET per press and never one per poll. When
+the read states nothing for that object, the write goes out as it was composed and
+the log says which path ran. The `set_property` path maps the internal name to the
+wire name so the same write shape the definition describes is what goes out, and the
+values a press leaves on the model are the ones that were actually sent, so the
+entities follow the machine instead of the request.
 
 The commands are asked for, not assumed to work: `resetDrierTime{drierEffeDays}` uses
 the day budget the machine states (or the longest the definition allows when it states

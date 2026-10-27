@@ -177,8 +177,15 @@ entity had been defined on a property Home Assistant does not read, which left i
 with no state and the control unreachable. The message is sent upper-case on the
 write, because the front panel is a fixed LED matrix with no lower-case glyphs:
 this unit drew `teste1` as a bare `1` and drew `TESTE1` in full, and the Neakasa
-app does the same normalisation. The token debug buttons are gone:
-they existed only to watch the token path for these notes. Nothing else moved: no
+app does the same normalisation. Settings that name one part of a nested config
+(the display kind and message, the freshness manager, the meal-sound volume, the
+rehydration minutes, the portion and water defaults) now read the machine first and
+carry *that* state's other parts, because the entry scans every five minutes and an
+older model copy used to be written back over a change made in the app - this unit
+had presses pushing `custom`/`N/A` onto a machine the app had set to time. The token
+debug buttons are
+gone: they existed only to watch the token path for these notes. Nothing else moved:
+no
 unique id, unit, default or wire call changed, so an install that already has the
 entities keeps every one of them and only re-files them.
 

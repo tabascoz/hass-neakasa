@@ -345,6 +345,35 @@ async def test_a_display_that_states_no_message_still_takes_one(
     }
 
 
+async def test_a_press_takes_its_siblings_from_the_machine(
+    hass: HomeAssistant, mock_config_entry: MagicMock
+) -> None:
+    """A change made outside Home Assistant is not written back by a press."""
+    coordinator = _make_coordinator(hass, mock_config_entry, _snapshot(_answered()))
+    snap = coordinator.data["riko-001"]
+    assert snap.display_cfg["displayParam"] == "N/A", "the model holds an older state"
+
+    client = AsyncMock()
+    client.get_device_properties = AsyncMock(
+        return_value={
+            "displayCfg": {
+                "time": 1793056632778,
+                "value": {"displayType": 0, "displayParam": "", "bDisplayIfIdle": 1},
+            }
+        }
+    )
+    coordinator._get_client = AsyncMock(return_value=client)
+
+    kind = NeakasaDisplayStandbyKindSelect(coordinator, DEVICE_INFO, "riko-001")
+    await kind.async_select_option("custom")
+    client.set_device_properties.assert_called_once_with(
+        "riko-001",
+        {"displayCfg": {"displayType": 2, "displayParam": "", "bDisplayIfIdle": 1}},
+    )
+    assert snap.display_type == 2
+    assert snap.display_param == "", "the machine's message, not the older one"
+
+
 async def test_buttons_ask_the_machine_its_own_commands(
     hass: HomeAssistant, mock_config_entry: MagicMock
 ) -> None:

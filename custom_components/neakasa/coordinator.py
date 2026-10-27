@@ -553,6 +553,47 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         "dnd_cfg": "DND_Mode",
     }
 
+    # A nested config object is replaced as a whole by the gateway, so a setting
+    # that owns one of its fields has to carry the others. They come from a read
+    # of the machine taken when the press runs, not from the model: the model is
+    # only as fresh as the last scan, and a change made in the mobile app inside
+    # that window would otherwise be written back as the older value we still
+    # hold - the journal showed presses at 22:47 and 23:07 pushing
+    # `displayType: 2, displayParam: N/A` onto a machine the app had set to time
+    # at 23:39. The read costs one extra GET per press, which is what a real
+    # client (the app) does before writing, and it is never done by polling.
+    NESTED_WRITES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "cleanCfg",
+            "deepCleanCfg",
+            "freshMgrCfg",
+            "defFdCfg",
+            "feedAudCfg",
+            "displayCfg",
+            "DND_Mode",
+        }
+    )
+
+    # Where a field of a written object also appears on the model as its own
+    # value, so the entities follow what was sent rather than what was assumed.
+    _NESTED_MODEL_FIELDS: ClassVar[dict[str, dict[str, tuple[str, str]]]] = {
+        "display_cfg": {
+            "displayType": ("display_type", "int"),
+            "displayParam": ("display_param", "text"),
+            "bDisplayIfIdle": ("display_when_idle", "bool"),
+        },
+        "fresh_mgr_cfg": {
+            "bOnOff": ("fresh_mgr_on", "bool"),
+            "monitorTime": ("fresh_mgr_hours", "int"),
+            "leftOverTTH": ("fresh_mgr_leftover_g", "int"),
+        },
+        "feed_aud_cfg": {
+            "audIdx": ("sound_index", "int"),
+            "volume": ("sound_volume", "int"),
+        },
+        "feed_cfg": {"mixMin": ("mix_min_minutes", "int")},
+    }
+
     # ------------------------------------------------------------------
     # Product-type routing
     # ------------------------------------------------------------------
@@ -701,14 +742,78 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         return {"devices": devices, "products": schema_by_product}
 
     async def set_property(self, iot_id: str, key: str, value: Any) -> None:
-        """Set a device property via the Aliyun IoT gateway."""
+        """
+        Write one device property, taking a nested object's siblings from the machine.
+
+        A nested config (`displayCfg`, `freshMgrCfg`, `defFdCfg`, `feedAudCfg`,
+        `cleanCfg`, `deepCleanCfg`, `DND_Mode`) is replaced as a whole, so the
+        fields this control does not own are read from the device at this moment
+        and merged in - the model's copy is only as fresh as the last scan, and
+        re-sending it would push a value the machine no longer has back onto it.
+        A field the caller changed is kept as the caller set it; a field that is
+        only being carried along takes the machine's value. When the read states
+        nothing for the object, what was asked is written as it is and the log
+        says which path ran.
+        """
         client = await self._get_client()
         wire_key = self._SNAP_TO_WIRE.get(key, key)
-        await client.set_device_properties(iot_id, {wire_key: value})
-        if self.data and iot_id in self.data:
-            setattr(self.data[iot_id], key, value)
-            self._mark_state_changed(iot_id)
-            self.async_set_updated_data(self.data)
+        snap = self.data.get(iot_id) if self.data else None
+        payload = value
+        if isinstance(value, dict) and wire_key in self.NESTED_WRITES:
+            fresh = await self._get_properties(iot_id, client)
+            stated = _property_value(fresh, wire_key, {})
+            if not isinstance(stated, dict):
+                stated = {}
+            if stated:
+                stale = getattr(snap, key, None) if snap is not None else None
+                payload = dict(stated)
+                for field, field_value in value.items():
+                    if not isinstance(stale, dict) or field_value != stale.get(field):
+                        payload[field] = field_value
+            else:
+                _LOGGER.debug(
+                    "The machine stated nothing for %s, so writing what was asked",
+                    wire_key,
+                )
+        await client.set_device_properties(iot_id, {wire_key: payload})
+        if snap is None:
+            return
+        setattr(snap, key, payload if isinstance(payload, dict) else value)
+        if isinstance(payload, dict):
+            self._note_written_config(snap, key, payload)
+        self._mark_state_changed(iot_id)
+        self.async_set_updated_data(self.data)
+
+    def _note_written_config(
+        self,
+        snap: NeakasaDeviceSnapshot,
+        key: str,
+        written: dict[str, Any],
+    ) -> None:
+        """
+        Mirror a nested object that was just written into the model's fields.
+
+        The model holds both the raw object and the per-field values the entities
+        read. Both are set from what was actually written - the machine's siblings
+        merged with the field this control owns - so a press is followed by the
+        values it asked for, and a sibling the machine corrected is followed by
+        that correction instead of by our older guess.
+        """
+        for wire_field, (attr, kind) in self._NESTED_MODEL_FIELDS.get(key, {}).items():
+            if wire_field not in written:
+                continue
+            raw = written[wire_field]
+            match kind:
+                case "int":
+                    setattr(snap, attr, _optional_int(raw))
+                case "bool":
+                    setattr(snap, attr, _to_int(raw) == 1)
+                case "text":
+                    setattr(snap, attr, raw)
+        if key == "feed_cfg":
+            food_g, ratio = _configured_feed_defaults(written)
+            snap.default_food_g = food_g
+            snap.default_water_ratio = ratio
 
     async def invoke_service(self, iot_id: str, service: str) -> None:
         """Invoke a device service (clean or level)."""
@@ -938,13 +1043,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         current = dict(snap.feed_cfg) if snap is not None and snap.feed_cfg else {}
         payload = dict(current)
         payload["mixMin"] = minutes
-        client = await self._get_client()
-        await client.set_device_properties(iot_id, {"defFdCfg": payload})
-        if snap is not None:
-            snap.feed_cfg = payload
-            snap.mix_min_minutes = minutes
-            self._mark_state_changed(iot_id)
-            self.async_set_updated_data(self.data)
+        await self.set_property(iot_id, "feed_cfg", payload)
 
     async def set_feed_sound_volume(self, iot_id: str, volume: int) -> None:
         """
@@ -952,23 +1051,19 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
 
         The definition allows a volume up to 200, and this unit states 100; the
         integration offers 0-100 only, where 0 is silence, so a value here stays
-        inside what the machine has been seen to use.
+        inside what the machine has been seen to use. The clip and any other key
+        of `feedAudCfg` are carried by the shared write path, which takes them from
+        a read of the machine at press time.
         """
         if not FEED_SOUND_VOLUME_MIN <= volume <= FEED_SOUND_VOLUME_MAX:
             msg = f"Sound volume out of range: {volume}"
             raise ValueError(msg)
         snap = self.data.get(iot_id) if self.data else None
-        payload = (
+        current = (
             dict(snap.feed_aud_cfg) if snap is not None and snap.feed_aud_cfg else {}
         )
-        payload["volume"] = volume
-        client = await self._get_client()
-        await client.set_device_properties(iot_id, {"feedAudCfg": payload})
-        if snap is not None:
-            snap.feed_aud_cfg = payload
-            snap.sound_volume = volume
-            self._mark_state_changed(iot_id)
-            self.async_set_updated_data(self.data)
+        current["volume"] = volume
+        await self.set_property(iot_id, "feed_aud_cfg", current)
 
     async def request_desiccant_reset(self, iot_id: str) -> None:
         """
@@ -1063,14 +1158,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             "water": food_g * water_ratio,
             "mixMin": current_mix_min,
         }
-        client = await self._get_client()
-        await client.set_device_properties(iot_id, {"defFdCfg": payload})
-        if snap is not None:
-            snap.default_food_g = food_g
-            snap.default_water_ratio = water_ratio
-            snap.feed_cfg = payload
-            self._mark_state_changed(iot_id)
-            self.async_set_updated_data(self.data)
+        await self.set_property(iot_id, "feed_cfg", payload)
 
     # ------------------------------------------------------------------
     # Debug probe (opt-in via options flow; never affects normal polling)
