@@ -16,13 +16,16 @@ if TYPE_CHECKING:
 
 from ..const import DOMAIN
 from .battery import NeakasaBatterySensor
+from .battery_state import NeakasaBatteryStateSensor
 from .bin_state import NeakasaBinStateSensor
 from .bowl_weight import NeakasaBowlWeightSensor
 from .bucket_status import NeakasaBucketStatusSensor
 from .cat_weight import NeakasaCatWeightSensor
 from .cloud_session import NeakasaCloudSessionStatusSensor
+from .deep_clean_state import NeakasaDeepCleanStateSensor
 from .desiccant_days_left import NeakasaDesiccantDaysLeftSensor
 from .device_serial import NeakasaDeviceSerialSensor
+from .device_status import NeakasaDeviceStatusSensor
 from .firmware_version import NeakasaFirmwareVersionSensor
 from .food_intake_today import NeakasaFoodIntakeTodaySensor
 from .food_level import NeakasaFoodLevelSensor
@@ -90,8 +93,11 @@ async def async_setup_entry(
                         NeakasaFoodLevelSensor(coordinator, device_info, iot_id),
                         NeakasaWaterLevelSensor(coordinator, device_info, iot_id),
                         NeakasaBatterySensor(coordinator, device_info, iot_id),
+                        NeakasaBatteryStateSensor(coordinator, device_info, iot_id),
                         NeakasaWifiRssiSensor(coordinator, device_info, iot_id),
+                        NeakasaDeviceStatusSensor(coordinator, device_info, iot_id),
                         NeakasaBowlWeightSensor(coordinator, device_info, iot_id),
+                        NeakasaDeepCleanStateSensor(coordinator, device_info, iot_id),
                         NeakasaDesiccantDaysLeftSensor(
                             coordinator, device_info, iot_id
                         ),

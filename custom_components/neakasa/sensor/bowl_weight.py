@@ -19,13 +19,15 @@ class NeakasaBowlWeightSensor(CoordinatorEntity[NeakasaCoordinator], SensorEntit
     """
     Grams of contents in the bowl, from the machine's own scale and tare.
 
-    The scale states one weight that includes the bowl, and the machine states
-    the bowl's tare beside it, so the value published is the difference clamped
-    at zero - what the app shows for the same bowl. The raw reading and the
-    tare are not hidden: they travel in `extra_state_attributes` with
-    `scale_state_as_of` and `scale_state_age_minutes`, because the cloud only
-    holds the state the machine last pushed for that key and asking it changes
-    nothing - this unit's copy kept the same value and stamp for two days.
+    The scale answers in two ways, and both are kept apart. The cloud's copy of
+    `bowlStatus` only repeats what the machine last reported, so it carries its
+    own moment and age; the definition's 称重 read (`iotRead` with the weighing
+    type) is asked once a scan and answers with a reading that moves, beside the
+    tare the same answer states. The published figure is the difference clamped
+    at zero, preferring the answer that was taken more recently, which is what
+    the Neakasa app shows for the same bowl. Both answers and both moments stay
+    in `extra_state_attributes`, so a figure can be traced to the call that made
+    it rather than read as the present.
     """
 
     _attr_should_poll = False
@@ -68,25 +70,40 @@ class NeakasaBowlWeightSensor(CoordinatorEntity[NeakasaCoordinator], SensorEntit
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """The reading's age and the parts it is made of, so it can be checked."""
-        return self.coordinator.scale_state_evidence(self._iot_id)
+        """Both answers the scale can give, each with the moment it was stated."""
+        return {
+            **self.coordinator.scale_state_evidence(self._iot_id),
+            **self.coordinator.live_scale_evidence(self._iot_id),
+        }
 
     @property
     def native_value(self) -> int | None:
         """
-        Return what the bowl holds, or None when the scale does not report.
+        Return what the bowl holds, or None when the scale gives no answer.
 
-        The scale's number includes the bowl (`curWeight`, 67 g observed here)
-        and the machine states the bowl's own tare beside it (`bowlGram`, 68 g
-        observed here), so the contents are the difference clamped at zero -
-        the scale sits a gram light, and an empty bowl is empty rather than
-        negative. That is the figure the Neakasa app shows for the same bowl.
-        With no tare stated there is nothing to subtract, so the raw reading is
-        what is shown; both parts and the moment they were stated are in
-        `extra_state_attributes` either way.
+        The scale's number includes the bowl, and the machine states the bowl's
+        own tare beside it - either in the same report or in the same reply -
+        so the contents are the difference clamped at zero: this unit's 89.08 g
+        reading above its 68 g tare is 21 g, the figure the app shows for the
+        bowl. The live answer is asked for each scan and is the more recent
+        claim, so it wins; with no live answer the stored copy is used, and the
+        attributes say which of the two and when it was stated. With no tare in
+        either answer there is nothing to take away, so the raw reading is what
+        is shown.
         """
         snap = self._snap
-        if snap is None or snap.bowl_weight_g is None:
+        if snap is None:
+            return None
+        if snap.scale_live_g is not None:
+            tare = (
+                snap.scale_live_tare_g
+                if snap.scale_live_tare_g is not None
+                else snap.bowl_tare_g
+            )
+            if tare is None:
+                return round(snap.scale_live_g)
+            return max(0, round(snap.scale_live_g - tare))
+        if snap.bowl_weight_g is None:
             return None
         if snap.bowl_tare_g is None:
             return snap.bowl_weight_g

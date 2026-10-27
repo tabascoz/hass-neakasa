@@ -32,6 +32,7 @@ from .const import (
 from .exceptions import (
     NeakasaApiClientAuthenticationError,
     NeakasaApiClientCommunicationError,
+    NeakasaApiClientDeviceBusyError,
     NeakasaApiClientError,
     NeakasaApiClientSessionExpiredError,
 )
@@ -189,6 +190,8 @@ class NeakasaDeviceSnapshot:
     water_level_state: int = 0
     battery_percent: int | None = None
     battery_level: int | None = None
+    battery_state: int | None = None
+    battery_ts: str | None = None
     bowl_present: bool = False
     cover_absent: bool = False
     desiccant_days_left: int | None = None
@@ -199,6 +202,8 @@ class NeakasaDeviceSnapshot:
     fresh_mgr_leftover_g: int | None = None
     fresh_mgr_hours: int | None = None
     deep_clean_on: bool = False
+    deep_clean_state: int | None = None
+    deep_clean_ts: str | None = None
     default_food_g: int | None = None
     default_water_ratio: int | None = None
     feed_cfg: dict[str, Any] | None = None
@@ -206,6 +211,12 @@ class NeakasaDeviceSnapshot:
     bowl_weight_g: int | None = None
     bowl_tare_g: int | None = None
     scale_state_ts: str | None = None
+    scale_live_g: float | None = None
+    scale_live_tare_g: int | None = None
+    scale_live_ts: str | None = None
+    device_state: int = 0
+    device_state_param: int | None = None
+    device_state_ts: str | None = None
     display_type: int | None = None
     display_param: str | None = None
     display_when_idle: bool | None = None
@@ -298,6 +309,77 @@ def _optional_int(value: Any) -> int | None:
         return None
 
 
+def _state_age(ts: Any) -> tuple[str | None, int | None]:
+    """Return the moment a wrapper stamp states, and how many minutes ago that was."""
+    if ts is None:
+        return None, None
+    try:
+        when = datetime.fromtimestamp(int(float(ts)) / 1000, tz=UTC)
+    except (ValueError, OverflowError, OSError):
+        return None, None
+    return when.isoformat(), max(
+        0, int((datetime.now(UTC) - when).total_seconds() // 60)
+    )
+
+
+def _state_evidence(values: dict[str, Any], prefix: str, ts: Any) -> dict[str, Any]:
+    """Return *values* with the moment they were stated and how long ago beside them."""
+    out = dict(values)
+    as_of, age = _state_age(ts)
+    if as_of is not None and age is not None:
+        out[f"{prefix}_as_of"] = as_of
+        out[f"{prefix}_age_minutes"] = age
+    return out
+
+
+def _service_answer(reply: Any) -> dict[str, Any]:
+    """
+    Return the parameters a sync service answered with, or {} when it gave none.
+
+    The gateway wraps the reply as `{"data": {"ReturnCode": 0, "Params": {…}}}`,
+    and inside `Params` the machine names which kind of answer it sent, so a
+    caller has to ask rather than assume: nothing here treats any answer as the
+    kind another caller wanted.
+    """
+    if not isinstance(reply, dict):
+        return {}
+    inner = reply.get("data", reply)
+    if not isinstance(inner, dict):
+        return {}
+    if _to_int(inner.get("ReturnCode", 0)) != 0:
+        return {}
+    params = inner.get("Params")
+    if not isinstance(params, dict):
+        return {}
+    return params
+
+
+def _live_scale(answer: Any) -> tuple[float | None, int | None]:
+    """
+    Return the weighing and the bowl's tare a live-read answer stated together.
+
+    This unit answered `{"type": "scale", "str": {"bowlGram": 68, "gram": 89.08}}`
+    twice on 2026-10-27 fourteen seconds apart, the second time with the gram at
+    89.1, so the reading moves with the ask while the cloud's stored copy stayed
+    at 67 g through that day. An answer labelled as anything else - the power
+    state, a hopper level - is not a weighing and gives nothing.
+    """
+    if not isinstance(answer, dict) or answer.get("type") != "scale":
+        return None, None
+    values = answer.get("str")
+    if not isinstance(values, dict):
+        return None, None
+    gram = values.get("gram")
+    if gram is None or isinstance(gram, bool):
+        return None, None
+    try:
+        weight = float(gram)
+    except (TypeError, ValueError):
+        return None, None
+    tare = values.get("bowlGram")
+    return weight, None if tare is None else _to_int(tare)
+
+
 def _feed_grams_today(records: Any) -> int | None:
     """
     Sum the grams the machine recorded as delivered meals for the current day.
@@ -348,6 +430,8 @@ def _build_device_snapshot(
     category_key: str = "CatLitter",
     product_key: str = "",
     label: str = "",
+    live: Any = None,
+    live_asked_at: str | None = None,
 ) -> NeakasaDeviceSnapshot:
     """Build a :class:`NeakasaDeviceSnapshot` without crashing on missing keys."""
     if not isinstance(devicedata, dict):
@@ -361,7 +445,14 @@ def _build_device_snapshot(
 
     if category_key == "petFeeder":
         return _build_pet_feeder_snapshot(
-            iot_id, device_name, devicedata, product_key, label, records
+            iot_id,
+            device_name,
+            devicedata,
+            product_key,
+            label,
+            records,
+            live,
+            live_asked_at,
         )
 
     sand = _property_value(devicedata, "Sand", {})
@@ -419,8 +510,17 @@ def _build_pet_feeder_snapshot(
     product_key: str,
     label: str,
     records: dict[str, Any] | None = None,
+    live: Any = None,
+    live_asked_at: str | None = None,
 ) -> NeakasaDeviceSnapshot:
-    """Build a snapshot for a Riko wet-meal feeder (categoryKey ``petFeeder``)."""
+    """
+    Build a snapshot for a Riko wet-meal feeder (categoryKey ``petFeeder``).
+
+    The scale keeps two answers: the copy the cloud holds for `bowlStatus`, which
+    only says what the machine last reported, and the weighing this unit stated
+    when the integration asked for one (`live`, from the definition's 称重 read).
+    Both are kept apart, so an entity can say which of the two it is showing.
+    """
     _log_missing_property_keys(iot_id, devicedata, PETFEEDER_EXPECTED_KEYS)
     network = _property_value(devicedata, "NetWorkStatus", {})
     if not isinstance(network, dict):
@@ -428,15 +528,19 @@ def _build_pet_feeder_snapshot(
     pwr = _property_value(devicedata, "pwrStatus", {})
     if not isinstance(pwr, dict):
         pwr = {}
+    pwr_entry = devicedata.get("pwrStatus") if isinstance(devicedata, dict) else None
+    pwr_stamp = pwr_entry.get("time") if isinstance(pwr_entry, dict) else None
     bowl = _property_value(devicedata, "bowlStatus", {})
     if not isinstance(bowl, dict):
         bowl = {}
     # The wrapper's own stamp is the moment the machine last pushed this key to
-    # the cloud. Asking the cloud never refreshes it: on this unit the copy of
-    # `bowlStatus` stayed at the same value and the same stamp for two days while
-    # the machine's display moved, `get` is answered with "service not found" and
-    # `iotRead` is accepted but leaves the stamp put. So the age of the reading,
-    # not a claim about the present, is what can honestly be said.
+    # the cloud, and asking the cloud never re-reads what that push carried: this
+    # unit re-reported `bowlStatus` on 2026-10-27T00:56:40Z - inside a whole-set
+    # report, the same stamp as `pwrStatus`, `foodLvl`, `waterLvl`, `NetWorkStatus`
+    # and `deviceState` - still stating `{bowlGram: 68, curWeight: 67}` with about
+    # 22 g of food in the bowl while the app showed 22-23 g. Nothing on this path
+    # re-reads the scale, so the age of the reading, not a claim about the present,
+    # is what can honestly be said.
     bowl_entry = devicedata.get("bowlStatus") if isinstance(devicedata, dict) else None
     scale_stamp = bowl_entry.get("time") if isinstance(bowl_entry, dict) else None
     fresh_mgr = _property_value(devicedata, "freshMgrCfg", {})
@@ -445,12 +549,22 @@ def _build_pet_feeder_snapshot(
     deep_clean = _property_value(devicedata, "deepCleanCfg", {})
     if not isinstance(deep_clean, dict):
         deep_clean = {}
+    deep_clean_entry = (
+        devicedata.get("deepCleanCfg") if isinstance(devicedata, dict) else None
+    )
+    deep_clean_stamp = (
+        deep_clean_entry.get("time") if isinstance(deep_clean_entry, dict) else None
+    )
     def_fd = _property_value(devicedata, "defFdCfg", {})
     if not isinstance(def_fd, dict):
         def_fd = {}
     device_state = _property_value(devicedata, "deviceState", {})
     if not isinstance(device_state, dict):
         device_state = {}
+    device_entry = (
+        devicedata.get("deviceState") if isinstance(devicedata, dict) else None
+    )
+    device_stamp = device_entry.get("time") if isinstance(device_entry, dict) else None
     display = _property_value(devicedata, "displayCfg", {})
     if not isinstance(display, dict):
         display = {}
@@ -465,6 +579,7 @@ def _build_pet_feeder_snapshot(
         dnd = {}
 
     battery_percent_raw = pwr.get("batPercentage")
+    live_gram, live_tare = _live_scale(live)
     desiccant_raw = _property_value(devicedata, "leftDrierDays")
     default_food_g, default_water_ratio = _configured_feed_defaults(def_fd)
 
@@ -478,7 +593,7 @@ def _build_pet_feeder_snapshot(
         clean_cfg={},
         sand_level_state=0,
         sand_level_percent=0,
-        bucket_status=_to_int(device_state.get("state", 0)),
+        bucket_status=0,
         room_of_bin=0,
         young_cat_mode=False,
         child_lock=_property_value(devicedata, "childLockOnOff", 0) == 1,
@@ -498,6 +613,8 @@ def _build_pet_feeder_snapshot(
         battery_level=(
             None if pwr.get("batLevel") is None else _to_int(pwr.get("batLevel"))
         ),
+        battery_state=_optional_int(pwr.get("batStatus")),
+        battery_ts=str(pwr_stamp) if pwr_stamp is not None else None,
         bowl_present=_to_int(bowl.get("bBowlIn", 0)) == 1,
         cover_absent=_property_value(devicedata, "bCoverAbsent", 1) == 0,
         desiccant_days_left=(None if desiccant_raw is None else _to_int(desiccant_raw)),
@@ -510,6 +627,8 @@ def _build_pet_feeder_snapshot(
         fresh_mgr_leftover_g=_optional_int(fresh_mgr.get("leftOverTTH")),
         fresh_mgr_hours=_optional_int(fresh_mgr.get("monitorTime")),
         deep_clean_on=_to_int(deep_clean.get("bOnOff", 0)) == 1,
+        deep_clean_state=_optional_int(deep_clean.get("cleanState")),
+        deep_clean_ts=str(deep_clean_stamp) if deep_clean_stamp is not None else None,
         default_food_g=default_food_g,
         default_water_ratio=default_water_ratio,
         feed_cfg=dict(def_fd) if def_fd else None,
@@ -517,6 +636,12 @@ def _build_pet_feeder_snapshot(
         bowl_weight_g=_optional_int(bowl.get("curWeight")),
         bowl_tare_g=_optional_int(bowl.get("bowlGram")),
         scale_state_ts=str(scale_stamp) if scale_stamp is not None else None,
+        scale_live_g=live_gram,
+        scale_live_tare_g=live_tare if live_gram is not None else None,
+        scale_live_ts=live_asked_at if live_gram is not None else None,
+        device_state=_to_int(device_state.get("state", 0)),
+        device_state_param=_optional_int(device_state.get("param")),
+        device_state_ts=str(device_stamp) if device_stamp is not None else None,
         display_type=_optional_int(display.get("displayType")),
         display_param=display.get("displayParam"),
         display_when_idle=(
@@ -697,11 +822,16 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         Return the evidence behind a bowl reading, so its age can be checked.
 
         The cloud's copy of `bowlStatus` is only as fresh as the machine's last
-        push of that key, and asking the cloud does not refresh it: this unit's
-        copy kept the same value and the same stamp for two days while the
-        machine's own display moved, `get` is answered with "service not found"
-        and `iotRead` is accepted but leaves the stamp put. So the evidence names
-        the moment that reading was taken and how long ago it was, instead of
+        push of that key, and that push repeats what the machine had stored
+        rather than re-reading the scale: this unit re-reported the key at
+        2026-10-27T00:56:40Z - a whole-set report, the same stamp as
+        `pwrStatus`, `foodLvl`, `waterLvl`, `NetWorkStatus` and `deviceState` -
+        still stating 67 g on the scale against a 68 g tare with about 22 g of
+        food in the bowl while the app showed 22-23 g. `get` is answered with
+        "service not found", and asking for this key leaves it as it was: the
+        machine's own read command states a fresh weighing, and that is a
+        different claim, kept in its own helper. So the evidence names the
+        moment that reading was stated and how long ago that was, instead of
         presenting the number as if it were the present.
         """
         snap = self.device_snapshot(iot_id)
@@ -712,18 +842,84 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             "bowl_tare_g": snap.bowl_tare_g,
             "bowl_in_place": snap.bowl_present,
         }
-        if snap.scale_state_ts is None:
+        as_of, age = _state_age(snap.scale_state_ts)
+        if as_of is None or age is None:
             return evidence
-        try:
-            stamp = int(float(snap.scale_state_ts)) / 1000
-            when = datetime.fromtimestamp(stamp, tz=UTC)
-        except (ValueError, OverflowError, OSError):
-            return evidence
-        evidence["scale_state_as_of"] = when.isoformat()
-        evidence["scale_state_age_minutes"] = max(
-            0, int((datetime.now(UTC) - when).total_seconds() // 60)
-        )
+        evidence["scale_state_as_of"] = as_of
+        evidence["scale_state_age_minutes"] = age
         return evidence
+
+    def live_scale_evidence(self, iot_id: str) -> dict[str, Any]:
+        """
+        Return the weighing the machine stated to a live read, and when we asked.
+
+        This is the scale's other answer: the reply to the definition's 称重 read,
+        which this unit gave twice on 2026-10-27 fourteen seconds apart as 89.08
+        g and 89.1 g above the 68 g tare it states in the same answer - while the
+        stored copy stayed at 67 g for that whole day. The reply carries no
+        timestamp of its own, only a message identifier, so the date here is the
+        moment the answer arrived: the machine's reading as of the ask, and the
+        only claim that answer supports.
+        """
+        snap = self.device_snapshot(iot_id)
+        if snap is None or snap.scale_live_g is None:
+            return {}
+        return {
+            "scale_live_g": snap.scale_live_g,
+            "scale_live_tare_g": snap.scale_live_tare_g,
+            "scale_live_as_of": snap.scale_live_ts,
+        }
+
+    def device_state_evidence(self, iot_id: str) -> dict[str, Any]:
+        """
+        Return the machine's reported state beside the moment it stated it.
+
+        Unlike `bowlStatus`, the state keys here are re-pushed as the machine
+        works: this unit's `deviceState` stamp moved four times across
+        2026-10-26T11:05:05Z, 2026-10-27T00:40:17Z, 2026-10-27T00:56:40Z and
+        2026-10-27T09:44:57Z while the value stayed 0, so the value is as fresh
+        as the machine's last report of that key and the evidence says which
+        moment that was.
+        """
+        snap = self.device_snapshot(iot_id)
+        if snap is None:
+            return {}
+        return _state_evidence(
+            {
+                "state_value": snap.device_state,
+                "state_param": snap.device_state_param,
+            },
+            "state",
+            snap.device_state_ts,
+        )
+
+    def deep_clean_evidence(self, iot_id: str) -> dict[str, Any]:
+        """Return the wash state the machine states, and when it stated it."""
+        snap = self.device_snapshot(iot_id)
+        if snap is None:
+            return {}
+        return _state_evidence(
+            {
+                "deep_clean_state": snap.deep_clean_state,
+                "deep_clean_switch": snap.deep_clean_on,
+            },
+            "deep_clean",
+            snap.deep_clean_ts,
+        )
+
+    def battery_state_evidence(self, iot_id: str) -> dict[str, Any]:
+        """Return the battery state the machine states, and when it stated it."""
+        snap = self.device_snapshot(iot_id)
+        if snap is None:
+            return {}
+        return _state_evidence(
+            {
+                "battery_state": snap.battery_state,
+                "battery_percent": snap.battery_percent,
+            },
+            "battery",
+            snap.battery_ts,
+        )
 
     def device_category(self, iot_id: str) -> str:
         """Return the ``categoryKey`` for *iot_id*, e.g. ``"CatLitter"``."""
@@ -1413,10 +1609,43 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
 
         return await props_cache.get_or_update(fetch)
 
+    async def _read_live_scale(
+        self, iot_id: str, client: NeakasaApiClient | None = None
+    ) -> tuple[dict[str, Any], str | None]:
+        """
+        Ask the machine for its current weighing and return what it answered.
+
+        The definition names a sync service `iotRead` (远程读取) whose readType 2 is
+        称重 (the weighing), and this unit answers it: twice on 2026-10-27, fourteen
+        seconds apart, the reply was `{"type": "scale", "str": {"bowlGram": 68,
+        "gram": 89.08}}` then `89.1` - a reading that moves, while the cloud's copy
+        of `bowlStatus` stayed at 67 g for the whole day. The moment the answer
+        arrived is the only date the reply can be given, since it carries no stamp
+        of its own, so it is taken here rather than claimed by the machine.
+        A refused call is a gap, not an invention: the answer is empty and the
+        stored copy keeps its place.
+        """
+        api_client = client if client is not None else await self._get_client()
+        try:
+            reply = await api_client.invoke_service(iot_id, "iotRead", {"readType": 2})
+        except (
+            NeakasaApiClientCommunicationError,
+            NeakasaApiClientDeviceBusyError,
+        ) as err:
+            _LOGGER.debug(
+                "The live scale read was refused (%s), so the stored copy stands",
+                type(err).__name__,
+            )
+            return {}, None
+        answer = _service_answer(reply)
+        if not answer:
+            return {}, None
+        return answer, datetime.now(UTC).isoformat()
+
     async def _fetch_single_device(
         self, iot_id: str, client: NeakasaApiClient | None = None
     ) -> NeakasaDeviceSnapshot:
-        """Fetch properties and records for one device, building a snapshot."""
+        """Fetch the reads one device answers for and build its snapshot."""
         devicedata = await self._get_properties(iot_id, client)
         meta = self._device_meta.get(iot_id, {})
         category_key = meta.get("category_key", "CatLitter")
@@ -1437,6 +1666,11 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                 label=meta.get("label", ""),
             )
 
+        live: dict[str, Any] = {}
+        live_asked_at: str | None = None
+        if category_key == "petFeeder":
+            live, live_asked_at = await self._read_live_scale(iot_id, client)
+
         new_last_use = _get_last_use_date(devicedata)
         records_cache, _ = self._cache_for(iot_id)
         if self._last_use_dates.get(iot_id) != new_last_use:
@@ -1447,7 +1681,13 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
 
         records = await self._get_records(iot_id, client)
         device_name = await self._get_device_name(iot_id)
-        self._mark_state_changed(iot_id, devicedata, records)
+        stamp_props = devicedata if isinstance(devicedata, dict) else {}
+        if live:
+            # The live weighing changes what the bowl says without changing the
+            # property set, so it belongs in the stamp: an unchanged answer
+            # stays an unchanged state and is not re-pushed to Home Assistant.
+            stamp_props = {**stamp_props, "liveScale": live}
+        self._mark_state_changed(iot_id, stamp_props, records)
         return _build_device_snapshot(
             iot_id,
             device_name,
@@ -1457,6 +1697,8 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             category_key=category_key,
             product_key=meta.get("product_key", ""),
             label=meta.get("label", ""),
+            live=live,
+            live_asked_at=live_asked_at,
         )
 
     # ------------------------------------------------------------------

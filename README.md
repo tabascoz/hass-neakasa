@@ -17,7 +17,7 @@ The Neakasa Home Assistant Custom Integration allows you to integrate your Neaka
 
 ### Currently supported devices
 - Neakasa M1 (Cat Litter Box)
-- Neakasa Riko (Wet Meal Feeder) — read-write (beta, `v1.5.0-beta4`)
+- Neakasa Riko (Wet Meal Feeder) — read-write (beta, `v1.5.0-beta5`)
 
 #### Riko (wet meal feeder) features
 |Type|Name|Notes|
@@ -31,7 +31,12 @@ The Neakasa Home Assistant Custom Integration allows you to integrate your Neaka
 |Number|Food quantity|portion used by the next Feed now, 3–15 g|
 |Number|Water ratio|water-to-food ratio used by the next Feed now, 1–5 (water amount = portion × ratio)|
 |Switch|Save feed as default|whether a Feed now stores the amounts it used on the machine; default off|
-|Sensor|Bowl weight|grams the bowl holds - the machine's scale reading with its own tare subtracted, the raw reading and the tare shown beside it|
+|Sensor|Bowl weight|grams the bowl holds - the machine's scale reading with its own tare subtracted; the machine is asked for a current weighing (its 称重 read) each scan, so when it answers the figure is that reading and both answers keep their own moments in the state attributes|
+|Sensor|Device status|the operating state the machine states for itself (`deviceState`): idle, preparing a meal, dispensing a meal, paused, fault, sleeping, freshness protection, deep cleaning - only "idle" has been seen on this unit, the others are named by the machine's own definition; the moment that report was made travels with it|
+|Binary sensor|Serving food|whether the machine states it is preparing or dispensing a meal - the same key as the state above, so it follows the machine's report and not the scale|
+|Binary sensor|Bowl in place|whether the bowl is on the scale (`bowlStatus`), with the age of that reading beside it|
+|Sensor|Deep clean state|the bowl wash the machine says it is in (`deepCleanCfg`); this unit has only ever answered "not washing"|
+|Sensor|Battery state|whether the battery is fitted, being charged or in use (`pwrStatus.batStatus`)|
 |Sensor|Desiccant days left|the countdown the machine keeps for its desiccant pack|
 |Number|Desiccant days|the day budget for a fresh pack, 1–60|
 |Button|Desiccant pack is changed|restarts that countdown on the machine (`resetDrierTime`)|
@@ -98,17 +103,17 @@ The Neakasa Home Assistant Custom Integration allows you to integrate your Neaka
 
 ## Installation
 
-### Getting the Riko beta (`v1.5.0-beta4`)
+### Getting the Riko beta (`v1.5.0-beta5`)
 
 The Riko support ships as a pre-release. To try it before the next stable release:
 
 **Via HACS** — in Home Assistant, open HACS → *Integrations* → Neakasa → use the
-version selector to download `v1.5.0-beta4`, then restart Home Assistant.
+version selector to download `v1.5.0-beta5`, then restart Home Assistant.
 
 **Manually (zip)** — download this beta's asset and extract into your config dir:
 
 ```bash
-wget https://github.com/tabascoz/hass-neakasa/releases/download/v1.5.0-beta4/neakasa.zip
+wget https://github.com/tabascoz/hass-neakasa/releases/download/v1.5.0-beta5/neakasa.zip
 mkdir -p custom_components/neakasa && unzip neakasa.zip -d custom_components/neakasa && rm neakasa.zip
 ```
 
@@ -191,15 +196,24 @@ entities keeps every one of them and only re-files them. Presses now cost one ex
 read of the machine, which is what makes them carry the machine's own state instead
 of a copy that is up to five minutes old.
 
-**Bowl weight** now travels with the age of its reading. The cloud only holds the
-last state the machine pushed for `bowlStatus`, and asking it does not refresh that
-copy: this unit's reading stayed at a scale value with a stamp of two days earlier while
-the machine's own display moved, `get` is answered with "service not found" and `iotRead`
-is accepted but leaves the stamp put. The sensor now publishes the bowl's **contents** -
-the scale reading with the machine's own tare subtracted, clamped at zero, so this unit's
-67 g on the scale against a 68 g tare is an empty bowl, the figure the app shows - and
-carries `scale_state_as_of`, `scale_state_age_minutes`, the raw reading and the tare as
-attributes, so an old number is read as old rather than as the present.
+**Bowl weight** now publishes the bowl's **contents** - the scale reading with the
+machine's own tare subtracted and clamped at zero, so this unit's 67 g on the scale
+against a 68 g tare is an empty bowl - and it travels with the age of its reading,
+because the cloud only holds what the machine last reported for `bowlStatus`. The
+wording of that reason was wrong in this note when it was first written and has
+been corrected against the measurements of 2026-10-27: the machine does push that
+key again - this unit re-reported it at 2026-10-27T00:56:40Z, inside a whole-set
+report in which `pwrStatus`, `foodLvl`, `waterLvl`, `NetWorkStatus` and `deviceState`
+carry the same moment - but the numbers in that report are the ones the machine had
+stored, still 67 g on the scale against a 68 g tare with about 22 g of food in the
+bowl while the app showed 22-23 g. Nothing this integration reached then re-read
+the scale: `get` is answered with "service not found" and asking for the key
+restates what it held. What does answer freshly is the machine's own read
+command, and that is the next release's change - written up there rather than
+patched into this note, because this release shipped the age and nothing more.
+So the sensor carries `scale_state_as_of`,
+`scale_state_age_minutes`, the raw reading and the tare as attributes, and an old
+number is read as old rather than as the present.
 
 What that release also records is the one thing it cannot make better: with the
 integration running, the Neakasa mobile app (iOS and the Android APK) reports the
@@ -215,6 +229,50 @@ the app, share the machines to it, and configure this integration with that acco
 the app and Home Assistant then describe different accounts and there is no session
 left to fight over. If that split is not yours and the app's stability matters more
 than the integration, disabling this entry is the switch that keeps the app normal.
+
+### The state the machine reports for itself (working tree, `v1.5.0-beta6` — not released)
+
+What the feeder says about its own working state is now read and shown, from the
+keys its own definition names and this unit answers: a **Device status** sensor
+for the operating state (`deviceState`), a **Serving food** binary sensor for the
+two codes the definition names as a meal (preparing and dispensing), **Bowl in
+place** from `bowlStatus`, **Deep clean state** from `deepCleanCfg` and
+**Battery state** from `pwrStatus`. The names of those states are the definition's;
+the only values this unit has ever answered are idle, no wash, the battery in use,
+and the bowl in place - the other states are shown with the names the definition
+gives them and have not been seen here.
+
+Unlike the scale, these keys are re-pushed while the machine works: this unit's
+`deviceState` report moved across 2026-10-26T11:05:05Z, 2026-10-27T00:40:17Z,
+2026-10-27T00:56:40Z and 2026-10-27T09:44:57Z while the value stayed at idle, so
+each of these values carries its own `*_as_of` and `*_age_minutes` naming the
+moment the machine stated that key, rather than presenting it as the present. The
+bowl number is unchanged for the reason given above - the channel the mobile app
+reads the scale through is still being looked for, and a re-echoed reading is not
+offered as the present. No control writes the machine: these are reads.
+
+The bowl number, however, was wrong for a reason we can now answer. The cloud's
+copy of `bowlStatus` is a replay: seven reads across 2026-10-27 all restated 67
+g on the scale against a 68 g tare - a published 0 g - while the app showed 22 g
+and the machine's display moved. The machine's own read command answers freshly.
+The product's definition names `iotRead` (远程读取) and its `readType` 2 is 称重 (the
+weighing); this unit replied `{"type": "scale", "str": {"bowlGram": 68, "gram":
+89.08}}` and, fourteen seconds later, `89.1` - 21 g above the tare that same
+answer states. So the integration asks that command once per scan for the feeder,
+through the same call path it already uses, and prefers the answer taken more
+recently: `scale_live_g`, `scale_live_tare_g` and `scale_live_as_of` travel
+beside the stored copy's own `scale_state_as_of` and `scale_state_age_minutes`,
+never dressed up as one claim. A machine that refuses the ask states nothing and
+the stored figure keeps its age. This is one extra cloud call per feeder per
+scan, which is what the mobile app does as well, and it is why the app's session
+has to be signed in again after us.
+
+The same command answers the machine's other live states - the power state
+(this unit said 85 % and `"state": "Using"` against the stored 90 %), the
+hopper's raw detection value, the water level and the device clock - and
+`getVoltage` reads a channel value; only the weighing is read today, with the
+rest written up in `docs/riko-protocol.md` so they do not have to be
+rediscovered.
 
 ### HACS (recommended)
 

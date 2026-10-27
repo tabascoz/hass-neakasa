@@ -536,9 +536,9 @@ class NeakasaAPI:
 
     async def _invoke_service(
         self, iot_id: str, identifier: str, args: dict[str, Any]
-    ) -> None:
-        """Invoke a device service (clean, level, etc)."""
-        await self._iot_request(
+    ) -> Any:
+        """Invoke a device service (clean, level, etc) and return what it answers."""
+        return await self._iot_request(
             "1.0.5",
             "/thing/service/invoke",
             {"args": args, "identifier": identifier, "iotId": iot_id},
@@ -554,9 +554,9 @@ class NeakasaAPI:
 
     async def invoke_service(
         self, iot_id: str, identifier: str, args: dict[str, Any]
-    ) -> None:
-        """Invoke an arbitrary device service by wire identifier."""
-        await self._invoke_service(iot_id, identifier, args)
+    ) -> Any:
+        """Invoke an arbitrary device service by wire identifier; the reply is returned."""
+        return await self._invoke_service(iot_id, identifier, args)
 
     # ------------------------------------------------------------------
     # Neakasa web API (pure aiohttp — no Aliyun SDK)

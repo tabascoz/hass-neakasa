@@ -142,10 +142,10 @@ class NeakasaApiClient:
 
     async def invoke_service(
         self, iot_id: str, identifier: str, args: dict[str, Any]
-    ) -> None:
-        """Invoke an arbitrary device service by wire identifier."""
+    ) -> Any:
+        """Invoke a device service; the machine's reply is returned."""
         async with _translate_errors():
-            await self._api.invoke_service(iot_id, identifier, args)
+            return await self._api.invoke_service(iot_id, identifier, args)
 
     async def get_product_list(self) -> Any:
         """Fetch the account's product schema (commands/properties)."""

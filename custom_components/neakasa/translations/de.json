@@ -11,19 +11,19 @@
                 }
             },
             "reauth_confirm": {
-                "title": "Reauthenticate Neakasa",
-                "description": "Your Neakasa credentials for {username} are no longer valid. Enter new credentials to restore access.",
+                "title": "Neakasa erneute Authentifizierung",
+                "description": "Deine Neakasa-Anmeldeinformationen für {username} sind nicht mehr gültig. Gib neue Anmeldeinformationen ein, um den Zugriff wiederherzustellen.",
                 "data": {
-                    "username": "Username",
-                    "password": "Password"
+                    "username": "Benutzername",
+                    "password": "Kennwort"
                 }
             },
             "reconfigure": {
-                "title": "Reconfigure Neakasa",
-                "description": "Update your Neakasa account credentials.",
+                "title": "Neakasa neu konfigurieren",
+                "description": "Aktualisiere die Anmeldeinformationen deines Neakasa-Kontos.",
                 "data": {
-                    "username": "Username",
-                    "password": "Password"
+                    "username": "Benutzername",
+                    "password": "Kennwort"
                 }
             }
         },
@@ -32,13 +32,13 @@
             "unknown": "Unbekannter Fehler.",
             "connection": "Fehler bei dem Verbindungsaufbau.",
             "no_devices_found": "Keine Neakasa CatLitter-Geräte mit diesem Konto gefunden.",
-            "reauth_successful": "Reauthentication successful.",
-            "reconfigure_successful": "Reconfiguration successful."
+            "reauth_successful": "Erneute Authentifizierung erfolgreich.",
+            "reconfigure_successful": "Neukonfiguration erfolgreich."
         },
         "error": {
-            "authentication": "Invalid username or password.",
-            "connection": "Could not connect to Neakasa servers. Check your network.",
-            "no_devices_found": "No CatLitter devices found for this account."
+            "authentication": "Ungültiger Benutzername oder Kennwort.",
+            "connection": "Verbindung zu den Neakasa-Servern fehlgeschlagen. Überprüfe dein Netzwerk.",
+            "no_devices_found": "Keine CatLitter-Geräte für dieses Konto gefunden."
         }
     },
     "entity": {
@@ -50,42 +50,42 @@
                 "name": "Glätten"
             },
             "feed_now": {
-                "name": "Feeding now"
+                "name": "Jetzt füttern"
             },
             "refresh_data": {
                 "name": "Daten aktualisieren"
             },
             "reset_desiccant": {
-                "name": "Desiccant pack is changed"
+                "name": "Trockenmittelbeutel gewechselt"
             },
             "reset_bowl_scale": {
-                "name": "Zero the bowl scale"
+                "name": "Futternapf-Waage nullen"
             },
             "calibrate_food_scale": {
-                "name": "Calibrate the food scale"
+                "name": "Futterwaage kalibrieren"
             },
             "mark_water_bin_clean": {
-                "name": "Water tank was cleaned"
+                "name": "Wassertank wurde gereinigt"
             },
             "mark_food_bin_clean": {
-                "name": "Food bin was cleaned"
+                "name": "Futterbehälter wurde gereinigt"
             }
         },
         "number": {
             "food_grams": {
-                "name": "Food quantity"
+                "name": "Futtermenge"
             },
             "water_ratio": {
-                "name": "Water ratio"
+                "name": "Mischungsverhältnis Wasser"
             },
             "rehydration_minutes": {
-                "name": "Rehydration time"
+                "name": "Einweichzeit"
             },
             "desiccant_days": {
-                "name": "Days of the desiccant"
+                "name": "Tage des Trockenmittels"
             },
             "feed_sound_volume": {
-                "name": "Volume of the meal sound"
+                "name": "Lautstärke des Mahlzeit-Signals"
             }
         },
         "binary_sensor": {
@@ -94,6 +94,12 @@
             },
             "cover_absent": {
                 "name": "Abdeckung fehlt"
+            },
+            "serving_food": {
+                "name": "Futter wird ausgegeben"
+            },
+            "bowl_in_place": {
+                "name": "Napf eingesetzt"
             }
         },
         "sensor": {
@@ -104,7 +110,7 @@
                 "name": "Katzenstreu Level"
             },
             "wifi_rssi": {
-                "name": "WiFi RSSI"
+                "name": "WLAN RSSI"
             },
             "stay_time": {
                 "name": "Letzte Aufenthaltszeit"
@@ -143,13 +149,13 @@
                 }
             },
             "device_label": {
-                "name": "Gerät Label"
+                "name": "Geräte-Bezeichnung"
             },
             "food_level": {
-                "name": "Level Food"
+                "name": "Futterstand"
             },
             "water_level": {
-                "name": "Level Water"
+                "name": "Wasserstand"
             },
             "battery": {
                 "name": "Akku"
@@ -157,14 +163,14 @@
             "cloud_session_status": {
                 "name": "Cloud-Sitzungsstatus",
                 "state": {
-                    "unknown": "Unknown",
+                    "unknown": "Unbekannt",
                     "home_assistant": "Home Assistant",
                     "not_home_assistant": "Nicht Home Assistant"
                 },
                 "state_attributes": {
                     "options": {
                         "state": {
-                            "unknown": "Unknown",
+                            "unknown": "Unbekannt",
                             "home_assistant": "Home Assistant",
                             "not_home_assistant": "Nicht Home Assistant"
                         }
@@ -172,25 +178,55 @@
                 }
             },
             "bowl_weight": {
-                "name": "Bowl weight"
+                "name": "Gewicht des Napfs"
             },
             "desiccant_days_left": {
-                "name": "Days remaining of the desiccant"
+                "name": "Verbleibende Tage des Trockenmittels"
             },
             "device_serial": {
-                "name": "Serial number of the device"
+                "name": "Seriennummer des Geräts"
             },
             "firmware_version": {
-                "name": "Version of the firmware"
+                "name": "Firmware-Version"
             },
             "food_intake_today": {
-                "name": "Food delivered today"
+                "name": "Heute ausgegebenes Futter"
             },
             "water_bin_clean": {
-                "name": "Water tank was last cleaned"
+                "name": "Wassertank zuletzt gereinigt am"
             },
             "food_bin_clean": {
-                "name": "Food bin was last cleaned"
+                "name": "Futterbehälter zuletzt gereinigt am"
+            },
+            "device_status": {
+                "name": "Geräte Status",
+                "state": {
+                    "idle": "Leerlauf",
+                    "preparing_food": "Mahlzeit wird zubereitet",
+                    "serving_food": "Mahlzeit wird ausgegeben",
+                    "paused": "Pausiert",
+                    "fault": "Fehler",
+                    "sleeping": "Schlafmodus",
+                    "freshness_protection": "Frischeschutz",
+                    "deep_cleaning": "Tiefenreinigung"
+                }
+            },
+            "deep_clean_state": {
+                "name": "Status der Tiefenreinigung",
+                "state": {
+                    "not_washing": "Wäscht nicht",
+                    "washing_water_channel": "Wasserkanal wird gewaschen",
+                    "water_channel_washed": "Wasserkanal gewaschen",
+                    "rinsing_water_channel": "Wasserkanal wird gespült"
+                }
+            },
+            "battery_state": {
+                "name": "Akkustatus",
+                "state": {
+                    "not_fitted": "Kein Akku eingesetzt",
+                    "charging": "Lädt",
+                    "in_use": "In Betrieb"
+                }
             }
         },
         "switch": {
@@ -216,29 +252,29 @@
                 "name": "Unaufhaltsamer Kreislauf"
             },
             "auto_clean": {
-                "name": "Auto clean"
+                "name": "Automatische Reinigung"
             },
             "feed_keep_as_new_defaults": {
                 "name": "Futtermenge als Standard"
             },
             "fresh_meal_manager": {
-                "name": "Keep the meal fresh"
+                "name": "Mahlzeit frisch halten"
             },
             "display_standby": {
-                "name": "Show the display when idle"
+                "name": "Display im Leerlauf anzeigen"
             },
             "do_not_disturb": {
-                "name": "Do not disturb"
+                "name": "Bitte nicht stören"
             }
         },
         "select": {
             "display_standby_kind": {
-                "name": "Kind of the standby display"
+                "name": "Art der Standby-Anzeige"
             }
         },
         "text": {
             "display_custom_message": {
-                "name": "Custom message of the standby display"
+                "name": "Benutzerdefinierte Nachricht der Standby-Anzeige"
             }
         }
     }

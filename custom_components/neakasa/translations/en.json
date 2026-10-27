@@ -94,6 +94,12 @@
             },
             "cover_absent": {
                 "name": "Cover missing"
+            },
+            "serving_food": {
+                "name": "Serving food"
+            },
+            "bowl_in_place": {
+                "name": "Bowl in place"
             }
         },
         "sensor": {
@@ -191,6 +197,36 @@
             },
             "food_bin_clean": {
                 "name": "Food bin last cleaned"
+            },
+            "device_status": {
+                "name": "Device status",
+                "state": {
+                    "idle": "Idle",
+                    "preparing_food": "Preparing a meal",
+                    "serving_food": "Dispensing a meal",
+                    "paused": "Paused",
+                    "fault": "Fault",
+                    "sleeping": "Sleeping",
+                    "freshness_protection": "Freshness protection",
+                    "deep_cleaning": "Deep cleaning"
+                }
+            },
+            "deep_clean_state": {
+                "name": "Deep clean state",
+                "state": {
+                    "not_washing": "Not washing",
+                    "washing_water_channel": "Washing the water channel",
+                    "water_channel_washed": "Water channel washed",
+                    "rinsing_water_channel": "Rinsing the water channel"
+                }
+            },
+            "battery_state": {
+                "name": "Battery state",
+                "state": {
+                    "not_fitted": "Battery not fitted",
+                    "charging": "Charging",
+                    "in_use": "In use"
+                }
             }
         },
         "switch": {

@@ -44,10 +44,10 @@ Every key below is labelled by where the shape came from:
 |---|---|---|
 | `foodLvl` | int enum (observed `2`) `[this unit]` | food hopper level state; the codes the machine uses are empty=0, lacking=1, full=2 — not a percent |
 | `waterLvl` | int enum (observed `3`) `[this unit]` | water tank level state; empty=0, lacking=1, low=2, middle=3, full=4 |
-| `pwrStatus` | `{batPercentage, batLevel, batVoltage, batTemp, pwrType, batStatus, batMsg}` | battery; observed `batPercentage`=90, `batLevel`=4, `batVoltage`=12159 mV, `batTemp`=25.0 °C, `batStatus`=2. The definition allows percentage 0–110 %, voltage 0–16000 mV, temperature −30…120 °C |
-| `bowlStatus` | `{bowlGram, curWeight, bBowlIn}` | the bowl on the scale: `curWeight` is **the bowl's actual weight in grams** (observed 67; the definition allows −3000…3000), `bowlGram` is the bowl's own tare (observed 68; 0…500 g), `bBowlIn`=1 bowl present. What the bowl holds is `curWeight − bowlGram` clamped at zero (67 g on the scale with a 68 g tare is an empty bowl, and that is what the app shows), which is what the sensor publishes; the raw reading, the tare and the wrapper's stamp travel with it. The wrapper's `time` is the moment the machine last pushed this key, and the cloud only holds that copy: it moved during a cycle (§Feeding, 67→139 g) but stayed at the same value and stamp for two days afterwards while the machine's own display moved, so Home Assistant carries the stamp with the number as `scale_state_as_of` and `scale_state_age_minutes` rather than presenting it as the present |
+| `pwrStatus` | `{batPercentage, batLevel, batVoltage, batTemp, pwrType, batStatus, batMsg}` | battery; observed `batPercentage`=90, `batLevel`=4, `batVoltage`=12159 mV, `batTemp`=25.0 °C, `batStatus`=2. The definition allows percentage 0–110 %, voltage 0–16000 mV, temperature −30…120 °C, and spells `batStatus` as an enum 不在位=0 battery not fitted, 充电中=1 being charged, 使用中=2 in use — only 2 has been answered here, so the other two names are the definition's; the key's own stamp (2026-10-27T00:56:40Z on this unit) is carried as `battery_as_of` and `battery_age_minutes` |
+| `bowlStatus` | `{bowlGram, curWeight, bBowlIn}` | the bowl on the scale: `curWeight` is **the weight the scale reports with the bowl on it** (observed 67; the definition allows −3000…3000), `bowlGram` is the bowl's own tare (observed 68; 0…500 g), `bBowlIn`=1 bowl present (the definition names 0 不在位 not in place and 1 在位 in place). What the bowl holds is `curWeight − bowlGram` clamped at zero (67 g on the scale against a 68 g tare is an empty bowl), which is what the sensor publishes; the raw reading, the tare and whether the bowl is in place travel with it as `scale_reading_g`, `bowl_tare_g` and `bowl_in_place`, and the bowl's presence is a control of its own. The wrapper's `time` is the moment the machine last reported this key, and that report repeats what the machine had stored rather than re-reading the scale: seven reads across 2026-10-27 show the stamp moving to 2026-10-27T00:56:40Z — the same stamp as `pwrStatus`, `foodLvl`, `waterLvl`, `NetWorkStatus`, `bCoverAbsent`, `childLockOnOff`, `leftDrierDays` and `deviceState`, one whole-property-set report — while the value stayed 67 g on the scale against a 68 g tare with about 22 g of food in the bowl and the app showing 22–23 g. Asking this key never refreshes the number: `get` is answered with "service not found" and the `/sys/…/thing/…` forms the product's definition names are 404 on this gateway. What does state a current weighing is the machine's own read command, `iotRead` with `readType` 2 (§Commands) — it replied 89.08 g and, fourteen seconds later, 89.1 g above a 68 g tare on the same day — and that reply is kept apart from this copy as `scale_live_g`, `scale_live_tare_g` and `scale_live_as_of`, so Home Assistant never passes a replay off as the present and never dresses the two answers up as one |
 | `bCoverAbsent` | int 0/1 | cover/lid state — **inverted**: `1` = in place, `0` = absent (verified against the device with its cover in place) |
-| `deviceState` | `{state, param}` | operating state machine (observed 0/0); the state codes the machine uses are dormant=0, preparing food=1, delivering food=2, paused=3, faulting=4, sleeping=5, protecting=6, cleaning=7 |
+| `deviceState` | `{state, param}` | operating state machine (observed 0/0 on this unit throughout 2026-10-26 and 2026-10-27); the state codes and their names are the definition's enum — 空闲中=0 idle, 备餐中=1 preparing a meal, 出餐中=2 dispensing a meal, 挂起中=3 paused, 故障中=4 fault, 休眠中=5 sleeping, 新鲜度保护中=6 freshness protection, 深度清洁中=7 deep cleaning — and `param` is an int −100000…100000 named 参数 (a parameter), which this unit has only ever stated as 0. Unlike `bowlStatus`, this key **is re-pushed as the machine works**: this unit's copies were stamped 2026-10-26T11:05:05Z, then 2026-10-27T00:40:17Z, 2026-10-27T00:56:40Z and 2026-10-27T09:44:57Z in four reads of the same key, so the value is as fresh as the machine's last report of it — and Home Assistant carries that moment as `state_as_of` and `state_age_minutes` rather than presenting it as the present |
 | `drierEffeDays` | int (observed 40) | desiccant pack's effective days; the definition allows 1…60 |
 | `leftDrierDays` | int (observed 38) | desiccant days left; the definition allows 0…120 |
 | `drierResetTs` | str unix-seconds (observed `1792757949`) | the last desiccant change the machine recorded |
@@ -69,7 +69,7 @@ Every key below is labelled by where the shape came from:
 | `feedAudCfg` | `{audIdx, volume}` | the sound the machine plays when it delivers a meal: `audIdx` picks the clip (the machine holds a default clip and clips you record in the app), `volume` is 0…200 in the definition, and this unit reports 100; 0 is silence |
 | `freshMgrCfg` | `{bOnOff, monitorTime, leftOverTTH}` | the freshness manager: `bOnOff` starts or stops it, `monitorTime` is how long it watches the bowl in **hours** (definition 1…4, observed 4), `leftOverTTH` is the leftover threshold in **grams** (definition 0…300, observed 20) |
 | `leftover` | `{bOnOff, detGramTTh}` `[definition]` | a separate leftover detection switch with a 0…30 g threshold — this unit has never answered it |
-| `deepCleanCfg` | `{bOnOff, cleanState}` | the bowl wash: on/off and the state the wash is in (observed 0/0) |
+| `deepCleanCfg` | `{bOnOff, cleanState}` | the bowl wash: on/off and the state the wash is in (observed 0/0 on this unit). The wash states are the definition's enum: 0 初始状态 not washing, 1 水路清洁中 washing the water channel, 2 水路清洁完成 water channel washed, 3 水路冲洗中 rinsing the water channel — only 0 has been answered here, so the other three are read from the definition and their appearance is untested |
 | `displayCfg` | `{displayType, displayParam, bDisplayIfIdle}` | the front display: the kind is the definition's enum `{"0": "time", "1": "graphics", "2": "custom"}` (labelled 时间/图形/自定义 there), the text shown (`displayParam`, ≤50 characters in the definition and stored verbatim by this unit, though the panel draws no lower-case glyphs) and whether the display is up while the machine is idle (`bDisplayIfIdle`, observed 1) |
 | `DND_Mode` | `{active, startTime, endTime, weekRept, bAudioDND, bDisplayDND}` | `[definition]` do-not-disturb: on/off, start and end as seconds of the day (0…86400), which days repeat as a 7-bit mask (0…127), and separately whether the silence applies to the sound and to the display |
 | `smartPlanCfg` | `{catId, drierFoodId}` | `[definition]` the plan bound to a pet and a desiccant brand (both 0…100000000) |
@@ -101,15 +101,26 @@ machine (`[this unit]`, see §Feeding).
 | `updateTime` | `{type enum}` | correct the device clock |
 | `errorBan` | `{errCode 0…1000, bCleanBan bool}` | mute or unmute a fault the machine keeps reporting |
 | `errPostDebug` | `{errCode 0…100, module ≤20, error ≤32, param 0…1000}` | report a fault on demand |
-| `getVoltage` | `{chanIdx enum, val 0…10000}` | read one of the machine's own measurements |
-| `iotRead` | `{readType enum}` | ask the machine to read state back — accepted here with `readType` 0, 1 and 2 and no error, but the cloud's copy of `bowlStatus` keeps its old value and stamp, so it does not refresh what `/thing/properties/get` returns |
+| `getVoltage` | `{chanIdx enum, val 0…10000}` | read one of the machine's own measurements — `[this unit]` answered `chanIdx` 0 with `{"val": 12097}` and `12095` on 2026-10-27, the same order the battery's `batVoltage` states in mV, so the value moves with the ask |
+| `iotRead` `[this unit]` | `{readType enum 0 设备时间 / 1 设备唤醒时间 / **2 称重** / 3 电源状态 / 4 粮仓状态 / 5 水位状态}` | ask the machine to read state back, and it answers: `readType` 2 replied `{"type": "scale", "str": {"bowlGram": 68, "gram": 89.08}}` and, fourteen seconds later, `89.1` — 21 g above the tare its own answer states, against the 67 g the cloud's copy of `bowlStatus` held all day. `3` replied `{"bat": {"vol": 12094, "lv": 4, "state": "Using", "percent": 85}, "pwr": "DC"}` (the live percent against the stored 90), `4` replied `{"curLv": 2, "curVal": 312, "displayLv": 2}`, `5` replied `{"vol": 1677, "lv": 3}` and `0` replied `{"time": "2026-10-27 14:44:07", "dst": 0}`, all with `ReturnCode` 0 and a `messageId` but no timestamp of their own. The reply does not refresh the property set — it is a separate answer, kept separately |
 | `cfgRead`, `cfgWrite` | `{cfgFile ≤1024, cfgMsg ≤1024}` / `{cfgFile, cfgValStr, bCreate bool}` | read or write one of the machine's config files |
 | `fileSrv` | `{keepAliveSec 0…1000, bSW enum, bEncryption enum}` | the file service the machine talks to |
 | `udpCmd` | `{bOnOff bool}` | a raw machine command |
 | `updateBaseurl` | `{baseURL ≤64}` | re-fetch the regional endpoint |
 | `RmReboot` | — | restart the machine |
 
-Two events are defined as well: `post` and `ModuleErr{module, error, param, errCode}`.
+Two events are defined as well: `post` — whose method is
+`thing.event.property.post` and whose output list is the whole property set
+above, which is the channel the device reports live state over — and
+`ModuleErr{module, error, param, errCode}`. Asking that channel as readable
+history does not work: `/thing/events/get` returned only the one `ModuleErr`
+record on 2026-10-27 (`module: grinder`, `error: CoverLost`, `errCode: 12`),
+`/thing/properties/query` is 404 on this gateway, and the extended-property
+endpoint asks for a `dataKey` we have no name for. What does answer on request is
+the machine's own read command (`§Commands`, `iotRead`), whose reply is a
+separate claim from the property set — and it is the channel the mobile app's
+own code reads, whose model classes for the feeder are `data/model/food_machine/…`
+fed by `data/model/topic/{IotPropertyTopic,EventTopic,StatusTopic,InvokeServiceReply}`.
 The job list the machine numbers cleaning and consumables with is
 litter-box clean=0, trash-can clean=1, trash-can wash=2, buy litter=3,
 **water-tank clean=4**, **food-bin clean=5**, **desiccant replacement=6**; meal
@@ -203,8 +214,8 @@ Unique ids are `{iot_id}-{control}`.
 
 | Platform | Both categories | `petFeeder` (Riko) | `CatLitter` (M1) |
 |----------|-----------------|--------------------|------------------|
-| sensor | `label` | `food_level`, `water_level`, `battery`, `wifi_rssi`, `bowl_weight`, `desiccant_days_left`, `device_serial`, `firmware_version`, `food_intake_today`, `last_bin_clean_water`, `last_bin_clean_food` | `sand_percent`, `wifi_rssi`, `stay_time`, `last_usage`, `bucket_status`, `sand_level_state`, `bin_state`, `cat_weight` per cat |
-| binary_sensor | — | `cover_absent` | `bin_full` |
+| sensor | `label` | `food_level`, `water_level`, `battery`, `battery_state`, `device_status`, `deep_clean_state`, `wifi_rssi`, `bowl_weight`, `bowl_in_place` as a binary sensor, `desiccant_days_left`, `device_serial`, `firmware_version`, `food_intake_today`, `last_bin_clean_water`, `last_bin_clean_food` | `sand_percent`, `wifi_rssi`, `stay_time`, `last_usage`, `bucket_status`, `sand_level_state`, `bin_state`, `cat_weight` per cat |
+| binary_sensor | — | `cover_absent`, `bowl_in_place`, `serving_food` | `bin_full` |
 | button | — | `feed_now`, `reset_desiccant`, `reset_bowl_scale`, `calibrate_food_scale`, `mark_water_bin_clean`, `mark_food_bin_clean` | `clean`, `level` |
 | number | — | `food_grams`, `water_ratio`, `rehydration_minutes`, `desiccant_days`, `feed_sound_volume` | — |
 | switch | — | `feed_keep_as_new_defaults`, `fresh_meal_manager`, `display_standby`, `do_not_disturb` | `auto_clean`, `young_cat_mode`, `child_lock`, `auto_bury`, `auto_level`, `silent_mode`, `auto_recovery`, `unstoppable_cycle` |
@@ -303,6 +314,61 @@ The daily intake is read from the account's record endpoint, which is now asked 
 the feeder as well; no delivery has been recorded on this account, so it currently
 answers with nothing and the sensor shows nothing. That is also why the reading is
 kept separate from the definition: the record shape is described, not confirmed.
+
+## What the machine reports about its own state (v1.5.0-beta6)
+
+Measured on this unit across 2026-10-27. The state the machine reports for itself
+is now read and shown, and every value carries the moment the machine stated it:
+
+- `deviceState` is re-pushed as the machine works — this unit's copies were
+  stamped 2026-10-26T11:05:05Z, then 2026-10-27T00:40:17Z, 2026-10-27T00:56:40Z
+  and 2026-10-27T09:44:57Z, and all of them said state 0 with param 0. So the
+  **Device status** control reads idle here, and only idle has been seen; the other
+  seven names come from the definition's enum (§Property set), as does the pair the
+  **Serving food** control stands for. A code outside the eight is published as
+  that number rather than given an invented name.
+- `deepCleanCfg.cleanState` and `pwrStatus.batStatus` are read the same way: this
+  unit answered 0 and 2, so the wash control says "not washing" and the battery
+  control says "in use". The other names in those enums are the definition's and
+  untested here.
+- `bowlStatus.bBowlIn` is **Bowl in place** (this unit says in place). It belongs
+  to the same cloud copy the bowl number is read from, so the reading's age is
+  offered with it — a bowl reported in place is in place at the moment the machine
+  stated it, not necessarily now.
+- Nothing is invented for a key the machine has never answered: its value stays
+  unknown, and each control carries its own `*_as_of` and `*_age_minutes` taken
+  from that key's wrapper. The feeder's state is its own field now, not the
+  litter box's, so one device's state stops borrowing another device's name.
+- These are reads. No control writes the machine, and none of them costs a call
+  per scan — the values come from the property set the entry already reads.
+
+### The scale's two answers (v1.5.0-beta6)
+
+Also measured on 2026-10-27. The bowl's weight has two answers, and the
+difference between them is the whole reason the number was wrong:
+
+- The cloud's copy of `bowlStatus` is a replay. Seven reads across that day all
+  stated 67 g on the scale against a 68 g tare — so the published figure was
+  0 g — while the app showed 22 g and the machine's own display moved.
+- The machine's read command answers freshly: the definition's `iotRead`
+  (远程读取) with `readType` 2 (称重) replied `{"type": "scale", "str": {"bowlGram":
+  68, "gram": 89.08}}` and, fourteen seconds later, `89.1` — 21 g above the
+  tare the same answer states. That reply is not written back into the property
+  set, so it is a separate claim: the model keeps both, `scale_live_g`/`scale_live_tare_g`
+  beside `scale_live_ts` (the moment the answer arrived, since the reply carries
+  no timestamp of its own), and the sensor prefers the answer taken more recently
+  while the attributes show both.
+- The app reaches the same answer over its MQTT property/service-reply topics
+  (`data/model/topic/IotPropertyTopic`, `InvokeServiceReply` in its own code);
+  the integration asks the same command through the REST path it already uses,
+  which is why this costs one extra cloud call per feeder per scan and nothing
+  more. A refused ask states nothing: the stored copy and its age stand.
+- The same command answers the other states too — 电源状态 (this unit said 85 %
+  and `"state": "Using"` against the stored 90 %), 粮仓状态 (`curVal` 312 raw
+  under `curLv` 2), 水位状态 (`vol` 1677) and 设备时间 (the machine's clock,
+  which matched our wall clock) — and `getVoltage` reads one channel's value.
+  Only the weighing is read today; the others are recorded so a later release
+  does not have to rediscover them.
 
 ## Naming note
 

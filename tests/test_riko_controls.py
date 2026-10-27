@@ -14,6 +14,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.core import HomeAssistant
 
+from custom_components.neakasa.binary_sensor.bowl_in_place import (
+    NeakasaBowlInPlaceBinarySensor,
+)
+from custom_components.neakasa.binary_sensor.serving_food import (
+    NeakasaServingFoodBinarySensor,
+)
 from custom_components.neakasa.button.calibrate_food_scale import (
     NeakasaCalibrateFoodScaleButton,
 )
@@ -38,6 +44,11 @@ from custom_components.neakasa.coordinator import (
     NeakasaCoordinator,
     _build_pet_feeder_snapshot,
     _feed_grams_today,
+    _live_scale,
+    _service_answer,
+)
+from custom_components.neakasa.exceptions import (
+    NeakasaApiClientCommunicationError,
 )
 from custom_components.neakasa.number.desiccant_days import NeakasaDesiccantDaysNumber
 from custom_components.neakasa.number.feed_sound_volume import (
@@ -49,11 +60,20 @@ from custom_components.neakasa.number.rehydration_minutes import (
 from custom_components.neakasa.select.display_standby_kind import (
     NeakasaDisplayStandbyKindSelect,
 )
+from custom_components.neakasa.sensor.battery_state import (
+    NeakasaBatteryStateSensor,
+)
 from custom_components.neakasa.sensor.bowl_weight import NeakasaBowlWeightSensor
+from custom_components.neakasa.sensor.deep_clean_state import (
+    NeakasaDeepCleanStateSensor,
+)
 from custom_components.neakasa.sensor.desiccant_days_left import (
     NeakasaDesiccantDaysLeftSensor,
 )
 from custom_components.neakasa.sensor.device_serial import NeakasaDeviceSerialSensor
+from custom_components.neakasa.sensor.device_status import (
+    NeakasaDeviceStatusSensor,
+)
 from custom_components.neakasa.sensor.firmware_version import (
     NeakasaFirmwareVersionSensor,
 )
@@ -93,6 +113,18 @@ ANSWERED: dict = {
     "lastWaterBinCleanTime": {"value": "2026-10-19 07:18:49"},
     "DeviceVer": {
         "value": {"FW_Version": "1.0.0-0033", "HW_Version": "1.00.01", "type": 0}
+    },
+    "pwrStatus": {
+        "time": 1793062600623,
+        "value": {"batPercentage": 90, "batLevel": 4, "batStatus": 2},
+    },
+    "deepCleanCfg": {
+        "time": 1793062600808,
+        "value": {"bOnOff": 0, "cleanState": 0},
+    },
+    "deviceState": {
+        "time": 1793094297980,
+        "value": {"param": 0, "state": 0},
     },
 }
 
@@ -139,6 +171,14 @@ def test_definition_named_controls_are_read_when_answered() -> None:
     assert snap.dnd_active is True
     assert snap.firmware_version == "1.0.0-0033"
     assert snap.device_serial == "SERIALFAKE0000000000000"
+    assert snap.device_state == 0
+    assert snap.device_state_param == 0
+    assert snap.device_state_ts == "1793094297980"
+    assert snap.deep_clean_state == 0
+    assert snap.deep_clean_ts == "1793062600808"
+    assert snap.battery_state == 2
+    assert snap.battery_ts == "1793062600623"
+    assert snap.bucket_status == 0, "a feeder keeps its own state, not the litter box's"
 
 
 def test_unanswered_controls_stay_unknown() -> None:
@@ -150,6 +190,10 @@ def test_unanswered_controls_stay_unknown() -> None:
     assert snap.desiccant_days_effective is None
     assert snap.firmware_version is None
     assert snap.feed_today_g is None
+    assert snap.device_state_ts is None
+    assert snap.device_state_param is None
+    assert snap.deep_clean_state is None
+    assert snap.battery_state is None
 
 
 def test_meals_recorded_today_are_summed() -> None:
@@ -206,6 +250,185 @@ async def test_the_bowl_reading_carries_its_own_age(
 
     weight = NeakasaBowlWeightSensor(coordinator, DEVICE_INFO, "riko-001")
     assert weight.extra_state_attributes == evidence
+
+
+async def test_the_weighing_the_machine_answers_is_the_fresher_claim(
+    hass: HomeAssistant, mock_config_entry: MagicMock
+) -> None:
+    """The 称重 read moves and the stored copy does not; both stay labelled apart."""
+    answer = {"type": "scale", "str": {"bowlGram": 68, "gram": 89.08}}
+    asked_at = "2026-10-27T14:44:07+00:00"
+    snap = _build_pet_feeder_snapshot(
+        "riko-001",
+        "SERIALFAKE0000000000000",
+        _answered(),
+        "a1ccEqBcaUD",
+        "TestLabel",
+        None,
+        answer,
+        asked_at,
+    )
+    assert snap.scale_live_g == 89.08
+    assert snap.scale_live_tare_g == 68
+    assert snap.scale_live_ts == asked_at
+
+    coordinator = _make_coordinator(hass, mock_config_entry, snap)
+    live = coordinator.live_scale_evidence("riko-001")
+    assert live["scale_live_g"] == 89.08
+    assert live["scale_live_as_of"] == asked_at
+    assert "scale_state_as_of" not in live, "one answer's evidence names nothing else"
+
+    weight = NeakasaBowlWeightSensor(coordinator, DEVICE_INFO, "riko-001")
+    assert weight.native_value == 21, (
+        "89.08 g over the 68 g tare the same answer states"
+    )
+    attributes = weight.extra_state_attributes
+    assert attributes["scale_live_g"] == 89.08
+    assert attributes["scale_live_as_of"] == asked_at
+    assert attributes["scale_reading_g"] == 67, (
+        "the stored copy stays visible beside it"
+    )
+
+
+def test_only_an_answer_the_machine_labels_as_a_weighing_is_read_as_one() -> None:
+    """A refusal, another read type or an unreadable number invents nothing."""
+    assert (
+        _service_answer({"data": {"ReturnCode": 1, "Params": {"type": "scale"}}}) == {}
+    )
+    assert _live_scale({"type": "pwr", "str": {"bat": {"percent": 85}}}) == (None, None)
+    assert _live_scale(
+        {"type": "scale", "str": {"gram": "89.08", "bowlGram": "68"}}
+    ) == (89.08, 68)
+
+    props = copy.deepcopy(_answered())
+    props["bowlStatus"] = {
+        "time": 1793100000000,
+        "value": {"bowlGram": 68, "curWeight": 90, "bBowlIn": 1},
+    }
+    snap = _build_pet_feeder_snapshot(
+        "riko-001",
+        "SERIALFAKE0000000000000",
+        props,
+        "a1ccEqBcaUD",
+        "TestLabel",
+        None,
+        {"type": "waterLv", "str": {"vol": 1677, "lv": 3}},
+        "2026-10-27T14:44:07+00:00",
+    )
+    assert snap.scale_live_g is None
+    assert snap.scale_live_ts is None
+    weight = NeakasaBowlWeightSensor(_mock_coord(snap), DEVICE_INFO, "riko-001")
+    assert weight.native_value == 22, "the stored copy still says what it stated"
+
+
+async def test_the_scan_asks_the_machine_for_the_weighing_once(
+    hass: HomeAssistant, mock_config_entry: MagicMock
+) -> None:
+    """The read is the definition's 称重 command; a refusal claims no moment."""
+    coordinator = _make_coordinator(hass, mock_config_entry, _snapshot(_answered()))
+    client = AsyncMock()
+    client.invoke_service = AsyncMock(
+        return_value={
+            "data": {
+                "ReturnCode": 0,
+                "Params": {"type": "scale", "str": {"bowlGram": 68, "gram": 89.08}},
+            },
+            "messageId": "849220164",
+        }
+    )
+    coordinator._get_client = AsyncMock(return_value=client)
+
+    answer, asked_at = await coordinator._read_live_scale("riko-001", client)
+    client.invoke_service.assert_awaited_once_with(
+        "riko-001", "iotRead", {"readType": 2}
+    )
+    assert answer["str"]["gram"] == 89.08
+    assert asked_at is not None
+
+    client.invoke_service = AsyncMock(
+        side_effect=NeakasaApiClientCommunicationError("gateway.hsf.invoke.timeout")
+    )
+    answer, asked_at = await coordinator._read_live_scale("riko-001", client)
+    assert answer == {}
+    assert asked_at is None, "a refusal states nothing, so no moment is claimed"
+
+
+async def test_a_state_report_carries_the_moment_that_report_made(
+    hass: HomeAssistant, mock_config_entry: MagicMock
+) -> None:
+    """The state keys are re-pushed, so each one is dated by its own stamp."""
+    coordinator = _make_coordinator(hass, mock_config_entry, _snapshot(_answered()))
+    state = coordinator.device_state_evidence("riko-001")
+    assert state["state_value"] == 0
+    assert state["state_param"] == 0
+    assert state["state_as_of"].startswith("2026-10-27T09:44")
+    assert state["state_age_minutes"] >= 0
+    assert "deep_clean_as_of" not in state, "one state's evidence names nothing else"
+
+    wash = coordinator.deep_clean_evidence("riko-001")
+    assert wash["deep_clean_state"] == 0
+    assert wash["deep_clean_as_of"].startswith("2026-10-27T00:56")
+
+    battery = coordinator.battery_state_evidence("riko-001")
+    assert battery["battery_state"] == 2
+    assert battery["battery_as_of"].startswith("2026-10-27T00:56")
+
+    status = NeakasaDeviceStatusSensor(coordinator, DEVICE_INFO, "riko-001")
+    assert status.extra_state_attributes == state
+
+    serving = NeakasaServingFoodBinarySensor(coordinator, DEVICE_INFO, "riko-001")
+    assert serving.extra_state_attributes == state
+
+    in_place = NeakasaBowlInPlaceBinarySensor(coordinator, DEVICE_INFO, "riko-001")
+    assert in_place.extra_state_attributes == coordinator.scale_state_evidence(
+        "riko-001"
+    )
+
+
+def test_the_state_sensors_name_their_codes_as_the_definition_spells_them() -> None:
+    """The state names are the definition's; an unknown code passes through."""
+    props = copy.deepcopy(_answered())
+    props["deviceState"] = {"time": 1, "value": {"param": 7, "state": 2}}
+    props["deepCleanCfg"] = {"time": 1, "value": {"bOnOff": 1, "cleanState": 3}}
+    props["pwrStatus"] = {"time": 1, "value": {"batStatus": 1}}
+    snap = _snapshot(props)
+    coordinator = _mock_coord(snap)
+
+    status = NeakasaDeviceStatusSensor(coordinator, DEVICE_INFO, "riko-001")
+    assert status.native_value == "serving_food"
+
+    serving = NeakasaServingFoodBinarySensor(coordinator, DEVICE_INFO, "riko-001")
+    assert serving.is_on is True
+
+    wash = NeakasaDeepCleanStateSensor(coordinator, DEVICE_INFO, "riko-001")
+    assert wash.native_value == "rinsing_water_channel"
+
+    battery = NeakasaBatteryStateSensor(coordinator, DEVICE_INFO, "riko-001")
+    assert battery.native_value == "charging"
+
+    other = _snapshot(
+        {**_answered(), "deviceState": {"time": 1, "value": {"state": 12, "param": 0}}}
+    )
+    unknown = NeakasaDeviceStatusSensor(_mock_coord(other), DEVICE_INFO, "riko-001")
+    assert unknown.native_value == 12, "an unknown code is not given an invented name"
+
+    off = _snapshot(
+        {**_answered(), "deviceState": {"time": 1, "value": {"state": 5, "param": 0}}}
+    )
+    dormant = NeakasaServingFoodBinarySensor(_mock_coord(off), DEVICE_INFO, "riko-001")
+    assert dormant.is_on is False
+
+    no_bowl = _snapshot(
+        {k: v for k, v in _answered().items() if k != "bowlStatus"}
+        | {
+            "bowlStatus": {
+                "time": 1,
+                "value": {"bowlGram": 68, "curWeight": 90, "bBowlIn": 0},
+            }
+        }
+    )
+    bowl = NeakasaBowlInPlaceBinarySensor(_mock_coord(no_bowl), DEVICE_INFO, "riko-001")
+    assert bowl.is_on is False
 
 
 def test_read_only_sensors_show_what_the_machine_states() -> None:

@@ -3,26 +3,26 @@
     "config": {
         "step": {
             "user": {
-                "title": "Neakasa Configuration",
+                "title": "Configuration de Neakasa",
                 "description": "Les informations d'identification seront utilisées pour récupérer les données du serveur.",
                 "data": {
-                    "username": "Utilisateur",
+                    "username": "Nom d'utilisateur",
                     "password": "Mot de passe"
                 }
             },
             "reauth_confirm": {
-                "title": "Ré-authenticate Neakasa",
+                "title": "Réauthentifier Neakasa",
                 "description": "Vos identifiants Neakasa pour {username} ne sont plus valides. Saisissez de nouveaux identifiants pour rétablir l'accès.",
                 "data": {
-                    "username": "Utilisateur",
+                    "username": "Nom d'utilisateur",
                     "password": "Mot de passe"
                 }
             },
             "reconfigure": {
                 "title": "Reconfiguration de Neakasa",
-                "description": "Mettez à jour les identifiants de votre compte Neakasa..",
+                "description": "Mettez à jour les identifiants de votre compte Neakasa.",
                 "data": {
-                    "username": "Utilisateur",
+                    "username": "Nom d'utilisateur",
                     "password": "Mot de passe"
                 }
             }
@@ -30,15 +30,15 @@
         "abort": {
             "authentication": "Erreur lors de l'authentification.",
             "connection": "Erreur lors de la connexion.",
-            "unknown": "Erreur inconnue",
-            "no_devices_found": "Aucune litière trouvée pour ce compte.",
-            "reauth_successful": "Ré-authentication réussie.",
+            "unknown": "Erreur inconnue.",
+            "no_devices_found": "Aucune litière Neakasa trouvée pour ce compte.",
+            "reauth_successful": "Réauthentification réussie.",
             "reconfigure_successful": "Reconfiguration réussie."
         },
         "error": {
-            "authentication": "Utilisateur ou mot de passe invalide.",
-            "connection": "Impossible de se connecter aux serveurs de Neakasa. Vérifiez votre réseau.",
-            "no_devices_found": "Aucune litière trouvée pour ce compte."
+            "authentication": "Nom d'utilisateur ou mot de passe invalide.",
+            "connection": "Impossible de se connecter aux serveurs Neakasa. Vérifiez votre réseau.",
+            "no_devices_found": "Aucun appareil CatLitter trouvé pour ce compte."
         }
     },
     "entity": {
@@ -47,53 +47,59 @@
                 "name": "Nettoyer"
             },
             "level": {
-                "name": "Niveller"
+                "name": "Niveler"
             },
             "feed_now": {
-                "name": "Feeding now"
+                "name": "Nourrir maintenant"
             },
             "refresh_data": {
                 "name": "Actualiser les données"
             },
             "reset_desiccant": {
-                "name": "Desiccant pack is changed"
+                "name": "Sachet dessiccant remplacé"
             },
             "reset_bowl_scale": {
-                "name": "Zero the scale of the bowl"
+                "name": "Régler la balance du bol à zéro"
             },
             "calibrate_food_scale": {
-                "name": "Calibrate the scale of the food"
+                "name": "Calibrer la balance de nourriture"
             },
             "mark_water_bin_clean": {
-                "name": "Tank of water was cleaned"
+                "name": "Réservoir d'eau nettoyé"
             },
             "mark_food_bin_clean": {
-                "name": "Bin of food was cleaned"
+                "name": "Bac à nourriture nettoyé"
             }
         },
         "number": {
             "food_grams": {
-                "name": "Food quantity"
+                "name": "Quantité de nourriture"
             },
             "water_ratio": {
-                "name": "Water ratio"
+                "name": "Ratio d'eau"
             },
             "rehydration_minutes": {
-                "name": "Rehydration time"
+                "name": "Temps de réhydratation"
             },
             "desiccant_days": {
-                "name": "Days of the desiccant"
+                "name": "Jours du dessiccant"
             },
             "feed_sound_volume": {
-                "name": "Volume of the meal sound"
+                "name": "Volume du son de repas"
             }
         },
         "binary_sensor": {
             "bin_full": {
-                "name": "Poubelle pleine"
+                "name": "Bac à déchets plein"
             },
             "cover_absent": {
-                "name": "Capa missing"
+                "name": "Couvercle absent"
+            },
+            "serving_food": {
+                "name": "Distribution de la nourriture"
+            },
+            "bowl_in_place": {
+                "name": "Bol en place"
             }
         },
         "sensor": {
@@ -104,10 +110,10 @@
                 "name": "Niveau de litière"
             },
             "wifi_rssi": {
-                "name": "WiFi RSSI"
+                "name": "RSSI Wi-Fi"
             },
             "stay_time": {
-                "name": "Temps d'utilisation"
+                "name": "Dernier temps de présence"
             },
             "last_usage": {
                 "name": "Dernière utilisation"
@@ -115,82 +121,112 @@
             "current_status": {
                 "name": "État de l'appareil",
                 "state": {
-                    "idle": "Inactive",
+                    "idle": "Inactif",
                     "cleaning": "Nettoyage",
                     "leveling": "Nivellement",
-                    "flipover": "À l'envers",
+                    "flipover": "Retourné",
                     "cat_present": "Chat présent",
                     "paused": "En pause",
-                    "side_bin_locking_panels_missing": "Panneaux de verrouillage des bacs latéraux manquants",
+                    "side_bin_locking_panels_missing": "Panneaux de verrouillage du bac latéral manquants",
                     "cleaning_interrupted": "Nettoyage interrompu"
                 }
             },
             "sand_state": {
-                "name": "Litière",
+                "name": "État de la litière",
                 "state": {
                     "insufficient": "Insuffisante",
-                    "moderate": "Normale",
+                    "moderate": "Moyenne",
                     "sufficient": "Suffisante",
-                    "overfilled": "En excédent"
+                    "overfilled": "Trop remplie"
                 }
             },
             "bin_state": {
-                "name": "Poubelle",
+                "name": "État du bac à déchets",
                 "state": {
-                    "normal": "Normale",
-                    "full": "Pleine",
-                    "missing": "Manquante"
+                    "normal": "Normal",
+                    "full": "Plein",
+                    "missing": "Manquant"
                 }
             },
             "device_label": {
-                "name": "Label del device"
+                "name": "Étiquette de l'appareil"
             },
             "food_level": {
-                "name": "Level food"
+                "name": "Niveau de nourriture"
             },
             "water_level": {
-                "name": "Level water"
+                "name": "Niveau d'eau"
             },
             "battery": {
-                "name": "Bateria"
+                "name": "Batterie"
             },
             "cloud_session_status": {
                 "name": "État de la session cloud",
                 "state": {
-                    "unknown": "Unknown",
+                    "unknown": "Inconnu",
                     "home_assistant": "Home Assistant",
-                    "not_home_assistant": "Not Home Assistant"
+                    "not_home_assistant": "Non Home Assistant"
                 },
                 "state_attributes": {
                     "options": {
                         "state": {
-                            "unknown": "Unknown",
+                            "unknown": "Inconnu",
                             "home_assistant": "Home Assistant",
-                            "not_home_assistant": "Not Home Assistant"
+                            "not_home_assistant": "Non Home Assistant"
                         }
                     }
                 }
             },
             "bowl_weight": {
-                "name": "Weight of the bowl"
+                "name": "Poids du bol"
             },
             "desiccant_days_left": {
-                "name": "Days remaining of the desiccant"
+                "name": "Jours restants du dessiccant"
             },
             "device_serial": {
-                "name": "Serial number of the device"
+                "name": "Numéro de série de l'appareil"
             },
             "firmware_version": {
-                "name": "Version of the firmware"
+                "name": "Version du firmware"
             },
             "food_intake_today": {
-                "name": "Food delivered today"
+                "name": "Nourriture distribuée aujourd'hui"
             },
             "water_bin_clean": {
-                "name": "Tank of water was last cleaned"
+                "name": "Dernier nettoyage du réservoir d'eau"
             },
             "food_bin_clean": {
-                "name": "Bin of food was last cleaned"
+                "name": "Dernier nettoyage du bac à nourriture"
+            },
+            "device_status": {
+                "name": "État de l'appareil",
+                "state": {
+                    "idle": "Inactif",
+                    "preparing_food": "Préparation du repas",
+                    "serving_food": "Distribution du repas",
+                    "paused": "En pause",
+                    "fault": "Erreur",
+                    "sleeping": "En veille",
+                    "freshness_protection": "Protection de la fraîcheur",
+                    "deep_cleaning": "Nettoyage en profondeur"
+                }
+            },
+            "deep_clean_state": {
+                "name": "État du nettoyage en profondeur",
+                "state": {
+                    "not_washing": "Pas de lavage",
+                    "washing_water_channel": "Lavage du circuit d'eau",
+                    "water_channel_washed": "Circuit d'eau lavé",
+                    "rinsing_water_channel": "Rinçage du circuit d'eau"
+                }
+            },
+            "battery_state": {
+                "name": "État de la batterie",
+                "state": {
+                    "not_fitted": "Batterie non installée",
+                    "charging": "En charge",
+                    "in_use": "En cours d'utilisation"
+                }
             }
         },
         "switch": {
@@ -216,29 +252,29 @@
                 "name": "Restauration automatique"
             },
             "unstoppable_cycle": {
-                "name": "Cycle non arrêtable"
+                "name": "Cycle ininterrompable"
             },
             "feed_keep_as_new_defaults": {
-                "name": "Ration par défaut"
+                "name": "Conserver la ration par défaut"
             },
             "fresh_meal_manager": {
-                "name": "Keep the meal fresh"
+                "name": "Garder le repas frais"
             },
             "display_standby": {
-                "name": "Display when idle"
+                "name": "Afficher l'écran en veille"
             },
             "do_not_disturb": {
-                "name": "Do not disturb"
+                "name": "Ne pas déranger"
             }
         },
         "select": {
             "display_standby_kind": {
-                "name": "Kind of the standby display"
+                "name": "Type d'affichage en veille"
             }
         },
         "text": {
             "display_custom_message": {
-                "name": "Custom message of the standby display"
+                "name": "Message personnalisé d'affichage en veille"
             }
         }
     }

@@ -75,6 +75,10 @@ def test_build_pet_feeder_reads_levels() -> None:
     assert snap.desiccant_days_left == 40
     assert snap.fresh_mgr_on is True
     assert snap.deep_clean_on is False
+    assert snap.deep_clean_state == 0
+    assert snap.battery_state == 2
+    assert snap.device_state == 0
+    assert snap.bucket_status == 0, "a feeder keeps its own state, not the litter box's"
     assert snap.wifi_rssi == -43
     assert snap.label == "TestLabel"
     assert snap.default_food_g == 5
@@ -92,6 +96,9 @@ def test_build_pet_feeder_missing_optional_keys() -> None:
     assert snap.bowl_present is False
     assert snap.desiccant_days_left is None
     assert snap.bucket_status == 0
+    assert snap.battery_state is None
+    assert snap.device_state_ts is None
+    assert snap.device_state_param is None
 
 
 def test_build_pet_feeder_empty_properties() -> None:
