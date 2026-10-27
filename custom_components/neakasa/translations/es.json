@@ -1,0 +1,281 @@
+{
+    "title": "Neakasa",
+    "config": {
+        "step": {
+            "user": {
+                "title": "Configuración de Neakasa",
+                "description": "Las credenciales se utilizarán para extraer los datos del servidor.",
+                "data": {
+                    "username": "Nombre de usuario",
+                    "password": "Contraseña"
+                }
+            },
+            "reauth_confirm": {
+                "title": "Volver a autenticar a Neakasa",
+                "description": "Tus credenciales de Neakasa para {username} ya no son válidas. Ingrese nuevas credenciales para restaurar el acceso.",
+                "data": {
+                    "username": "Nombre de usuario",
+                    "password": "Contraseña"
+                }
+            },
+            "reconfigure": {
+                "title": "Reconfigurar Neakasa",
+                "description": "Actualice las credenciales de su cuenta Neakasa.",
+                "data": {
+                    "username": "Nombre de usuario",
+                    "password": "Contraseña"
+                }
+            }
+        },
+        "abort": {
+            "authentication": "Error durante la autenticación.",
+            "unknown": "Error desconocido",
+            "connection": "Error durante la conexión.",
+            "no_devices_found": "No se encontraron dispositivos Neakasa compatibles en esta cuenta.",
+            "reauth_successful": "Reautenticación exitosa.",
+            "reconfigure_successful": "Reconfiguración exitosa."
+        },
+        "error": {
+            "authentication": "Nombre de usuario o contraseña no válidos.",
+            "connection": "No se pudo conectar a los servidores de Neakasa. Comprueba tu red.",
+            "no_devices_found": "No se encontraron dispositivos Neakasa compatibles para esta cuenta."
+        }
+    },
+    "entity": {
+        "button": {
+            "clean": {
+                "name": "limpio"
+            },
+            "level": {
+                "name": "Nivel"
+            },
+            "feed_now": {
+                "name": "Alimentar ahora"
+            },
+            "refresh_data": {
+                "name": "Actualizar datos ahora"
+            },
+            "reset_desiccant": {
+                "name": "Se cambia el paquete desecante"
+            },
+            "reset_bowl_scale": {
+                "name": "Pon a cero la báscula del tazón"
+            },
+            "calibrate_food_scale": {
+                "name": "Calibrar la báscula de alimentos."
+            },
+            "mark_water_bin_clean": {
+                "name": "Se limpió el tanque de agua"
+            },
+            "mark_food_bin_clean": {
+                "name": "Se limpió el contenedor de comida."
+            }
+        },
+        "number": {
+            "food_grams": {
+                "name": "Cantidad de comida"
+            },
+            "water_ratio": {
+                "name": "Proporción de agua"
+            },
+            "rehydration_minutes": {
+                "name": "tiempo de rehidratación"
+            },
+            "desiccant_days": {
+                "name": "Días desecantes"
+            },
+            "feed_sound_volume": {
+                "name": "Volumen del sonido de la comida"
+            }
+        },
+        "binary_sensor": {
+            "bin_full": {
+                "name": "bote de basura lleno"
+            },
+            "cover_absent": {
+                "name": "Falta portada"
+            },
+            "serving_food": {
+                "name": "sirviendo comida"
+            },
+            "bowl_in_place": {
+                "name": "Cuenco en su lugar"
+            }
+        },
+        "sensor": {
+            "cat_sensor": {
+                "name": "Gato {name}"
+            },
+            "sand_percent": {
+                "name": "Nivel de arena para gatos"
+            },
+            "wifi_rssi": {
+                "name": "Wi-Fi RSSI"
+            },
+            "stay_time": {
+                "name": "última hora de estancia"
+            },
+            "last_usage": {
+                "name": "Último uso"
+            },
+            "current_status": {
+                "name": "Estado del dispositivo",
+                "state": {
+                    "idle": "inactivo",
+                    "cleaning": "Limpieza",
+                    "leveling": "nivelación",
+                    "flipover": "Al revés",
+                    "cat_present": "Gato presente",
+                    "paused": "En pausa",
+                    "side_bin_locking_panels_missing": "Faltan paneles de bloqueo del contenedor lateral",
+                    "cleaning_interrupted": "Limpieza interrumpida"
+                }
+            },
+            "sand_state": {
+                "name": "Estado de la arena para gatos",
+                "state": {
+                    "insufficient": "insuficiente",
+                    "moderate": "moderado",
+                    "sufficient": "suficiente",
+                    "overfilled": "Sobrellenado"
+                }
+            },
+            "bin_state": {
+                "name": "Estado del contenedor",
+                "state": {
+                    "normal": "normales",
+                    "full": "bote de basura lleno",
+                    "missing": "No en posición"
+                }
+            },
+            "device_label": {
+                "name": "Etiqueta del dispositivo"
+            },
+            "food_level": {
+                "name": "nivel de comida"
+            },
+            "water_level": {
+                "name": "nivel de agua"
+            },
+            "battery": {
+                "name": "Batería"
+            },
+            "cloud_session_status": {
+                "name": "Estado de la sesión en la nube",
+                "state": {
+                    "unknown": "Desconocido",
+                    "home_assistant": "Asistente de hogar",
+                    "not_home_assistant": "No asistente de casa"
+                },
+                "state_attributes": {
+                    "options": {
+                        "state": {
+                            "unknown": "Desconocido",
+                            "home_assistant": "Asistente de hogar",
+                            "not_home_assistant": "No asistente de casa"
+                        }
+                    }
+                }
+            },
+            "bowl_weight": {
+                "name": "Peso del cuenco"
+            },
+            "desiccant_days_left": {
+                "name": "Quedan días desecantes"
+            },
+            "device_serial": {
+                "name": "Serie del dispositivo"
+            },
+            "firmware_version": {
+                "name": "Versión de firmware"
+            },
+            "food_intake_today": {
+                "name": "Comida entregada hoy"
+            },
+            "water_bin_clean": {
+                "name": "Tanque de agua limpiado por última vez"
+            },
+            "food_bin_clean": {
+                "name": "El contenedor de alimentos se limpió por última vez"
+            },
+            "device_status": {
+                "name": "Estado del dispositivo",
+                "state": {
+                    "idle": "inactivo",
+                    "preparing_food": "Preparando una comida",
+                    "serving_food": "Dispensar una comida",
+                    "paused": "En pausa",
+                    "fault": "Fallo",
+                    "sleeping": "durmiendo",
+                    "freshness_protection": "Protección de frescura",
+                    "deep_cleaning": "limpieza profunda"
+                }
+            },
+            "deep_clean_state": {
+                "name": "Estado de limpieza profunda",
+                "state": {
+                    "not_washing": "No lavar",
+                    "washing_water_channel": "Lavar el canal de agua.",
+                    "water_channel_washed": "Canal de agua lavado",
+                    "rinsing_water_channel": "Enjuague del canal de agua."
+                }
+            },
+            "battery_state": {
+                "name": "Estado de la batería",
+                "state": {
+                    "not_fitted": "Batería no instalada",
+                    "charging": "Cargando",
+                    "in_use": "En uso"
+                }
+            }
+        },
+        "switch": {
+            "auto_clean": {
+                "name": "limpieza automática"
+            },
+            "young_cat_mode": {
+                "name": "modo gatito"
+            },
+            "child_lock": {
+                "name": "Bloqueo para niños"
+            },
+            "auto_bury": {
+                "name": "Cobertura automática"
+            },
+            "auto_level": {
+                "name": "Nivelación automática"
+            },
+            "silent_mode": {
+                "name": "Modo silencioso"
+            },
+            "auto_recovery": {
+                "name": "Recuperación automática"
+            },
+            "unstoppable_cycle": {
+                "name": "Ciclo imparable"
+            },
+            "feed_keep_as_new_defaults": {
+                "name": "Guardar feed como predeterminado"
+            },
+            "fresh_meal_manager": {
+                "name": "Mantenga la comida fresca"
+            },
+            "display_standby": {
+                "name": "Mostrar la pantalla cuando está inactivo"
+            },
+            "do_not_disturb": {
+                "name": "no molestar"
+            }
+        },
+        "select": {
+            "display_standby_kind": {
+                "name": "Tipo de pantalla en espera"
+            }
+        },
+        "text": {
+            "display_custom_message": {
+                "name": "Mensaje personalizado en pantalla en espera"
+            }
+        }
+    }
+}

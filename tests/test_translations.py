@@ -81,7 +81,7 @@ SUPPORTED_LANGUAGES = [
     "zh-Hant",
 ]
 
-PUBLISHED_LANGUAGES = ["de", "en", "fr", "pl", "pt", "pt-BR"]
+PUBLISHED_LANGUAGES = ["de", "en", "es", "es-419", "fr", "pl", "pt", "pt-BR"]
 PENDING_LANGUAGES = [
     language for language in SUPPORTED_LANGUAGES if language not in PUBLISHED_LANGUAGES
 ]
