@@ -12,6 +12,17 @@ comments, translations, lint workflow.
 For user-facing topics (what's included, how to install, supported devices),
 see [`README.md`](./README.md).
 
+## Operational rules live in `.clinerules`
+
+Alongside the style/architecture documents (`CODE_STYLE.md`, `CLAUDE.md`),
+this checkout may carry a root `.clinerules` file — the agent-facing layer on
+top of them: the gate command and its order, when publishing is allowed, the
+deploy-and-verify loop on the Home Assistant box, the probe and scratch
+discipline, and the shell timings this project uses. It is git-excluded on
+purpose (rules for agents, not part of the shipped integration), so a fresh
+clone will not have it. Read it when present; where it and these documents
+disagree, these documents win.
+
 ## Verification workflow
 
 **After every code change, always run lint then tests, in that order, before

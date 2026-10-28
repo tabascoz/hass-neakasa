@@ -19,3 +19,8 @@ htmlcov/
 # Nothing under here is publishable, so none of it is tracked.
 /tmp/
 
+# Agent rules for Cline — local to this checkout, never part of the published integration.
+# Cline reads them from disk, so keeping them untracked changes nothing about how they load.
+.clinerules
+.clinerules/
+
