@@ -13,6 +13,12 @@ This is a maintained fork of the original Neakasa integration by [@timniklas](ht
 The original repository disappeared, so I am continuing development in my free time.  
 Please be patient while I fully take over the codebase.
 
+The `v1.4.0` line — the `wave0` … `wave5` refactors of 2026-08-26 → 2026-08-27 — was modelled
+on the shape of [roquerodrigo/ha-neakasa-litterbox](https://github.com/roquerodrigo/ha-neakasa-litterbox),
+a separate Neakasa integration developed in parallel. That is credited as **inspiration, not as a
+dependency**: none of it runs here, and nothing of theirs was copied. See
+[Credits and Related Projects](#credits-and-related-projects) near the end of this file.
+
 > **Strong recommendation:**  
 > Use a **separate Neakasa account** for Home Assistant.  
 > Share your devices from the official app to the second account.  
@@ -276,6 +282,53 @@ Or use this button:
 Found a bug or want to contribute?  
 
 Feel free to open an issue or a pull request. All help is welcome!
+
+---
+
+## Credits and Related Projects
+
+### The integration this one forked
+
+- **[@timniklas](https://github.com/timniklas)** wrote the original Neakasa integration. Its whole
+  history is still in this repository: `Initial commit` on 2024-12-03, carried in through the
+  `sliwma` and `madmartin` forks and merged on 2026-06-23 as `v1.1 - initial clone from old repo`.
+  The `LICENSE` keeps that copyright alongside mine, and 128 of the commits here are theirs.
+
+### The project that shaped the `v1.4.0` refactors
+
+- **[roquerodrigo/ha-neakasa-litterbox](https://github.com/roquerodrigo/ha-neakasa-litterbox)** —
+  an independent Neakasa M1 integration maintained by [@roquerodrigo](https://github.com/roquerodrigo),
+  built on its companion **[neakasa-litterbox-sdk](https://pypi.org/project/neakasa-litterbox-sdk/)** —
+  is the **reference implementation the `wave0` … `wave5` modernization was modelled on**
+  (2026-08-26 → 2026-08-27, shipped as `v1.4.0-beta1` … `v1.4.0-beta5` and the `v1.4.0` release).
+
+  That project had already settled on the structure this integration was heading for, so its tree
+  decided the shape of the wave plan: one config entry per account with every device discovered at
+  runtime, one class per entity inside platform packages (`sensor/`, `switch/`, `button/`,
+  `binary_sensor/`, `number/`, `select/`, `text/`), a `data/` package for the typed shapes,
+  `entry.runtime_data` instead of `hass.data`, reauth/reconfigure flows and an `exceptions/`
+  package of one-file-per-error. The file names that reading produced are still shared between the
+  two trees — `exceptions/api_client_error.py`, `exceptions/api_client_authentication_error.py`,
+  `exceptions/api_client_communication_error.py`, `exceptions/api_client_device_busy_error.py`,
+  `exceptions/api_client_session_expired_error.py`, `data/config.py`, `data/json_types.py`,
+  `data/runtime.py`, `sensor/sand_percent.py`, `sensor/cat_weight.py`, `switch/auto_clean.py`,
+  `switch/child_lock.py`, `switch/silent_mode.py`.
+
+**Inspiration, not code, not a dependency.** What was taken is the architecture, never the content:
+
+- no file, class, string or commit of theirs exists in this integration, and the two repositories
+  share no git history;
+- this integration keeps its own cloud client — `iot_gateway.py` signs Aliyun IoT requests with
+  plain `aiohttp` and manual HMAC-SHA256 — while that one drives the published `neakasa-litterbox-sdk`
+  and an MQTT push stream;
+- `custom_components/neakasa/manifest.json` declares `"requirements": []`, so nothing of theirs is
+  installed, imported or needed at runtime;
+- the reference is one-way: that project says nothing about this one.
+
+Both are unofficial community integrations, and neither is endorsed by Neakasa.
+
+The full release line — which step of it was inspired by what — is written up in
+[CHANGELOG.md](./CHANGELOG.md).
 
 ---
 
