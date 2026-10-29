@@ -8,6 +8,16 @@ the written record of the line — entries must keep matching the tags, newest f
 
 No `v1.2` was ever cut; the line goes `v1.1` → `v1.3.0`.
 
+## [1.5.1](https://github.com/tabascoz/hass-neakasa/compare/v1.5.0...v1.5.1) (2026-10-29)
+
+### Fixes
+
+* **The integration sets up again on Home Assistant 2026.11** — one label that marks the
+  settings and diagnostics controls is no longer where it was read from, so the entry failed
+  and the devices showed with none of their controls (seen on the unit on 2026-10-29). It is
+  now taken from where Home Assistant defines it; controls, names, ids and reports are
+  unchanged, no cloud call is added, and older versions keep working.
+
 ## [1.5.0](https://github.com/tabascoz/hass-neakasa/compare/v1.4.2...v1.5.0) (2026-10-27)
 
 ### Features
