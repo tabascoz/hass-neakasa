@@ -18,6 +18,7 @@ from custom_components.neakasa import (
     async_setup_entry,
     async_unload_entry,
 )
+from custom_components.neakasa.log_redact import device_label
 
 
 async def test_platforms_present() -> None:
@@ -247,4 +248,30 @@ async def test_the_removal_hook_accepts_only_stale_devices() -> None:
     assert await async_remove_config_entry_device(MagicMock(), config_entry, stale)
     assert not await async_remove_config_entry_device(
         MagicMock(), config_entry, current
+    )
+
+
+def test_a_forgotten_machine_is_named_by_its_label() -> None:
+    """Which machine left stays readable; its serial does not reach the log."""
+    config_entry = MagicMock(entry_id="entry-1")
+    coordinator = MagicMock()
+    coordinator.data = {"iot-1": {}}
+    registry = MagicMock()
+    stale_machine = _registry_device(
+        {(DOMAIN, "4TQDtRLglcQJ5goDNlug000000")}, "entry-1"
+    )
+    with (
+        patch("custom_components.neakasa.get_device_registry", return_value=registry),
+        patch(
+            "custom_components.neakasa.async_entries_for_config_entry",
+            return_value=[stale_machine],
+        ),
+        patch("custom_components.neakasa._LOGGER.info") as info,
+    ):
+        _prune_devices_this_entry_no_longer_describes(
+            MagicMock(), config_entry, coordinator
+        )
+    info.assert_called_once_with(
+        "Forgetting device %s: this entry no longer describes it",
+        device_label("4TQDtRLglcQJ5goDNlug000000"),
     )

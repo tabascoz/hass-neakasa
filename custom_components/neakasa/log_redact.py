@@ -39,12 +39,23 @@ _DEVICE_PAIR = re.compile(
 # signature, a session token, an encoded body. `=` stays out of the class so a
 # `name=value` keeps its name and only the value is dropped.
 _OPAQUE_RUN = re.compile(r"[A-Za-z0-9+/_-]{20,}")
+# Inside an entity id a machine is one word: Home Assistant builds the object id as
+# `{slug(device_name)}_{slug(entity_name)}` and this integration's device name is the
+# wire deviceName, the machine's serial on the units measured. Only that segment is
+# replaced - the platform prefix and the entity's own name are what the counters read,
+# and the word put back is the iotId's label, the one every other line uses.
+_OBJECT_ID_DEVICE_SEGMENT = re.compile(r"[a-z0-9]{15,}")
 
 
 def _label_of(value: str, prefix: str) -> str:
     """Return the label *value* is logged as, keyed by *prefix*."""
     digest = hashlib.blake2s(value.strip().lower().encode(), digest_size=4).hexdigest()
     return f"{prefix}{digest}"
+
+
+def _slug_of(name: str) -> str:
+    """Return the word Home Assistant puts in an object id for *name*."""
+    return re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")
 
 
 def account_label(username: str) -> str:
@@ -73,6 +84,28 @@ def device_label(identifier: str) -> str:
     survives a rename in the app because the iotId does not change.
     """
     return _label_of(identifier, _DEVICE_PREFIX)
+
+
+def redact_entity_id(entity_id: str, iot_id: str, device_name: str = "") -> str:
+    """
+    Return *entity_id* with the machine's own word replaced by its log label.
+
+    Home Assistant names an entity by the word it built from the device's name, which is
+    the machine's serial; that segment is located by the entity's own device name first
+    and, when the id was registered under an older name, by the serial shape instead.
+    Only that segment is replaced: the platform prefix and the entity's own name stay,
+    so which entity presented and how often stay countable per kind, and the label put
+    back is the one every other line uses for this machine.
+    An id naming no machine (the account's own entities) is returned unchanged.
+    """
+    domain, dot, rest = entity_id.partition(".")
+    if not dot:
+        return entity_id
+    label = device_label(iot_id)
+    slug = _slug_of(device_name)
+    if slug and rest.startswith(f"{slug}_"):
+        return f"{domain}.{label}_{rest[len(slug) + 1 :]}"
+    return f"{domain}.{_OBJECT_ID_DEVICE_SEGMENT.sub(label, rest, count=1)}"
 
 
 def entry_label(config_entry_id: str) -> str:

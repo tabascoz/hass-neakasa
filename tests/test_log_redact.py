@@ -6,6 +6,7 @@ from custom_components.neakasa.log_redact import (
     account_label,
     device_label,
     entry_label,
+    redact_entity_id,
     redact_text,
 )
 
@@ -107,3 +108,61 @@ def test_a_quoted_iot_id_becomes_the_machine_label() -> None:
     assert "4TQD" not in redacted
     assert device_label("4TQDtRLglcQJ5goDNlug000000") in redacted
     assert '"code":0' in redacted
+
+
+def test_an_entity_id_keeps_its_entity_and_loses_its_serial() -> None:
+    """Which entity presented stays countable; the machine becomes its label."""
+    redacted = redact_entity_id(
+        "switch.wl03002g26270011577_store_feed_as_machine_defaults",
+        "4TQDtRLglcQJ5goDNlug000000",
+    )
+    assert redacted.startswith("switch." + device_label("4TQDtRLglcQJ5goDNlug000000"))
+    assert "wl03002g26270011577" not in redacted
+    assert "WL03002G26270011577" not in redacted
+    assert redacted.endswith("_store_feed_as_machine_defaults")
+
+
+def test_a_wire_name_renames_its_own_segment() -> None:
+    """A machine renamed in the app still loses whatever word it left."""
+    assert redact_entity_id(
+        "switch.living_room_cat_store_feed_as_machine_defaults",
+        "4TQDtRLglcQJ5goDNlug000000",
+        "Living Room Cat",
+    ) == (
+        "switch."
+        + device_label("4TQDtRLglcQJ5goDNlug000000")
+        + "_store_feed_as_machine_defaults"
+    )
+
+
+def test_two_machines_stay_two_words_inside_entity_ids() -> None:
+    """Two entities of one kind on two machines keep two labels."""
+    feeder = redact_entity_id(
+        "switch.wl03002g26270011577_store_feed_as_machine_defaults",
+        "4TQDtRLglcQJ5goDNlug000000",
+    )
+    litter = redact_entity_id(
+        "switch.jq01909g25430010947_auto_clean",
+        "EUZLwdsC7Kr8D6I3v0Km000000",
+    )
+    assert device_label("4TQDtRLglcQJ5goDNlug000000") in feeder
+    assert device_label("EUZLwdsC7Kr8D6I3v0Km000000") in litter
+    assert "wl03002g26270011577" not in feeder
+    assert "jq01909g25430010947" not in litter
+
+
+def test_an_account_entity_id_is_left_whole() -> None:
+    """No machine is named there, so there is no segment to replace."""
+    assert (
+        redact_entity_id(
+            "sensor.neakasa_account_cloud_session_status",
+            "4TQDtRLglcQJ5goDNlug000000",
+        )
+        == "sensor.neakasa_account_cloud_session_status"
+    )
+
+
+def test_a_value_that_is_not_an_entity_id_is_left_alone() -> None:
+    """There is no segment here to replace, so the value stays as it is."""
+    unchanged = redact_entity_id("wl03002g26270011577", "4TQDtRLglcQJ5goDNlug000000")
+    assert unchanged == "wl03002g26270011577"

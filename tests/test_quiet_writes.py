@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from homeassistant.core import HomeAssistant
 
 from custom_components.neakasa.base_entity import write_state_if_changed
 from custom_components.neakasa.coordinator import NeakasaCoordinator
+from custom_components.neakasa.log_redact import device_label
 
 
 class _WritingEntity:
@@ -89,3 +90,19 @@ def test_fingerprint_follows_staged_values(
     first = coordinator.state_fingerprint("iot-001")
     coordinator.set_pending_feed("iot-001", food_g=9)
     assert coordinator.state_fingerprint("iot-001") != first
+
+
+def test_a_state_line_keeps_the_entity_and_loses_the_serial() -> None:
+    """The debug line names the entity, never the machine's serial."""
+    entity = _entity_with(["same"])
+    entity.entity_id = "switch.wl03002g26270011577_store_feed_as_machine_defaults"
+    entity.device_info = {"name": "WL03002G26270011577"}
+    with patch("custom_components.neakasa.base_entity._LOGGER.debug") as debug:
+        write_state_if_changed(entity, "4TQDtRLglcQJ5goDNlug000000")
+    debug.assert_called_once_with(
+        "Reported state for %s",
+        "switch."
+        + device_label("4TQDtRLglcQJ5goDNlug000000")
+        + "_store_feed_as_machine_defaults",
+    )
+    assert entity.writes == [1]

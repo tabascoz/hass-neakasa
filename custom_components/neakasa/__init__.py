@@ -21,7 +21,7 @@ from .api_manager import clear_shared_api
 from .const import _LOGGER, DOMAIN
 from .coordinator import NeakasaCoordinator
 from .data import NeakasaConfigEntry, NeakasaData
-from .log_redact import entry_label
+from .log_redact import device_label, entry_label
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -55,6 +55,15 @@ def _current_identifiers(
     return identifiers
 
 
+def _device_log_label(device: DeviceEntry) -> str:
+    """Return the word this device keeps in the journal, one per thing."""
+    ours = {value for kind, value in device.identifiers if kind == DOMAIN}
+    machines = sorted(v for v in ours if not v.startswith("account:"))
+    if machines:
+        return device_label(machines[0])
+    return device.name or entry_label(device.id)
+
+
 @callback
 def _prune_devices_this_entry_no_longer_describes(
     hass: HomeAssistant, config_entry: ConfigEntry, coordinator: NeakasaCoordinator
@@ -82,7 +91,7 @@ def _prune_devices_this_entry_no_longer_describes(
             continue
         _LOGGER.info(
             "Forgetting device %s: this entry no longer describes it",
-            device.name or device.id,
+            _device_log_label(device),
         )
         registry.async_remove_device(device.id)
 
