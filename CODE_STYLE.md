@@ -163,6 +163,40 @@ All commits follow [Conventional Commits](https://www.conventionalcommits.org/):
 - Use scopes when useful: `fix(sensor): map missing values to None`.
 - A `BREAKING CHANGE:` footer (or `!` after type) bumps the major version.
 
+## Release records
+
+Every `v<version>` tag is an annotated tag whose message **is** the release record, and
+`gh release create` reuses that same text as the release notes — the tag and the release
+carry the same words. The style below is fixed by the newest tag: read it with
+`git cat-file tag v<latest>` before writing a new one, and follow it unless the user says
+something different.
+
+```text
+## What's Changed
+
+* **<The group a change belongs to>:**
+  * <one short line per behaviour a user can see: what it did before, what it does now>
+  * <defaults, controls that start off, and the cost a reader would want to know>
+```
+
+- The heading is `## What's Changed` and nothing follows it: no version, no catchphrase.
+- Group headings are bold and end with a colon; their sub-bullets are one clause each,
+  indented two spaces, and describe what the user sees rather than files or internals.
+- Backtick literal values (`Unknown`, `0 g`); plain prose otherwise; em dashes only inside
+  a sentence, never as the bullet separator.
+- Measurements — counts, the date and the unit they were read on — belong in the commit
+  bodies and in `docs/`, not in the record. The record states behaviour, not evidence.
+- GitHub's release title is `v<version> - <catchphrase>`, one plain-language witty line;
+  the catchphrase never appears in the body.
+- `CHANGELOG.md` follows the same record from `v1.5.2` forward: the entry keeps its
+  spine (`## [x.y.z](https://github.com/.../compare/v<prev>...v<x.y.z>) (YYYY-MM-DD)`)
+  and nothing else - no `### Features` / `### Fixes` sub-headings, because the bold
+  group names do that grouping. Entries older than that keep whatever form they were
+  cut in; they are not rewritten to the new style.
+- The three renderings of one release - tag message, GitHub release body, changelog
+  entry - carry the same words. If any two drift, the tag is re-cut and the release
+  edited, not the prose reconciled by hand.
+
 ## Linting and verification
 
 - Ruff configuration lives in `pyproject.toml` (`[tool.ruff]`).

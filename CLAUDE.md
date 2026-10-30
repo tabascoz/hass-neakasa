@@ -7,7 +7,12 @@ Guidance for Claude Code agents working in this repository.
 Before creating, renaming or restructuring any file/class/function, **read
 [`CODE_STYLE.md`](./CODE_STYLE.md)**. It is the single source of truth for
 conventions: language, file organisation, naming, typing, docstrings,
-comments, translations, lint workflow.
+comments, translations, commit messages, release records, lint workflow.
+
+A `v<version>` tag is an annotated tag whose message **is** the release record, and
+the GitHub release reuses that same text. §Release records in `CODE_STYLE.md` fixes
+its style, and the newest tag is the exemplar — read it (`git cat-file tag v<latest>`)
+before writing one, and follow that style unless the user says something different.
 
 For user-facing topics (what's included, how to install, supported devices),
 see [`README.md`](./README.md).
