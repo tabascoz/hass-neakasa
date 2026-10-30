@@ -28,6 +28,8 @@ from .device_serial import NeakasaDeviceSerialSensor
 from .device_status import NeakasaDeviceStatusSensor
 from .firmware_version import NeakasaFirmwareVersionSensor
 from .food_intake_today import NeakasaFoodIntakeTodaySensor
+from .food_intake_today_liquid import NeakasaFoodIntakeTodayLiquidSensor
+from .food_intake_today_solids import NeakasaFoodIntakeTodaySolidsSensor
 from .food_level import NeakasaFoodLevelSensor
 from .label import NeakasaLabelSensor
 from .last_bin_clean_food import NeakasaFoodBinCleanSensor
@@ -104,6 +106,12 @@ async def async_setup_entry(
                         NeakasaDeviceSerialSensor(coordinator, device_info, iot_id),
                         NeakasaFirmwareVersionSensor(coordinator, device_info, iot_id),
                         NeakasaFoodIntakeTodaySensor(coordinator, device_info, iot_id),
+                        NeakasaFoodIntakeTodaySolidsSensor(
+                            coordinator, device_info, iot_id
+                        ),
+                        NeakasaFoodIntakeTodayLiquidSensor(
+                            coordinator, device_info, iot_id
+                        ),
                         NeakasaWaterBinCleanSensor(coordinator, device_info, iot_id),
                         NeakasaFoodBinCleanSensor(coordinator, device_info, iot_id),
                     ]

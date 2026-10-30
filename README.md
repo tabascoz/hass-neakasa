@@ -109,7 +109,9 @@ If you installed a beta, some of this you already have.
 | Sensor        | Battery state           | Fitted / charging / in use                     |
 | Sensor        | Deep clean state        | Current bowl wash status                       |
 | Sensor        | Desiccant days left     | Remaining days on the desiccant pack           |
-| Sensor        | Food delivered today    | Grams delivered since the day began            |
+| Sensor        | Food served today          | Grams the machine served since the day began  |
+| Sensor        | Food served today (solid)   | Solid grams of that figure (off by default)   |
+| Sensor        | Food served today (liquid)  | Liquid grams of that figure (off by default)  |
 | Sensor        | Water tank last cleaned | The cleaning mark the machine holds            |
 | Sensor        | Food bin last cleaned   | The same mark for the food bin                 |
 | Sensor        | Cloud session status    | Whether this account's session is still ours   |
@@ -120,9 +122,9 @@ If you installed a beta, some of this you already have.
 
 > **Never answered on a real machine during development:** the meal states beyond
 > `idle`, the deep-clean steps beyond `not washing`, the battery states beyond `in use`,
-> and the two cleaning marks plus **Food delivered today** (no record was ever returned
-> for them). Those entities are offered and written, but they stay empty until a machine
-> reports them — the integration never invents a value.
+> and the two cleaning marks (no record was ever returned for them). Those entities are
+> offered and written, but they stay empty until a machine reports them — the
+> integration never invents a value.
 
 ### Settings & Actions
 

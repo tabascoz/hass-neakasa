@@ -82,6 +82,13 @@ async def test_get_statistics() -> None:
     api.get_statistics.assert_awaited_once_with("dev")
 
 
+async def test_get_feeder_records() -> None:
+    client, api = _make_client()
+    api.get_feeder_records = AsyncMock(return_value={"feed_list": []})
+    assert await client.get_feeder_records("dev", 1, 2) == {"feed_list": []}
+    api.get_feeder_records.assert_awaited_once_with("dev", 1, 2)
+
+
 async def test_translate_success_passthrough() -> None:
     async with _translate_errors():
         assert True

@@ -192,6 +192,12 @@
             "food_intake_today": {
                 "name": "Heute ausgegebenes Futter"
             },
+            "food_intake_today_solids": {
+                "name": "Heute ausgegebenes Futter (fest)"
+            },
+            "food_intake_today_liquid": {
+                "name": "Heute ausgegebenes Futter (flüssig)"
+            },
             "water_bin_clean": {
                 "name": "Wassertank zuletzt gereinigt am"
             },

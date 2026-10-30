@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util.dt import as_timestamp, start_of_local_day
 
 from .api_manager import clear_shared_api, force_reconnect_api, get_shared_api
 from .const import (
@@ -52,6 +53,16 @@ if TYPE_CHECKING:
 # device you just added. The value this replaces was 10 minutes: six
 # presentations an hour on the 5-minute scan cadence this entry runs.
 DEVICE_LIST_REFRESH_MINUTES = 6 * 60
+
+# A pet feeder is asked for its own meal records, and a served meal does not
+# reliably re-push the property set, so no signal says "read again": the read is
+# bounded instead. One hour is the worst-case delay for a figure the mobile app
+# already shows you, one request an hour at most per feeder; `Refresh data now`
+# reads immediately. The window asked for is the day being grouped plus a day of
+# slack, because the machine's own day can start on the other side of the
+# midnight Home Assistant uses.
+FEEDER_RECORDS_REFRESH_HOURS = 1
+FEEDER_RECORDS_SLACK_SECONDS = 86400
 
 # A full re-login mints a new session for the account, so it is done at most
 # once per cooldown; renewing the IoT token (one call) is tried first.
@@ -230,7 +241,10 @@ class NeakasaDeviceSnapshot:
     last_food_bin_clean: str | None = None
     firmware_version: str | None = None
     hardware_version: str | None = None
-    feed_today_g: int | None = None
+    feed_today_solids_g: int | None = None
+    feed_today_liquid_g: int | None = None
+    meals_today: int | None = None
+    meal_times: tuple[int, ...] = ()
     device_serial: str = ""
 
 
@@ -332,6 +346,19 @@ def _state_evidence(values: dict[str, Any], prefix: str, ts: Any) -> dict[str, A
     return out
 
 
+def _epoch_seconds_age(ts: Any) -> tuple[str | None, int | None]:
+    """Return the moment an epoch-seconds stamp states, and how long ago that was."""
+    if ts is None:
+        return None, None
+    try:
+        when = datetime.fromtimestamp(int(ts), tz=UTC)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None, None
+    return when.isoformat(), max(
+        0, int((datetime.now(UTC) - when).total_seconds() // 60)
+    )
+
+
 def _service_answer(reply: Any) -> dict[str, Any]:
     """
     Return the parameters a sync service answered with, or {} when it gave none.
@@ -380,44 +407,67 @@ def _live_scale(answer: Any) -> tuple[float | None, int | None]:
     return weight, None if tare is None else _to_int(tare)
 
 
-def _feed_grams_today(records: Any) -> int | None:
-    """
-    Sum the grams the machine recorded as delivered meals for the current day.
+def _served_day_bounds() -> tuple[int, int]:
+    """Return the epoch seconds the account's current day runs over."""
+    day_start = int(as_timestamp(start_of_local_day()))
+    return day_start, day_start + 86400
 
-    The meal records the account-side endpoint answers with name each delivery
-    (`feed_weight` in grams at `feed_time`); nothing here has that shape yet -
-    no delivery has been recorded on this account - so an unrecognisable list
-    returns None rather than a guessed zero, and the sensor shows no value. The
-    day is the machine's clock read as UTC, because the record itself carries no
-    timezone.
+
+def _served_rows(records: Any) -> list[tuple[int, dict[str, Any]]]:
+    """
+    Return (epoch seconds, row) for every meal a pet feeder recorded in the day running.
+
+    A row states its own moment in epoch seconds, or milliseconds where the machine
+    stated them, so both are brought to seconds before the day is compared. Rows
+    outside the running day, rows with no moment, and answers that carry no `feed_list`
+    at all are left out - the litter box's `record_list` is not this feeder's meals.
     """
     if not isinstance(records, dict):
-        return None
-    entries = records.get("record_list")
-    if not isinstance(entries, list) or not entries:
-        return None
-    today = datetime.now(UTC).date()
-    total = 0
-    recognised = False
+        return []
+    entries = records.get("feed_list")
+    if not isinstance(entries, list):
+        return []
+    day_start, day_end = _served_day_bounds()
+    inside: list[tuple[int, dict[str, Any]]] = []
     for entry in entries:
         if not isinstance(entry, dict):
             continue
-        grams = _optional_int(entry.get("feed_weight", entry.get("weight")))
-        when_seconds = _optional_int(
-            entry.get("feed_time", entry.get("time", entry.get("ts")))
-        )
-        if grams is None or when_seconds is None:
+        when_seconds = _optional_int(entry.get("feed_time"))
+        if when_seconds is None:
             continue
         if when_seconds > 10**12:
             when_seconds //= 1000
-        try:
-            when = datetime.fromtimestamp(when_seconds, tz=UTC).date()
-        except (OverflowError, ValueError, OSError):
+        if not day_start <= when_seconds < day_end:
             continue
-        recognised = True
-        if when == today:
-            total += grams
-    return total if recognised else None
+        inside.append((when_seconds, entry))
+    return inside
+
+
+def _served_today(records: Any) -> tuple[int | None, int | None, tuple[int, ...]]:
+    """
+    Sum the grams a pet feeder recorded as served today, and name the meals.
+
+    Returns the solid and liquid grams and the moments of the meals grouped into
+    them, because a day figure is a grouping rather than a number the cloud
+    states: what it publishes has to say which meals made it. A pet feeder keeps
+    its own meal records and its rows name what was ground out (`feed_weight`)
+    and what was watered out (`water_weight`) at `feed_time`; the `plan_` pair is
+    only what was planned and is never counted, and `way` says whether the row
+    was a press (`manual`) or the machine's own freshness refresh (`reflesh`) -
+    both served food, so both count. "Today" is the day Home Assistant itself
+    runs, the one every other control of this device follows, never UTC. An
+    answer with no rows in the day states no number: only meals grouped to zero
+    grams are a zero.
+    """
+    rows = _served_rows(records)
+    if not rows:
+        return None, None, ()
+    solids = 0
+    liquid = 0
+    for _when_seconds, entry in rows:
+        solids += _optional_int(entry.get("feed_weight")) or 0
+        liquid += _optional_int(entry.get("water_weight")) or 0
+    return solids, liquid, tuple(sorted(when for when, _ in rows))
 
 
 def _build_device_snapshot(
@@ -520,8 +570,12 @@ def _build_pet_feeder_snapshot(
     only says what the machine last reported, and the weighing this unit stated
     when the integration asked for one (`live`, from the definition's 称重 read).
     Both are kept apart, so an entity can say which of the two it is showing.
+
+    The day figure is grouped here from the feeder's own meal rows: no key on the
+    device states a day total, so the rows are the only source of one.
     """
     _log_missing_property_keys(iot_id, devicedata, PETFEEDER_EXPECTED_KEYS)
+    served_solids_g, served_liquid_g, served_meal_times = _served_today(records)
     network = _property_value(devicedata, "NetWorkStatus", {})
     if not isinstance(network, dict):
         network = {}
@@ -659,7 +713,10 @@ def _build_pet_feeder_snapshot(
         last_food_bin_clean=_property_value(devicedata, "lastFoodBinCleanTime"),
         firmware_version=versions.get("FW_Version"),
         hardware_version=versions.get("HW_Version"),
-        feed_today_g=_feed_grams_today(records),
+        feed_today_solids_g=served_solids_g,
+        feed_today_liquid_g=served_liquid_g,
+        meals_today=len(served_meal_times) if served_meal_times else None,
+        meal_times=served_meal_times,
         device_serial=device_name,
     )
 
@@ -763,6 +820,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
 
         self._records_caches: dict[str, ValueCacher] = {}
         self._properties_caches: dict[str, ValueCacher] = {}
+        self._records_when: dict[str, int] = {}
         self._last_use_dates: dict[str, int] = {}
         self._device_names: dict[str, str] = {}
         self._device_meta: dict[str, dict[str, str]] = {}
@@ -869,6 +927,39 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             "scale_live_tare_g": snap.scale_live_tare_g,
             "scale_live_as_of": snap.scale_live_ts,
         }
+
+    def served_today_evidence(self, iot_id: str) -> dict[str, Any]:
+        """
+        Return the meals the day figure groups, and when their rows were asked.
+
+        No key on the machine states a day total, and the read that carries the
+        meals is bounded (at most one an hour per feeder), so a day figure is a
+        grouping of stated meals rather than a claim about now: the evidence names
+        each meal's own moment and the moment the rows were fetched. Measured on
+        this unit on 2026-10-29 the answer carried 24 rows over 30 days, exactly
+        one of them inside the day that was running, and that row's `feed_weight`
+        10 and `water_weight` 9 are the 19 g the product's own day panel showed
+        as 10 g solid and 9 g liquid.
+        """
+        snap = self.device_snapshot(iot_id)
+        if snap is None or snap.meals_today is None:
+            return {}
+        stamps = [
+            iso
+            for iso in (_epoch_seconds_age(when)[0] for when in snap.meal_times)
+            if iso
+        ]
+        evidence: dict[str, Any] = {
+            "meals_today": snap.meals_today,
+            "solid_g": snap.feed_today_solids_g,
+            "liquid_g": snap.feed_today_liquid_g,
+            "meal_times": stamps,
+        }
+        asked_as_of, asked_age = _epoch_seconds_age(self._records_when.get(iot_id))
+        if asked_as_of is not None and asked_age is not None:
+            evidence["records_as_of"] = asked_as_of
+            evidence["records_age_minutes"] = asked_age
+        return evidence
 
     def device_state_evidence(self, iot_id: str) -> dict[str, Any]:
         """
@@ -1526,6 +1617,10 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         """Drop the cached device list so the next scan refetches it."""
         self._devices_cache.mark_as_stale()
 
+    def _is_pet_feeder(self, iot_id: str) -> bool:
+        """Return whether the discovered model for *iot_id* is a Riko feeder."""
+        return self._device_meta.get(iot_id, {}).get("category_key") == "petFeeder"
+
     def _cache_for(self, iot_id: str) -> tuple[ValueCacher, ValueCacher]:
         """
         Return (records_cache, properties_cache) for *iot_id*.
@@ -1533,12 +1628,17 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         Records are only re-read when the device reports a new last-use, which
         is the one thing that can mean a new record exists: the cache is never
         stale on its own, so no scan is spent asking for records that cannot
-        have changed. Properties always re-read, so the device values follow the
-        scan interval.
+        have changed. A pet feeder states no such signal for its meals, so its
+        read is bounded by the ceiling in the constant above instead. Properties
+        always re-read, so the device values follow the scan interval.
         """
         if iot_id not in self._records_caches:
             self._records_caches[iot_id] = ValueCacher(
-                refresh_after=None,
+                refresh_after=(
+                    timedelta(hours=FEEDER_RECORDS_REFRESH_HOURS)
+                    if self._is_pet_feeder(iot_id)
+                    else None
+                ),
                 discard_after=timedelta(hours=4),
             )
         if iot_id not in self._properties_caches:
@@ -1574,10 +1674,13 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         """
         Fetch cached usage records for *iot_id*, reusing *client* when given.
 
-        /catbox/record is signed with the account session, so asking it is what
-        moves the session: when the account refuses it we are holding the
-        records another client's session made, and we say so. A refusal with
-        nothing held goes on as an error instead.
+        A pet feeder keeps its own records path; the litter box endpoint answers
+        nothing for a feeder name. Both are signed with the account session, so
+        asking either is what moves the session: when the account refuses it we
+        are holding the records another client's session made, and we say so. A
+        refusal with nothing held goes on as an error instead. The feeder window
+        is the day being grouped plus the slack costed above; the day itself is
+        grouped from whatever rows are held, so a day change needs no read.
         """
         records_cache, _ = self._cache_for(iot_id)
 
@@ -1585,13 +1688,22 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             device_name = await self._get_device_name(iot_id)
             api_client = client if client is not None else await self._get_client()
             try:
-                records = await api_client.get_records(device_name)
+                if self._is_pet_feeder(iot_id):
+                    day_start, _day_end = _served_day_bounds()
+                    records = await api_client.get_feeder_records(
+                        device_name,
+                        day_start - FEEDER_RECORDS_SLACK_SECONDS,
+                        int(time.time()),
+                    )
+                else:
+                    records = await api_client.get_records(device_name)
             except NeakasaApiClientSessionExpiredError as err:
                 self._note_account_refused("records", err)
                 held = records_cache.value_if_not_discarded()
                 if held is None:
                     raise
                 return held
+            self._records_when[iot_id] = int(time.time())
             self._note_presented("records")
             return records
 
@@ -1674,8 +1786,9 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         new_last_use = _get_last_use_date(devicedata)
         records_cache, _ = self._cache_for(iot_id)
         if self._last_use_dates.get(iot_id) != new_last_use:
-            # A new last-use is the only thing that can mean a new record, so
-            # the records are re-read on it and not otherwise.
+            # A new last-use is the litter box's own signal that a record exists,
+            # so the records are re-read on it and not otherwise; a pet feeder
+            # states nothing like it, so its read is bounded by the cache ceiling.
             records_cache.mark_as_stale()
         self._last_use_dates[iot_id] = new_last_use
 

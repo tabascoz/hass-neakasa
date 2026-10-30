@@ -192,6 +192,12 @@
             "food_intake_today": {
                 "name": "Comida dispensada hoy"
             },
+            "food_intake_today_solids": {
+                "name": "Comida dispensada hoy (sólido)"
+            },
+            "food_intake_today_liquid": {
+                "name": "Comida dispensada hoy (líquido)"
+            },
             "water_bin_clean": {
                 "name": "Depósito de agua limpiado por última vez"
             },

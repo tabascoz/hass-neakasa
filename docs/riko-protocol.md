@@ -214,7 +214,7 @@ Unique ids are `{iot_id}-{control}`.
 
 | Platform | Both categories | `petFeeder` (Riko) | `CatLitter` (M1) |
 |----------|-----------------|--------------------|------------------|
-| sensor | `label` | `food_level`, `water_level`, `battery`, `battery_state`, `device_status`, `deep_clean_state`, `wifi_rssi`, `bowl_weight`, `bowl_in_place` as a binary sensor, `desiccant_days_left`, `device_serial`, `firmware_version`, `food_intake_today`, `last_bin_clean_water`, `last_bin_clean_food` | `sand_percent`, `wifi_rssi`, `stay_time`, `last_usage`, `bucket_status`, `sand_level_state`, `bin_state`, `cat_weight` per cat |
+| sensor | `label` | `food_level`, `water_level`, `battery`, `battery_state`, `device_status`, `deep_clean_state`, `wifi_rssi`, `bowl_weight`, `bowl_in_place` as a binary sensor, `desiccant_days_left`, `device_serial`, `firmware_version`, `food_intake_today`, `food_intake_today_solids`, `food_intake_today_liquid`, `last_bin_clean_water`, `last_bin_clean_food` | `sand_percent`, `wifi_rssi`, `stay_time`, `last_usage`, `bucket_status`, `sand_level_state`, `bin_state`, `cat_weight` per cat |
 | binary_sensor | — | `cover_absent`, `bowl_in_place`, `serving_food` | `bin_full` |
 | button | — | `feed_now`, `reset_desiccant`, `reset_bowl_scale`, `calibrate_food_scale`, `mark_water_bin_clean`, `mark_food_bin_clean` | `clean`, `level` |
 | number | — | `food_grams`, `water_ratio`, `rehydration_minutes`, `desiccant_days`, `feed_sound_volume` | — |
@@ -310,10 +310,40 @@ because this unit has never reported any. What each of those answers is what a p
 in Home Assistant finds out, and the answer is written in the journal at debug level
 by the same cloud-write line the feeding path already produces.
 
-The daily intake is read from the account's record endpoint, which is now asked for
-the feeder as well; no delivery has been recorded on this account, so it currently
-answers with nothing and the sensor shows nothing. That is also why the reading is
-kept separate from the definition: the record shape is described, not confirmed.
+The daily intake is read from the pet feeder's own records endpoint, and it answers.
+`GET {baseurl}/feeder/record`, signed with the account session this client already
+holds - the same base url and signing the litter box's records use - is asked with
+`user_id`, `device_name` (the wire name the device list carries, not the iotId),
+`bind_status` 2 and a window in epoch **seconds**, and answers `feed_list`,
+`eat_list` and the account's `cat_list`. A `feed_list` row is one meal: `feed_time`
+(epoch s), `feed_weight` grams of solid food and `water_weight` grams of liquid are
+what ran, `plan_feed_weight`/`plan_water_weight` are only what was planned, and `way`
+says whether the row was a press (`manual`) or the machine's own freshness refresh
+(`reflesh`); `fail_reason`, `left_weight`, `left_water_weight` and `status` describe
+a meal that failed or left food behind. Measured on this unit on 2026-10-29: 24 rows
+over 30 days, exactly one inside the day that was running, `feed_weight` 10 and
+`water_weight` 9 - 19 g, and that product's own day panel showed 19 g made of 10 g
+solid and 9 g liquid for the same meal. Nothing here groups the day. No key on the
+machine states a day total (the whole answered key set was read again that day and
+carries none), `defFdCfg` is the meal the machine is set to deliver rather than a day
+figure (it read `{food:15, water:30, mixMin:3}` after a meal was set that day, which
+is not the pair above), and the litter box's endpoint answers `"record_list": []` for
+a feeder name while still returning the account's pets. The history shapes this client
+can reach were all tried that day and none answer: `/thing/properties/query` is 404,
+`/thing/extended/property/get` answers "tag not found" for every tag tried (`props`,
+`system`, `post`, `ModuleErr`, `event`, `feed`, `food`, `fdPlanStr` and the two names
+a day panel would read), `/living/user/device/shared/record/query`,
+`/living/user/device/shared/query` and `/living/device/event/timeline/get` answer
+"gateway.not found backend router" on the API gateway and `API not found` on the OA
+gateway, and `/feeder/record/statistics` exists but refused every shape tried -
+`ParamError` with `zone` required (0 reads as missing) and set to 3600 or 7200, over
+second and millisecond windows, with a real pet id. So the day is grouped from the
+rows here, by the day Home Assistant itself runs and never UTC; the integration asks
+the window of that day plus one day of slack, and re-reads it at most once an hour.
+What the day figure publishes beside it is what it is made of: the number of meals
+inside that day, each meal's own moment, and the moment the rows were fetched with
+how long ago that was - a grouped figure states its own age rather than posing as
+the present.
 
 ## What the machine reports about its own state (v1.5.0-beta6)
 

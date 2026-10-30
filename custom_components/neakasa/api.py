@@ -35,7 +35,11 @@ _WRITE_PATHS: tuple[str, ...] = ("/thing/properties/set", "/thing/service/invoke
 # Naming every accepted presentation makes the number of presentations per hour,
 # the actual lever, measurable from the journal. The IoT token exchange also
 # moves the session and is named where it happens, in _get_iot_token_by_sid.
-_PRESENTATION_PATHS: tuple[str, ...] = ("/uc/listBindingByAccount", "/catbox/record")
+_PRESENTATION_PATHS: tuple[str, ...] = (
+    "/uc/listBindingByAccount",
+    "/catbox/record",
+    "/feeder/record",
+)
 
 
 def _field_names(payload: object, prefix: str = "") -> list[str]:
@@ -626,6 +630,28 @@ class NeakasaAPI:
                 "bind_status": 2,
                 "start_time": self._seven_days_ago(timestamp),
                 "end_time": timestamp,
+            },
+        )
+
+    async def get_feeder_records(
+        self, device_name: str, start_time: int, end_time: int
+    ) -> Any:
+        """
+        Fetch the meals a pet feeder recorded, over an explicit window.
+
+        A pet feeder keeps its own records path; the litter box endpoint answers
+        nothing for a feeder name. The window is in epoch seconds - the unit the
+        rows state their own `feed_time` in - so the caller, which knows whose
+        day is being asked about, decides it rather than this client.
+        """
+        return await self._signed_get(
+            self.baseurl + "/feeder/record",
+            {
+                "user_id": self._encryption.userid,
+                "device_name": device_name,
+                "bind_status": 2,
+                "start_time": start_time,
+                "end_time": end_time,
             },
         )
 

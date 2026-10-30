@@ -192,6 +192,12 @@
             "food_intake_today": {
                 "name": "Karma wydana dzisiaj"
             },
+            "food_intake_today_solids": {
+                "name": "Karma wydana dzisiaj (stała)"
+            },
+            "food_intake_today_liquid": {
+                "name": "Karma wydana dzisiaj (płynna)"
+            },
             "water_bin_clean": {
                 "name": "Ostatnie czyszczenie zbiornika na wodę"
             },

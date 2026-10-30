@@ -475,6 +475,38 @@ async def test_get_records_cached(
     client.get_records.assert_awaited_once_with("T1")
 
 
+async def test_a_pet_feeder_is_asked_for_its_own_records(
+    hass: HomeAssistant,
+    mock_config_entry: MagicMock,
+    mock_get_shared_api: MagicMock,
+) -> None:
+    """A feeder's meals come from its own path; a box's stay on the box's."""
+    coordinator = _make_coordinator(hass, mock_config_entry)
+    coordinator._device_meta["iot-feeder"] = {
+        "category_key": "petFeeder",
+        "product_key": "pk",
+    }
+    client = AsyncMock()
+    client.get_feeder_records = AsyncMock(return_value={"feed_list": []})
+    client.get_records = AsyncMock(return_value={"cat_list": []})
+    coordinator._get_client = AsyncMock(return_value=client)
+
+    with patch.object(
+        coordinator,
+        "_get_device_name",
+        new=AsyncMock(return_value="T1"),
+    ):
+        feeder = await coordinator._get_records("iot-feeder")
+        box = await coordinator._get_records("iot-box")
+
+    assert feeder == {"feed_list": []}
+    assert box == {"cat_list": []}
+    client.get_records.assert_awaited_once_with("T1")
+    args = client.get_feeder_records.await_args.args
+    assert args[1] < args[2], "a window was asked for, not a point"
+    assert args[2] < 10**12, "the window is in the seconds the rows stamp in"
+
+
 async def test_get_properties_cached(
     hass: HomeAssistant,
     mock_config_entry: MagicMock,

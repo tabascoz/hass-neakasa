@@ -192,6 +192,12 @@
             "food_intake_today": {
                 "name": "Nourriture distribuée aujourd'hui"
             },
+            "food_intake_today_solids": {
+                "name": "Nourriture distribuée aujourd'hui (solide)"
+            },
+            "food_intake_today_liquid": {
+                "name": "Nourriture distribuée aujourd'hui (liquide)"
+            },
             "water_bin_clean": {
                 "name": "Dernier nettoyage du réservoir d'eau"
             },

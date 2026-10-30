@@ -734,6 +734,22 @@ async def test_get_records() -> None:
     assert args[1]["device_name"] == "dev-1"
 
 
+async def test_get_feeder_records() -> None:
+    api = _make_api()
+    api.baseurl = "https://web.example.com"
+    _set_encryption(api)
+    with patch.object(api, "_signed_get", new=AsyncMock(return_value={})) as signed:
+        await api.get_feeder_records("dev-1", 1_700_000_000, 1_700_086_400)
+    args = signed.await_args.args
+    assert args[0] == "https://web.example.com/feeder/record"
+    params = args[1]
+    assert params["device_name"] == "dev-1"
+    assert params["user_id"] == "user-1"
+    assert params["bind_status"] == 2
+    assert params["start_time"] == 1_700_000_000
+    assert params["end_time"] == 1_700_086_400
+
+
 def test_fields_are_named_even_when_the_answer_is_not_a_dict() -> None:
     """A field is named by where it sits; the answer being no dict names nothing."""
     assert _field_names(None) == []
@@ -747,6 +763,7 @@ def test_only_the_calls_that_present_the_account_are_named() -> None:
         "/uc/listBindingByAccount"
     )
     assert _presentation_path("https://x/catbox/record") == "/catbox/record"
+    assert _presentation_path("https://x/feeder/record") == "/feeder/record"
     assert _presentation_path("https://x/thing/properties/set") == "", (
         "a write presents nothing"
     )

@@ -54,6 +54,11 @@ into roughly seven cloud requests a minute.
   hour by itself; six hours leaves the records path as the only automatic one. A
   device added to the account appears within six hours unless you press
   `Refresh data now`, which is the manual path this already had.
+- A pet feeder is asked for its own meal records (`/feeder/record`, its sibling
+  path) instead of the litter box's, which answers nothing for a feeder name. A
+  served meal states no signal to follow, so that read is bounded to one an hour
+  per feeder - still one account presentation an hour at most, and the day figure
+  itself is grouped from whatever rows are held.
 - A rejected session is recovered by renewing the IoT token (`refresh_session`,
   one call) and a full re-login happens at most once per
   `FULL_REAUTH_COOLDOWN_SECONDS`. When the cooldown blocks it, the scan fails

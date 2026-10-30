@@ -140,6 +140,13 @@ class NeakasaApiClient:
         async with _translate_errors():
             return await self._api.get_statistics(device_name)
 
+    async def get_feeder_records(
+        self, device_name: str, start_time: int, end_time: int
+    ) -> Any:
+        """Fetch a pet feeder's own meal records, translating errors."""
+        async with _translate_errors():
+            return await self._api.get_feeder_records(device_name, start_time, end_time)
+
     async def invoke_service(
         self, iot_id: str, identifier: str, args: dict[str, Any]
     ) -> Any:

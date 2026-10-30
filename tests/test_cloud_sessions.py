@@ -525,6 +525,14 @@ def test_presentation_lines_name_the_call_and_the_device() -> None:
     assert _describe_presentation("/catbox/record", params) == (
         f"/catbox/record device={device_label('T1 Plus')}"
     )
+    feeder = {
+        "device_name": "SERIALFAKE0000000000000",
+        "bind_status": 2,
+        "start_time": 1_700_000_000,
+    }
+    assert _describe_presentation("/feeder/record", feeder) == (
+        f"/feeder/record device={device_label('SERIALFAKE0000000000000')}"
+    )
 
 
 def test_the_instrument_names_machines_by_their_labels() -> None:

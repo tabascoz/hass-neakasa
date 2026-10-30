@@ -8,8 +8,9 @@ as the tests that read one.
 from __future__ import annotations
 
 import copy
-import time
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -43,8 +44,9 @@ from custom_components.neakasa.const import (
 from custom_components.neakasa.coordinator import (
     NeakasaCoordinator,
     _build_pet_feeder_snapshot,
-    _feed_grams_today,
     _live_scale,
+    _served_rows,
+    _served_today,
     _service_answer,
 )
 from custom_components.neakasa.exceptions import (
@@ -80,6 +82,12 @@ from custom_components.neakasa.sensor.firmware_version import (
 )
 from custom_components.neakasa.sensor.food_intake_today import (
     NeakasaFoodIntakeTodaySensor,
+)
+from custom_components.neakasa.sensor.food_intake_today_liquid import (
+    NeakasaFoodIntakeTodayLiquidSensor,
+)
+from custom_components.neakasa.sensor.food_intake_today_solids import (
+    NeakasaFoodIntakeTodaySolidsSensor,
 )
 from custom_components.neakasa.sensor.food_level import NeakasaFoodLevelSensor
 from custom_components.neakasa.sensor.label import NeakasaLabelSensor
@@ -193,31 +201,141 @@ def test_unanswered_controls_stay_unknown() -> None:
     assert snap.sound_volume is None
     assert snap.desiccant_days_effective is None
     assert snap.firmware_version is None
-    assert snap.feed_today_g is None
+    assert snap.feed_today_solids_g is None
+    assert snap.feed_today_liquid_g is None
     assert snap.device_state_ts is None
     assert snap.device_state_param is None
     assert snap.deep_clean_state is None
     assert snap.battery_state is None
 
 
-def test_meals_recorded_today_are_summed() -> None:
-    """A delivery record names its grams and the time it ran at."""
-    now = int(time.time())
-    records = {
-        "record_list": [
-            {"feed_time": now - 60, "feed_weight": 12},
-            {"feed_time": now - 60, "water_weight": 24},
-            {"feed_time": now - 60 - 9 * 86400, "feed_weight": 99},
-        ]
-    }
-    assert _feed_grams_today(records) == 12
+def _fixed_local_day() -> tuple[int, datetime]:
+    """Return a half-hour-offset day's start and the midnight that states it."""
+    midnight = datetime(2026, 10, 29, tzinfo=ZoneInfo("Asia/Kolkata"))
+    return int(midnight.timestamp()), midnight
+
+
+def test_the_day_being_run_groups_the_rows_and_another_zones_day_does_not() -> None:
+    """Rows either side of a half-hour midnight are told apart."""
+    day_start, midnight = _fixed_local_day()
+    rows = [
+        {"feed_time": day_start - 60, "feed_weight": 99, "water_weight": 99},
+        {"feed_time": day_start + 60, "feed_weight": 10, "water_weight": 9},
+        {
+            "feed_time": day_start + 3600,
+            "feed_weight": 0,
+            "water_weight": 0,
+            "way": "reflesh",
+        },
+    ]
+    with patch(
+        "custom_components.neakasa.coordinator.start_of_local_day",
+        return_value=midnight,
+    ):
+        assert _served_today({"feed_list": rows}) == (
+            10,
+            9,
+            (day_start + 60, day_start + 3600),
+        )
+
+
+def test_millisecond_rows_are_the_same_meals() -> None:
+    """A row stamped in milliseconds is the row stamped in seconds."""
+    day_start, midnight = _fixed_local_day()
+    rows = [{"feed_time": (day_start + 60) * 1000 + 250, "feed_weight": 10}]
+    with patch(
+        "custom_components.neakasa.coordinator.start_of_local_day",
+        return_value=midnight,
+    ):
+        assert _served_today({"feed_list": rows}) == (10, 0, (day_start + 60,))
+
+
+def test_a_meal_that_ran_without_grams_states_a_known_zero() -> None:
+    """The machine's own refresh grounded nothing; that is a zero, not a gap."""
+    day_start, midnight = _fixed_local_day()
+    rows = [
+        {
+            "feed_time": day_start + 60,
+            "feed_weight": 0,
+            "water_weight": 0,
+            "way": "reflesh",
+        }
+    ]
+    with patch(
+        "custom_components.neakasa.coordinator.start_of_local_day",
+        return_value=midnight,
+    ):
+        assert _served_today({"feed_list": rows}) == (0, 0, (day_start + 60,))
+
+
+def test_a_planned_meal_is_never_counted_as_served() -> None:
+    """What the machine only planned is not what ran."""
+    day_start, midnight = _fixed_local_day()
+    rows = [
+        {
+            "feed_time": day_start + 60,
+            "plan_feed_weight": 10,
+            "plan_water_weight": 10,
+        }
+    ]
+    with patch(
+        "custom_components.neakasa.coordinator.start_of_local_day",
+        return_value=midnight,
+    ):
+        assert _served_today({"feed_list": rows}) == (0, 0, (day_start + 60,))
 
 
 def test_unrecognisable_records_produce_no_number() -> None:
-    """An answer with no grams is not reported as zero grams."""
-    assert _feed_grams_today({"record_list": []}) is None
-    assert _feed_grams_today({"record_list": [{"plan": "x"}]}) is None
-    assert _feed_grams_today(None) is None
+    """An answer with no rows is not reported as zero grams."""
+    assert _served_today({"feed_list": []}) == (None, None, ())
+    assert _served_today({"record_list": [{"feed_weight": 12}]}) == (None, None, ())
+    assert _served_today(None) == (None, None, ())
+
+
+def test_only_the_running_day_is_grouped_and_a_row_without_a_moment_is_left_out() -> (
+    None
+):
+    """The walk the figure and its provenance share keeps one day and nothing else."""
+    day_start, midnight = _fixed_local_day()
+    rows = [
+        {"feed_time": day_start - 1, "feed_weight": 99, "water_weight": 99},
+        {
+            "feed_time": (day_start + 60) * 1000 + 500,
+            "feed_weight": 10,
+            "water_weight": 9,
+        },
+        {"feed_weight": 7},
+        "not-a-row",
+    ]
+    with patch(
+        "custom_components.neakasa.coordinator.start_of_local_day",
+        return_value=midnight,
+    ):
+        grouped = _served_rows({"feed_list": rows})
+        assert [when for when, _ in grouped] == [day_start + 60]
+        assert _served_today({"feed_list": rows}) == (10, 9, (day_start + 60,))
+    assert _served_rows({"record_list": rows}) == []
+    assert _served_rows(None) == []
+
+
+def test_the_grouped_meals_reach_the_model_apart_from_the_grams() -> None:
+    """The meals a day figure groups are kept beside it, not only their sum."""
+    day_start, midnight = _fixed_local_day()
+    rows = [
+        {"feed_time": day_start - 1, "feed_weight": 99, "water_weight": 99},
+        {"feed_time": day_start + 60, "feed_weight": 10, "water_weight": 9},
+    ]
+    with patch(
+        "custom_components.neakasa.coordinator.start_of_local_day",
+        return_value=midnight,
+    ):
+        snap = _snapshot(_answered(), {"feed_list": rows})
+    assert snap.feed_today_solids_g == 10
+    assert snap.feed_today_liquid_g == 9
+    assert snap.meals_today == 1
+    assert snap.meal_times == (day_start + 60,)
+    assert _snapshot(_answered()).meals_today is None
+    assert _snapshot(_answered()).meal_times == ()
 
 
 def _mock_coord(snapshot: object) -> MagicMock:
@@ -459,6 +577,82 @@ def test_read_only_sensors_show_what_the_machine_states() -> None:
 
     intake = NeakasaFoodIntakeTodaySensor(_mock_coord(snap), DEVICE_INFO, "riko-001")
     assert intake.native_value is None
+    solids = NeakasaFoodIntakeTodaySolidsSensor(
+        _mock_coord(snap), DEVICE_INFO, "riko-001"
+    )
+    assert solids.native_value is None
+    assert solids.unique_id == "riko-001-food_intake_today_solids"
+    assert solids.translation_key == "food_intake_today_solids"
+    assert solids.entity_registry_enabled_default is False
+    liquid = NeakasaFoodIntakeTodayLiquidSensor(
+        _mock_coord(snap), DEVICE_INFO, "riko-001"
+    )
+    assert liquid.native_value is None
+    assert liquid.unique_id == "riko-001-food_intake_today_liquid"
+    assert liquid.translation_key == "food_intake_today_liquid"
+    assert liquid.entity_registry_enabled_default is False
+
+
+def test_the_three_day_figures_read_the_meals_recorded() -> None:
+    """The total is the two halves, and each half is only its own."""
+    day_start, midnight = _fixed_local_day()
+    rows = [
+        {"feed_time": day_start - 60, "feed_weight": 99, "water_weight": 99},
+        {"feed_time": day_start + 60, "feed_weight": 10, "water_weight": 9},
+    ]
+    with patch(
+        "custom_components.neakasa.coordinator.start_of_local_day",
+        return_value=midnight,
+    ):
+        answered = _snapshot(_answered(), {"feed_list": rows})
+        coordinator = _mock_coord(answered)
+        total = NeakasaFoodIntakeTodaySensor(coordinator, DEVICE_INFO, "riko-001")
+        solids = NeakasaFoodIntakeTodaySolidsSensor(
+            coordinator, DEVICE_INFO, "riko-001"
+        )
+        liquid = NeakasaFoodIntakeTodayLiquidSensor(
+            coordinator, DEVICE_INFO, "riko-001"
+        )
+    assert total.native_value == 19
+    assert solids.native_value == 10
+    assert liquid.native_value == 9
+    assert total.unique_id == "riko-001-food_intake_today"
+
+
+async def test_the_day_figure_names_the_meals_it_groups(
+    hass: HomeAssistant, mock_config_entry: MagicMock
+) -> None:
+    """A grouped figure states the meals it came from and when they were read."""
+    day_start, midnight = _fixed_local_day()
+    rows = [{"feed_time": day_start + 60, "feed_weight": 10, "water_weight": 9}]
+    with patch(
+        "custom_components.neakasa.coordinator.start_of_local_day",
+        return_value=midnight,
+    ):
+        snap = _snapshot(_answered(), {"feed_list": rows})
+    coordinator = _make_coordinator(hass, mock_config_entry, snap)
+    coordinator._records_when = {"riko-001": day_start + 120}
+    evidence = coordinator.served_today_evidence("riko-001")
+    assert evidence["meals_today"] == 1
+    assert evidence["solid_g"] == 10
+    assert evidence["liquid_g"] == 9
+    assert evidence["meal_times"] == [
+        datetime.fromtimestamp(day_start + 60, tz=UTC).isoformat()
+    ]
+    assert (
+        evidence["records_as_of"]
+        == datetime.fromtimestamp(day_start + 120, tz=UTC).isoformat()
+    )
+    assert evidence["records_age_minutes"] >= 0
+
+    total = NeakasaFoodIntakeTodaySensor(coordinator, DEVICE_INFO, "riko-001")
+    assert total.native_value == 19
+    assert total.extra_state_attributes == evidence
+
+    blank = _make_coordinator(hass, mock_config_entry, _snapshot(_answered()))
+    assert blank.served_today_evidence("riko-001") == {}, (
+        "a figure with no meals behind it names none either"
+    )
 
 
 def test_settings_read_the_state_without_inventing_one() -> None:
@@ -733,6 +927,8 @@ def test_riko_sensors_answer_nothing_without_a_snapshot() -> None:
         NeakasaDeviceStatusSensor,
         NeakasaFirmwareVersionSensor,
         NeakasaFoodIntakeTodaySensor,
+        NeakasaFoodIntakeTodaySolidsSensor,
+        NeakasaFoodIntakeTodayLiquidSensor,
         NeakasaFoodBinCleanSensor,
         NeakasaWaterBinCleanSensor,
         NeakasaFoodLevelSensor,
@@ -783,6 +979,8 @@ async def test_riko_entities_write_only_once_registered(hass: HomeAssistant) -> 
         NeakasaDeviceStatusSensor,
         NeakasaFirmwareVersionSensor,
         NeakasaFoodIntakeTodaySensor,
+        NeakasaFoodIntakeTodaySolidsSensor,
+        NeakasaFoodIntakeTodayLiquidSensor,
         NeakasaFoodBinCleanSensor,
         NeakasaWaterBinCleanSensor,
         NeakasaFoodLevelSensor,

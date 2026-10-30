@@ -1,8 +1,8 @@
-"""Sensor for the grams of food the machine delivered today."""
+"""Sensor for the grams of food the machine served today."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import callback
@@ -17,11 +17,14 @@ if TYPE_CHECKING:
 
 class NeakasaFoodIntakeTodaySensor(CoordinatorEntity[NeakasaCoordinator], SensorEntity):
     """
-    Grams of food this machine delivered since the day began.
+    Grams of food this machine served today, solid and liquid together.
 
-    The meal records are read from the account's record endpoint, which this
-    account has never answered with one, so the value stays unknown until the
-    machine's first recorded delivery.
+    A pet feeder keeps its own meal rows and no key on the device states a day
+    total, so the rows are added up here for the day Home Assistant itself runs.
+    A day with no recorded meal states no number rather than a guessed zero.
+    The meals the figure groups - each naming its own moment - and the moment the
+    rows were asked for stay in `extra_state_attributes`, so a figure can be
+    traced to the meals that made it rather than read as the present.
     """
 
     _attr_should_poll = False
@@ -63,9 +66,24 @@ class NeakasaFoodIntakeTodaySensor(CoordinatorEntity[NeakasaCoordinator], Sensor
         return self.coordinator.device_snapshot(self._iot_id)
 
     @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """The meals grouped into the figure, and when their rows were asked."""
+        return self.coordinator.served_today_evidence(self._iot_id)
+
+    @property
     def native_value(self) -> int | None:
-        """Return the grams delivered today, or None when none were recorded."""
+        """
+        Return the grams served today, or None when none were recorded.
+
+        The two halves are what the machine's rows state - `feed_weight` ground
+        out and `water_weight` watered - and the total is their sum, the figure
+        the product's own day panel prints beside that pair.
+        """
         snap = self._snap
         if snap is None:
             return None
-        return snap.feed_today_g
+        solids = snap.feed_today_solids_g
+        liquid = snap.feed_today_liquid_g
+        if solids is None or liquid is None:
+            return None
+        return solids + liquid

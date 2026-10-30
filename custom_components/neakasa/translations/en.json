@@ -190,7 +190,13 @@
                 "name": "Firmware version"
             },
             "food_intake_today": {
-                "name": "Food delivered today"
+                "name": "Food served today"
+            },
+            "food_intake_today_solids": {
+                "name": "Food served today (solid)"
+            },
+            "food_intake_today_liquid": {
+                "name": "Food served today (liquid)"
             },
             "water_bin_clean": {
                 "name": "Water tank last cleaned"

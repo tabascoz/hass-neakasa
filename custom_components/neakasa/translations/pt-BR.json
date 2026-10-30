@@ -192,6 +192,12 @@
             "food_intake_today": {
                 "name": "Ração servida hoje"
             },
+            "food_intake_today_solids": {
+                "name": "Ração servida hoje (sólido)"
+            },
+            "food_intake_today_liquid": {
+                "name": "Ração servida hoje (líquido)"
+            },
             "water_bin_clean": {
                 "name": "Última limpeza do tanque de água"
             },
