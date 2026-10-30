@@ -8,6 +8,33 @@ the written record of the line — entries must keep matching the tags, newest f
 
 No `v1.2` was ever cut; the line goes `v1.1` → `v1.3.0`.
 
+## [1.5.2](https://github.com/tabascoz/hass-neakasa/compare/v1.5.1...v1.5.2) (2026-10-30)
+
+### Features
+
+* **Food served today reads the machine it belongs to** — the control read the account's records,
+  which belong to the litter box and answer an empty list for a feeder name, so it could only
+  ever be Unknown. A pet feeder keeps its own meal records and they answer: on 2026-10-29 this
+  unit returned 24 rows over 30 days, one inside the day running, 10 g solid and 9 g liquid, the
+  figure the product's own day panel showed. The control reports what the machine served today,
+  grouped by the day Home Assistant runs rather than UTC, states nothing for a day with no
+  recorded meal and never counts a planned meal as served. The total is on by default, and the
+  two halves are offered as separate controls that are off by default. The total also names the
+  meals it grouped - each with its own moment - and the moment the rows were read with how long
+  ago that was, because a grouped figure has to state its own age rather than pose as the
+  present. The records path is asked at most once an hour per feeder, since a served meal states
+  no signal that says read again, and the Refresh data now button reads it straight away.
+
+### Fixes
+
+* **The journal no longer spells out each machine's serial** — the lines that report an entity's
+  state named the device by its wire name, which is the serial, so 1225 of the 1279 such lines
+  measured on the unit on 2026-10-29 carried it. An entity's state line now keeps its platform
+  prefix and its own name and names the machine with the same hash word the other lines already
+  use, so the counts stay attributable per device and per control (2119 lines measured after, one
+  keeping an older Home Assistant device word beside the label, none carrying a serial). Entity
+  ids, unique ids, the entity registry and the cloud calls are unchanged by this change.
+
 ## [1.5.1](https://github.com/tabascoz/hass-neakasa/compare/v1.5.0...v1.5.1) (2026-10-29)
 
 ### Fixes
