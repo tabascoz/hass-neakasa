@@ -67,7 +67,7 @@ Every key below is labelled by where the shape came from:
 | Key | Shape | What it controls |
 |---|---|---|
 | `defFdCfg` | `{food, water, mixMin}` | the machine's default meal. `food` 0…60 g, **`water` is an amount of water in grams** 0…600 g (never the ratio index: sending the index on 2026-10-25 made the machine keep adding water until it reported clogged water sprays), `mixMin` 0…30 **minutes** — the definition names it as the rehydration time of the wet meal, and this unit reports 3 |
-| `feedAudCfg` | `{audIdx, volume}` | the sound the machine plays when it delivers a meal: `audIdx` picks the clip (the machine holds a default clip and clips you record in the app), `volume` is 0…200 in the definition, and this unit reports 100; 0 is silence |
+| `feedAudCfg` | `{audIdx, volume}` | the sound the machine plays with a meal: `audIdx` is the definition's enum 默认出餐音效=0 the default meal sound, 自定义出餐音效1…3=1…3 the clips recorded through the mobile app, 无出餐音效=-1 no meal sound; `volume` is 0…200 in the definition, where 0 is silence. This unit answered `{audIdx: 0, volume: 100}` on all three reads (2026-10-23, 2026-10-27 and 2026-11-03) and no other value. Its own stamp is the moment the setting last changed, not a report stamp like the whole-property-set group, so it moves when the app or a write of ours edits it |
 | `freshMgrCfg` | `{bOnOff, monitorTime, leftOverTTH}` | the freshness manager: `bOnOff` starts or stops it, `monitorTime` is how long it watches the bowl in **hours** (definition 1…4, observed 4), `leftOverTTH` is the leftover threshold in **grams** (definition 0…300, observed 20) |
 | `leftover` | `{bOnOff, detGramTTh}` `[definition]` | a separate leftover detection switch with a 0…30 g threshold — this unit has never answered it |
 | `deepCleanCfg` | `{bOnOff, cleanState}` | the bowl wash: on/off and the state the wash is in (observed 0/0 on this unit). The wash states are the definition's enum: 0 初始状态 not washing, 1 水路清洁中 washing the water channel, 2 水路清洁完成 water channel washed, 3 水路冲洗中 rinsing the water channel — only 0 has been answered here, so the other three are read from the definition and their appearance is untested |
@@ -162,6 +162,21 @@ and never claims one works before this unit has answered it.
 - Verified: `feedOnce {food:5, water:2}` → gateway OK; `defFdCfg` became
   `{food:5,water:2,mixMin:1}` and `bowlStatus.curWeight` rose 67→139 g (a meal was
   dispensed).
+- **A press is not the end of a meal (measured 2026-11-03).** The six presses this
+  integration made between 2026-10-25 and 2026-10-28 are each filed by the machine
+  **4 m 07 s to 6 m 47 s after the request** — the rehydration step the machine was
+  set to (3 min) plus the grinding and the sprays — carrying the solid amount as
+  asked and the water 1 g to 2 g under it. `status` 1 marks a meal that ran,
+  `status` 2 one that did not and its `fail_reason` states the codes as
+  `{"reason": N, "resParam": M}`; `way` says whether the row is a press (`manual`)
+  or the machine's own water refresh (`reflesh`). The 26 rows of the 12 days to
+  2026-11-03 carry **12 fields** — `day_sec`, `fail_reason`, `feed_time`,
+  `feed_weight`, `left_water_weight`, `left_weight`, `plan_feed_weight`,
+  `plan_water_weight`, `record_id`, `status`, `water_weight`, `way` — and none of
+  them names a sound; the 20 rows this integration cannot account for are filed the
+  same way. A serve from the app and a press from here are one kind of meal on the
+  wire, so whether a tone was heard is an observation at the feeder and not a field
+  to read — and a meal's own moment is the end of the cycle, minutes after a press.
 - **v1.5.0-beta1 regression:** beta1 sent `water` as the ratio index (1–5). Observed on the
   machine: it ground the food and then kept adding water until it reported an error of
   **clogged water sprays**. Sending the water amount in grams is what the official app does
