@@ -1,8 +1,9 @@
 # Neakasa Riko — wet meal feeder wire protocol
 
 Captured live from a personal account on branch `riko-wet-feeder` (identifiers below are anonymized).
-Source of truth: `/uc/listBindingByAccount`, `/thing/productInfo/getByAppKey`
-and `/thing/properties/get` over the Aliyun IoT gateway (`app_key=32715650`).
+Source of truth: `/uc/listBindingByAccount` and `/thing/properties/get` over the
+Aliyun IoT gateway (`app_key=32715650`). `/thing/productInfo/getByAppKey` is named
+no more — see §Product catalogue for what it answers instead.
 
 The Riko is bound to the **same** account, app key and gateway transport as the
 M1 litter box — only its `categoryKey`, `productKey` and property set differ.
@@ -200,10 +201,42 @@ win when they exist; the fallback only covers the never-configured case.
 
 `coordinator.async_get_device_schema` reports, per device, the raw `defFdCfg`, the parsed
 `default_food_g` and `default_water_ratio`, the staged `pending_feed`, `keep_as_new_defaults`
-and `last_feed` (the exact args the last `feedOnce` used and whether it stored them). Each feed
-also logs `Riko feedOnce <iot_id>: {…}` at debug level, and when storing, `Riko stored defaults
-<iot_id>: food N g, water M g` — so a press can be read either in the Diagnostics view or in the
-Home Assistant log with `custom_components.neakasa: debug`.
+and `last_feed` (the exact args the last `feedOnce` used and whether it stored them). Each device
+is keyed by `log_redact.device_label` — the same `dev-…` word the journal prints — and never by
+its iotId: the diagnostics download is meant to be shared, and `async_redact_data` replaces the
+value behind a key it recognises but copies every key out unchanged, so an iotId used as a key
+would go to whoever the file is handed to. Each feed also logs `Riko feedOnce <label>: {…}` at
+debug level, and when storing, `Riko stored defaults <label>: food N g, water M g` — so a press
+can be read either in the Diagnostics view or in the Home Assistant log with
+`custom_components.neakasa: debug`, under one word for the machine.
+
+## Product catalogue — `/thing/productInfo/getByAppKey` (measured 2026-11-19)
+
+This endpoint is **not** a source of truth for either Neakasa machine, and the
+diagnostics schema no longer asks it anything. One sign-in, five reads, every answer
+identical:
+
+| Parameters sent | Rows back | This account's products among them |
+|---|---|---|
+| `productStatusEnv=release` | 5 | none |
+| no filter at all | 5 | none |
+| `release` + `pageSize=100` + `currentPage=1` | 5 | none |
+| `release` + `pageSize=100` + `pageNo=1` | 5 | none |
+| `pageSize=100` only | 5 | none |
+
+The five are all `categoryKey: RobotCleaner` — Neabot N1Plus, N2, Q11, Q11 and
+N2 Lite — and the envelope is `{code, data, id}` with `data` a bare list and **no
+page counter anywhere in it**, so the identical answers are not a page boundary: the
+`appKey` behind these credentials (`32715650`) publishes the robot-vacuum line, and a
+Neakasa feeder or litter box can never appear in what it lists. The device rows this
+file does describe come from `/uc/listBindingByAccount`, which carries each bound
+machine's own `productKey`, and that is the same field name the catalogue uses — the
+two simply speak of different products.
+
+What the schema's products block would have added, `categoryKey` and `productName`,
+was already visible per device as `category_key` and `product_key`; nothing is lost by
+its going, and a diagnostics download now makes one cloud call fewer. If a real
+capability listing is ever wanted, the door is the thing's TSL, not this catalogue.
 
 ## Per-device entity registration
 

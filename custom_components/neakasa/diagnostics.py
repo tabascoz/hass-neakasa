@@ -13,6 +13,12 @@ if TYPE_CHECKING:
     from .data import NeakasaConfigEntry
 
 # `title` embeds the account login: "Neakasa (<username>)"
+#
+# This list names values, and `async_redact_data` replaces only the value sitting
+# behind one of these keys: a key of its own is copied out as it was written. So an
+# identifier must never be a key here - which is why
+# `coordinator.async_get_device_schema` keys its devices by `log_redact.device_label`
+# rather than by the iotId.
 TO_REDACT: frozenset[str] = frozenset(
     {CONF_PASSWORD, CONF_USERNAME, "device_ids", "title"}
 )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -277,7 +278,6 @@ async def test_async_get_device_schema_reports_missing_keys(
     )
     coordinator.data = {"riko-1": snap}
     client = AsyncMock()
-    client.get_product_list = AsyncMock(return_value=[])
     client.get_device_properties = AsyncMock(
         return_value={k: v for k, v in FAKE_RIKO_PROPERTIES.items() if k != "waterLvl"}
     )
@@ -285,10 +285,44 @@ async def test_async_get_device_schema_reports_missing_keys(
 
     schema = await coordinator.async_get_device_schema()
 
-    assert schema["products"] == {}
-    entry = schema["devices"]["riko-1"]
+    # The product catalogue belongs to the robot-vacuum appKey, so a download
+    # neither carries a products block nor pays for the call that produced it.
+    assert "products" not in schema
+    client.get_product_list.assert_not_called()
+    entry = schema["devices"][device_label("riko-1")]
     assert entry["category_key"] == "petFeeder"
     assert entry["missing_expected_keys"] == ["waterLvl"]
+
+
+async def test_async_get_device_schema_keys_devices_by_their_log_label(
+    hass: HomeAssistant, mock_config_entry: MagicMock
+) -> None:
+    """A schema entry is keyed by the machine's log label, never by its iotId.
+
+    The dict is handed to diagnostics whole and `async_redact_data` cannot redact
+    a key, so a raw iotId here would reach whoever the file is shared with.
+    """
+    iot_id = "4TQDtRLglcQJ5goDNlug000000"
+    coordinator = _make_coordinator(hass, mock_config_entry)
+    snap = _build_pet_feeder_snapshot(
+        iot_id,
+        "SERIALFAKE0000000000000",
+        FAKE_RIKO_PROPERTIES,
+        "a1ccEqBcaUD",
+        "TestLabel",
+    )
+    coordinator.data = {iot_id: snap}
+    client = AsyncMock()
+    client.get_device_properties = AsyncMock(
+        return_value=copy.deepcopy(FAKE_RIKO_PROPERTIES)
+    )
+    coordinator._get_client = AsyncMock(return_value=client)
+
+    schema = await coordinator.async_get_device_schema()
+
+    assert list(schema["devices"]) == [device_label(iot_id)]
+    assert iot_id not in json.dumps(schema)
+    assert schema["devices"][device_label(iot_id)]["feed"]["last_feed"] == {}
 
 
 async def test_feed_once_sends_water_grams(

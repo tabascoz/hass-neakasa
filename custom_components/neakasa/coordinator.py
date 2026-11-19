@@ -1021,28 +1021,21 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         """
         Return a per-device wire schema for diagnostics/discovery.
 
-        Exposes the raw property keys each device reports and the command/service
-        schema from the product list, so missing Riko capabilities are visible in
-        a shareable diagnostics download rather than guessed.
+        Reports the raw property keys each device states against the keys this
+        integration knows, so a firmware change shows up in a shareable download
+        rather than being guessed. There is no product block beside it:
+        /thing/productInfo/getByAppKey answers for the robot-vacuum line the
+        appKey behind these credentials publishes and never lists a Neakasa
+        feeder, which is measured in docs/riko-protocol.md.
+
+        A machine is named by its log label, never by its iotId: this dict is
+        returned to `diagnostics.py` whole, and `async_redact_data` redacts the
+        value behind a key it knows, not the key itself - so an iotId used as a
+        key would be handed to whoever the file is shared with whatever the
+        redaction list says. The label is the same word the journal prints for
+        this machine, which keeps a downloaded file and a log reading matchable.
         """
         client = await self._get_client()
-        products = await client.get_product_list()
-        product_keys = {
-            snap.product_key for snap in (self.data or {}).values() if snap.product_key
-        }
-        schema_by_product: dict[str, Any] = {}
-        if isinstance(products, list):
-            for entry in products:
-                if (
-                    not isinstance(entry, dict)
-                    or entry.get("productKey") not in product_keys
-                ):
-                    continue
-                schema_by_product[entry["productKey"]] = {
-                    "categoryKey": entry.get("categoryKey"),
-                    "productName": entry.get("name"),
-                }
-
         devices: dict[str, Any] = {}
         for iot_id, snap in (self.data or {}).items():
             devicedata = await self._get_properties(iot_id, client)
@@ -1054,14 +1047,15 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                 else PETFEEDER_EXPECTED_KEYS
             )
             missing = [key for key in expected if key not in devicedata]
-            devices[iot_id] = {
+            label = device_label(iot_id)
+            devices[label] = {
                 "category_key": snap.category_key,
                 "product_key": snap.product_key,
                 "property_keys": sorted(devicedata),
                 "missing_expected_keys": missing,
             }
             if snap.category_key == "petFeeder":
-                devices[iot_id]["feed"] = {
+                devices[label]["feed"] = {
                     "defFdCfg": _property_value(devicedata, "defFdCfg", {}),
                     "default_food_g": snap.default_food_g,
                     "default_water_ratio": snap.default_water_ratio,
@@ -1069,7 +1063,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                     "keep_as_new_defaults": self.feed_keep_as_new_defaults(iot_id),
                     "last_feed": self._last_feed.get(iot_id, {}),
                 }
-        return {"devices": devices, "products": schema_by_product}
+        return {"devices": devices}
 
     async def set_property(self, iot_id: str, key: str, value: Any) -> None:
         """
