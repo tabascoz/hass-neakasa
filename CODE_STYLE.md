@@ -162,6 +162,13 @@ All commits follow [Conventional Commits](https://www.conventionalcommits.org/):
 - Subject line: imperative mood, lowercase, no trailing period.
 - Use scopes when useful: `fix(sensor): map missing values to None`.
 - A `BREAKING CHANGE:` footer (or `!` after type) bumps the major version.
+- Body: plain prose paragraphs, written in one voice, saying what the code did before,
+  what it does now, and why this is the right shape for it. No `Why:` / `How:` / `Tests:`
+  labels — the paragraphs carry those without announcing themselves — and no list of the
+  tests added or run; a gate result is a number for the session's report, not a line in
+  the record. Measurements that settle a question (a count, the date and the unit it was
+  read on) belong in the prose, where they are the argument.
+- Hand-wrap the body at <=72 columns.
 
 ## Release records
 
