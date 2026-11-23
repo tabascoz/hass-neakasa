@@ -6,6 +6,8 @@ import logging
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
+from aiohttp import ClientError
+
 from .api import APIAuthError, APIConnectionError, NeakasaAPI
 from .exceptions import (
     NeakasaApiClientAuthenticationError,
@@ -78,6 +80,13 @@ async def _translate_errors() -> AsyncIterator[None]:
             redact_text(message),
         )
         raise NeakasaApiClientCommunicationError(message) from err
+    except (ClientError, TimeoutError) as err:
+        # A transport failure is never a rejected token, so its text is kept
+        # away from the phrase test above: a connection error that happened to
+        # read like an auth word would otherwise buy a re-login and push the
+        # mobile app off the account.
+        _LOGGER.info("Error translation: %s -> CommunicationError", type(err).__name__)
+        raise NeakasaApiClientCommunicationError(str(err)) from err
 
 
 class NeakasaApiClient:

@@ -2,7 +2,20 @@ from __future__ import annotations
 
 import logging
 
+from aiohttp import ClientTimeout
+
 DOMAIN = "neakasa"
+
+# Every cloud call carries this bound. Home Assistant builds its shared session
+# with no timeout and aiohttp's own defaults are all None, so an unreachable
+# cloud used to hold a request until the kernel gave up on the handshake:
+# measured on 2026-11-23 at 62 s for one scan, longer than the 60 s interval
+# that scan was blocking. `connect` is short because that is where the wedge
+# happened; `total` is 30 s, a value Home Assistant core itself uses for
+# API-sized bodies. A `connect` expiry arrives as an aiohttp ClientError, while
+# a `total` expiry arrives as a bare TimeoutError, so both are caught wherever
+# a request is mapped onto our own error type.
+CLIENT_TIMEOUT = ClientTimeout(total=30, connect=10)
 AES_KEY_DEFAULT = b"3J74PRUE5TKPJP32"
 AES_IV_DEFAULT = b"QB8GC2X6WK39FF93"
 

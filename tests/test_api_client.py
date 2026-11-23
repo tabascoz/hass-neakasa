@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
+import aiohttp
 import pytest
 
 from custom_components.neakasa.api import APIAuthError, APIConnectionError
 from custom_components.neakasa.api_client import NeakasaApiClient, _translate_errors
+from custom_components.neakasa.const import CLIENT_TIMEOUT
 from custom_components.neakasa.exceptions import (
     NeakasaApiClientAuthenticationError,
     NeakasaApiClientCommunicationError,
@@ -125,6 +127,42 @@ async def test_translate_token_invalid_to_session_expired() -> None:
             raise APIConnectionError(
                 "Error getting data: TokenInvalid\ufffatoken is abnormal"
             )
+
+
+async def test_translate_raw_aiohttp_error_to_communication() -> None:
+    """A bare transport failure must arrive as CommunicationError, not escape.
+
+    Measured during a 2026-11-23 cloud blackhole: the facade never saw these,
+    so an unreachable host surfaced as a raw aiohttp error and the coordinator's
+    communication handler stayed cold.
+    """
+    with pytest.raises(NeakasaApiClientCommunicationError):
+        async with _translate_errors():
+            raise aiohttp.ServerTimeoutError("Connection timeout to host")
+
+
+async def test_translate_bare_timeout_to_communication() -> None:
+    """A ClientTimeout total expiry arrives as TimeoutError, not a ClientError."""
+    with pytest.raises(NeakasaApiClientCommunicationError):
+        async with _translate_errors():
+            raise TimeoutError("total budget spent")
+
+
+async def test_a_connection_error_mentioning_auth_stays_communication() -> None:
+    """Transport failures skip the token phrase test rather than being read by it.
+
+    Misreading one as a rejected token would trigger a re-login, which moves the
+    account session off the mobile app for no reason at all.
+    """
+    with pytest.raises(NeakasaApiClientCommunicationError):
+        async with _translate_errors():
+            raise aiohttp.ServerTimeoutError("cannot reach host: auth handshake failed")
+
+
+def test_cloud_calls_carry_a_bounded_timeout() -> None:
+    """The bound is short where the wedge happened: connect, not only total."""
+    assert CLIENT_TIMEOUT.total == 30
+    assert CLIENT_TIMEOUT.connect == 10
 
 
 async def test_refresh_session_delegates() -> None:

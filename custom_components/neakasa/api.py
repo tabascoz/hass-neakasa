@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from aiohttp import ClientError
 
 from .api_encryption import APIEncryption
-from .const import _LOGGER
+from .const import _LOGGER, CLIENT_TIMEOUT
 from .iot_gateway import AliyunIoTClient, IoTConfig, IoTResponse
 from .log_redact import device_label, redact_text
 
@@ -173,6 +173,7 @@ class NeakasaAPI:
             async with self._session.get(
                 url="https://global.genhigh.com/global/baseurl/account",
                 params={"account": hashlib.md5(username.encode()).hexdigest()},
+                timeout=CLIENT_TIMEOUT,
                 headers={
                     "Request-Id": signature,
                     "Appid": self._app_key,
@@ -209,8 +210,8 @@ class NeakasaAPI:
                 if response_json["code"] != 0:
                     raise APIAuthError("Error connecting to api. Invalid username.")
                 self.baseurl = response_json["data"]["web"]
-        except ClientError:
-            raise APIConnectionError("Error connecting to api.")
+        except (ClientError, TimeoutError) as err:
+            raise APIConnectionError("Error connecting to api.") from err
 
     async def _load_auth_tokens(self, username: str, password: str) -> None:
         try:
@@ -225,6 +226,7 @@ class NeakasaAPI:
 
             async with self._session.post(
                 url=self.baseurl + "/login/user",
+                timeout=CLIENT_TIMEOUT,
                 json={
                     "product_id": "a123nCqsrQm3vEbt",
                     "system": 1,
@@ -281,8 +283,8 @@ class NeakasaAPI:
                 await self._encryption.decodeLoginToken(
                     response_json["data"]["login_token"]
                 )
-        except ClientError:
-            raise APIConnectionError("Error connecting to api.")
+        except (ClientError, TimeoutError) as err:
+            raise APIConnectionError("Error connecting to api.") from err
 
     async def _load_region_data(self) -> None:
         """Load regional API Gateway endpoints (IoT → do_request path)."""
@@ -581,6 +583,7 @@ class NeakasaAPI:
             async with self._session.get(
                 url=url,
                 params=params,
+                timeout=CLIENT_TIMEOUT,
                 headers={
                     "Request-Id": signature,
                     "Token": str(await self._encryption.getToken()),
@@ -597,8 +600,8 @@ class NeakasaAPI:
                         _describe_presentation(presented, params),
                     )
                 return data["data"]
-        except ClientError:
-            raise APIConnectionError("Error connecting to api.")
+        except (ClientError, TimeoutError) as err:
+            raise APIConnectionError("Error connecting to api.") from err
 
     def _seven_days_ago(self, now_ts: int) -> int:
         return int(

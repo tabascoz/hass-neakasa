@@ -6,6 +6,7 @@ from base64 import b64decode
 from typing import Self
 from unittest.mock import MagicMock
 
+from custom_components.neakasa.const import CLIENT_TIMEOUT
 from custom_components.neakasa.iot_gateway import (
     AliyunIoTClient,
     IoTCommonParams,
@@ -103,6 +104,7 @@ async def test_do_request() -> None:
     assert (
         headers["x-ca-signature-headers"] == "x-ca-key,x-ca-nonce,x-ca-signaturemethod"
     )
+    assert session.post.call_args.kwargs["timeout"] is CLIENT_TIMEOUT
 
 
 async def test_do_request_non_200() -> None:
@@ -130,6 +132,7 @@ async def test_do_request_raw() -> None:
     assert headers["content-type"] == "application/x-www-form-urlencoded"
     assert headers["x-ca-signature"]
     body = session.post.call_args.kwargs["data"]
+    assert session.post.call_args.kwargs["timeout"] is CLIENT_TIMEOUT
     assert body
 
 
