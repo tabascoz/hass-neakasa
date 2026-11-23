@@ -19,6 +19,10 @@ from custom_components.neakasa.log_redact import device_label
 
 # The shape a real iotId has on the wire: 24 characters of the cloud's alphabet.
 REAL_IOT_ID = "4TQDtRLglcQJ5goDNlug000000"
+# The shape a real serial has on the wire: the same prefix the units measured
+# carry, then zeros. It is the fallback `display_name` resolves to, and the value
+# the `device_serial` sensor already shows the owner in the UI.
+FAKE_SERIAL = "WL03002G00000000000"
 
 
 def test_to_redact_covers_identity_and_device_ids() -> None:
@@ -115,6 +119,9 @@ async def test_diagnostics_download_never_carries_a_raw_iot_id() -> None:
             product_key="a1ccEqBcaUD",
             default_food_g=5,
             default_water_ratio=2,
+            label="",
+            device_name=FAKE_SERIAL,
+            display_name_source="deviceName",
         )
     }
     client = _build_the_real_schema(entry.runtime_data.coordinator)
@@ -125,6 +132,10 @@ async def test_diagnostics_download_never_carries_a_raw_iot_id() -> None:
     assert REAL_IOT_ID not in download
     assert "user@example.com" not in download
     assert "hunter2" not in download
+    # The serial is a second machine identifier and reaches the file no more than
+    # the iotId does; `device_serial` on the snapshot is the same string the wire
+    # name carries, so one assertion here covers both spellings of it.
+    assert FAKE_SERIAL not in download
 
     # The label is the word the journal uses, so file and log still line up, and
     # the schema keeps everything a reader needs to see about the machine.
@@ -134,8 +145,51 @@ async def test_diagnostics_download_never_carries_a_raw_iot_id() -> None:
     assert device["product_key"] == "a1ccEqBcaUD"
     assert device["property_keys"] == ["defFdCfg", "foodLvl"]
     assert device["feed"]["last_feed"]["args"] == {"food": 5, "water": 10}
+    # A machine with no nickname says so, in field names rather than in names.
+    assert device["name_resolution"] == {
+        "source": "deviceName",
+        "nickname_length": 0,
+    }
 
     # And the download no longer pays for a product call that cannot describe
     # a Neakasa machine, so it has no products block to leave empty either.
     assert "products" not in result["schema"]
     client.get_product_list.assert_not_called()
+
+
+async def test_diagnostics_explains_a_name_without_carrying_it() -> None:
+    """
+    The download reports which field named a machine, never the name itself.
+
+    Naming resolves through three fields and a report of "it still shows the
+    serial" cannot be told apart from "the cloud sent no nickname" without one of
+    them, and settling it by hand costs a cloud call that logs the owner's app
+    out. The field's name and the length of the nickname answer it; the nickname
+    stays out because it is the owner's own word, and the serial is already a
+    sensor they can read in the UI.
+    """
+    entry = _make_entry()
+    nickname = "Catchief"
+    entry.runtime_data.coordinator.data = {
+        REAL_IOT_ID: SimpleNamespace(
+            category_key="petFeeder",
+            product_key="a1ccEqBcaUD",
+            default_food_g=5,
+            default_water_ratio=2,
+            label=nickname,
+            device_name=FAKE_SERIAL,
+            display_name_source="nickName",
+        )
+    }
+    _build_the_real_schema(entry.runtime_data.coordinator)
+
+    result = await async_get_config_entry_diagnostics(None, entry)
+    download = json.dumps(result)
+
+    device = result["schema"]["devices"][device_label(REAL_IOT_ID)]
+    assert device["name_resolution"] == {
+        "source": "nickName",
+        "nickname_length": len(nickname),
+    }
+    assert nickname not in download
+    assert FAKE_SERIAL not in download

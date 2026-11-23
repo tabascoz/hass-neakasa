@@ -272,6 +272,43 @@ async def test_async_get_device_schema_keys_devices_by_their_log_label(
     assert schema["devices"][device_label(iot_id)]["feed"]["last_feed"] == {}
 
 
+async def test_async_get_device_schema_reports_the_field_that_named_a_machine(
+    hass: HomeAssistant, mock_config_entry: MagicMock
+) -> None:
+    """
+    The schema names the field that resolved a machine's display name, not the name.
+
+    This one goes through the real snapshot builder, so it covers the chain on
+    `NeakasaDeviceSnapshot` rather than a stand-in for it: a machine holding both
+    a nickname and a serial reports the nickname as its source and neither string
+    into the file.
+    """
+    iot_id = "4TQDtRLglcQJ5goDNlug000000"
+    serial = "SERIALFAKE0000000000000"
+    nickname = "TestLabel"
+    coordinator = _make_coordinator(hass, mock_config_entry)
+    snap = _build_pet_feeder_snapshot(
+        iot_id, serial, FAKE_RIKO_PROPERTIES, "a1ccEqBcaUD", nickname
+    )
+    coordinator.data = {iot_id: snap}
+    client = AsyncMock()
+    client.get_device_properties = AsyncMock(
+        return_value=copy.deepcopy(FAKE_RIKO_PROPERTIES)
+    )
+    coordinator._get_client = AsyncMock(return_value=client)
+
+    schema = await coordinator.async_get_device_schema()
+
+    assert snap.display_name == nickname
+    assert schema["devices"][device_label(iot_id)]["name_resolution"] == {
+        "source": "nickName",
+        "nickname_length": len(nickname),
+    }
+    download = json.dumps(schema)
+    assert nickname not in download
+    assert serial not in download
+
+
 async def test_feed_once_sends_water_grams(
     hass: HomeAssistant, mock_config_entry: MagicMock
 ) -> None:

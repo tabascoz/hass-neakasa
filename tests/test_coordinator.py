@@ -462,13 +462,33 @@ def test_display_name_follows_the_label_then_the_wire_name() -> None:
     """
     snap = _build_device_snapshot("iot-001", "SERIAL-1", {}, {}, 0)
     assert snap.display_name == "SERIAL-1"
+    assert snap.display_name_source == "deviceName"
 
     snap.label = "Caixinha"
     assert snap.display_name == "Caixinha"
+    assert snap.display_name_source == "nickName"
 
     # A device list that gave the machine no name at all still resolves to a word.
     unnamed = _build_device_snapshot("iot-002", "", {}, {}, 0)
     assert unnamed.display_name == "iot-002"
+    assert unnamed.display_name_source == "iotId"
+
+
+def test_display_name_source_names_the_field_that_won_and_nothing_else() -> None:
+    """
+    The source is a field name, so a file can explain a name without carrying it.
+
+    Both members are read from one chain, so a machine holding a nickname and a
+    wire name cannot report one as its display name and the other as its source.
+    """
+    snap = _build_device_snapshot("iot-003", "SERIAL-3", {}, {}, 0)
+    snap.label = "   "
+
+    # No strip anywhere in the chain: whitespace the app stored is a name as far
+    # as the chain is concerned, and the length is what makes that visible.
+    assert snap.display_name == "   "
+    assert snap.display_name_source == "nickName"
+    assert len(snap.label) == 3
 
 
 async def test_get_records_cached(

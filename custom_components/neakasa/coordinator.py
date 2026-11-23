@@ -247,10 +247,9 @@ class NeakasaDeviceSnapshot:
     meal_times: tuple[int, ...] = ()
     device_serial: str = ""
 
-    @property
-    def display_name(self) -> str:
+    def _resolved_name(self) -> tuple[str, str]:
         """
-        Return the name to show this machine under in Home Assistant.
+        Return the wire field that names this machine and the value it gave.
 
         The label the owner gave the machine in the Neakasa app is what they
         recognise it by, so it names the device whenever they have set one. The
@@ -258,8 +257,36 @@ class NeakasaDeviceSnapshot:
         what the record and statistics endpoints key on, so it stays the fallback
         here and stays what the ``device_serial`` sensor reports; the iotId is the
         last resort, for a device list that named the machine no name at all.
+
+        The order lives in this one place. A diagnostics download reads the name
+        and the field that produced it together, and two copies of the chain
+        could agree on a machine that has both names while disagreeing on one
+        that has neither - which is the case the second one exists to explain.
         """
-        return self.label or self.device_name or self.iot_id
+        for source, value in (
+            ("nickName", self.label),
+            ("deviceName", self.device_name),
+            ("iotId", self.iot_id),
+        ):
+            if value:
+                return source, value
+        return "iotId", self.iot_id
+
+    @property
+    def display_name(self) -> str:
+        """Return the name to show this machine under in Home Assistant."""
+        return self._resolved_name()[1]
+
+    @property
+    def display_name_source(self) -> str:
+        """
+        Return which wire field ``display_name`` resolved to.
+
+        One of ``"nickName"``, ``"deviceName"`` or ``"iotId"`` - a field name,
+        never a value, so a shareable file can say why a machine is named what
+        it is without carrying the name itself.
+        """
+        return self._resolved_name()[0]
 
 
 NeakasaPayload = dict[str, NeakasaDeviceSnapshot]
@@ -1048,6 +1075,13 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         key would be handed to whoever the file is shared with whatever the
         redaction list says. The label is the same word the journal prints for
         this machine, which keeps a downloaded file and a log reading matchable.
+
+        Each device also says which field named it, because that is the one
+        question a naming report cannot answer from the rest of the file: whether
+        the cloud supplied the owner's nickname at all. It is reported as the
+        field's name and the length of the nickname, never as either name - the
+        serial is what the ``device_serial`` sensor already shows the owner, and
+        a nickname is theirs to keep out of a file they paste somewhere public.
         """
         client = await self._get_client()
         devices: dict[str, Any] = {}
@@ -1067,6 +1101,10 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                 "product_key": snap.product_key,
                 "property_keys": sorted(devicedata),
                 "missing_expected_keys": missing,
+                "name_resolution": {
+                    "source": snap.display_name_source,
+                    "nickname_length": len(snap.label),
+                },
             }
             if snap.category_key == "petFeeder":
                 devices[label]["feed"] = {
