@@ -52,8 +52,8 @@ Every key below is labelled by where the shape came from:
 | `drierEffeDays` | int (observed 40) | desiccant pack's effective days; the definition allows 1…60 |
 | `leftDrierDays` | int (observed 38) | desiccant days left; the definition allows 0…120 |
 | `drierResetTs` | str unix-seconds (observed `1792757949`) | the last desiccant change the machine recorded |
-| `lastWaterBinCleanTime` `[definition]` | text ≤100 | when the water tank was last marked clean — this unit has never answered it, so no cleaning has been recorded on it |
-| `lastFoodBinCleanTime` `[definition]` | text ≤100 | the same for the food bin |
+| `lastWaterBinCleanTime` `[this unit]` | text ≤100 | when the water tank was last marked clean — answered on 2026-11-23, from the first press of the button that writes it: the machine kept the stamp it was handed and stated it back unchanged through the scans after, so the figure is what a press recorded rather than a cleaning the machine noticed on its own |
+| `lastFoodBinCleanTime` `[definition]` | text ≤100 | the same for the food bin; still unanswered, because nothing has written it |
 | `NetWorkStatus` | `{WiFi_RSSI, WiFi_Name, IP_Addr, MAC_Addr}` | same key as CatLitter → the existing RSSI sensor covers it |
 | `DeviceVer` | `{FW_Version, HW_Version, type, bRegionLock}` | observed `FW_Version`=`1.0.0-0033`, `HW_Version`=`1.00.01`; the definition caps each version string at 16 characters. `/thing/info/get` repeats the firmware under `firmwareVersion` |
 | `disconn` | `{lockCnt, rssi, disconnReason, reconnFailed, ts}` | connectivity record (observed `disconnReason`=200, `rssi`=-62) |
@@ -77,7 +77,7 @@ Every key below is labelled by where the shape came from:
 | `fdPlanStr` | text ≤1024 | `[definition]` the feeding plan as one encoded string |
 | `childLockOnOff` | int 0/1 | child lock — same key as CatLitter, and this unit reports it for the feeder too (observed 0) |
 | `drierEffeDays`, `leftDrierDays` | int days | writing them is how the desiccant change is recorded; the reset is a command, see below |
-| `lastWaterBinCleanTime`, `lastFoodBinCleanTime`, `showDisplayAtIdle`, `unit_pref`, `weightUnit`, `is12HourFormat`, `battSavingMode` | see above | `[definition]` writable in the definition, not answered by this unit |
+| `lastFoodBinCleanTime`, `showDisplayAtIdle`, `unit_pref`, `weightUnit`, `is12HourFormat`, `battSavingMode` | see above | `[definition]` writable in the definition, not answered by this unit; `lastWaterBinCleanTime` stood in this group until a press wrote it on 2026-11-23 |
 
 
 ## Commands (`/thing/service/invoke`)
@@ -133,17 +133,20 @@ records are typed meal=0, eating=1, plan=2.
 
 Measured on 2026-10-26 through this integration's own client: `/thing/properties/get`
 for the feeder returns **23 keys**; the definition names **42**. Every reported key is
-defined (none is undocumented); **19 are defined and never answered**:
+defined (none is undocumented); **18 are defined and never answered**:
 `BatteryPercentage`, `DND_Mode`, `GenHighSvcEnv`, `bRegionLock`,
 `battSavingMode`, `catPermit`, `fdPlanStr`, `httpData`, `is12HourFormat`,
-`lastFoodBinCleanTime`, `lastWaterBinCleanTime`, `leftover`,
+`lastFoodBinCleanTime`, `leftover`,
 `newbieProgress`, `pwrMode`, `scannerCfg`, `showDisplayAtIdle`,
 `smartPlanCfg`, `unit_pref`, `weightUnit`.
 
 The reason matters for the controls being added: a key the machine has no value
 for is not a key the machine rejects. Writing it is how this firmware's answer is
 found out, so the integration reads these when present, shows nothing when not,
-and never claims one works before this unit has answered it.
+and never claims one works before this unit has answered it. One of the nineteen
+left the list on 2026-11-23 the way that paragraph expects: `lastWaterBinCleanTime`
+appeared the moment the button that writes it had been pressed, and stayed through
+the scans after it.
 
 
 
