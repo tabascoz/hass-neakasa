@@ -37,7 +37,7 @@ Every key below is labelled by where the shape came from:
 
 | Tag | Meaning |
 |---|---|
-| `[this unit]` | read from the live machine on 2026-10-26 (`/thing/properties/get`) |
+| `[this unit]` | answered by this machine when we asked it — read over `/thing/properties/get` on 2026-10-26, or invoked over `/thing/service/invoke` on 2026-10-27 and 2026-11-23 |
 | `[definition]` | the gateway's own product definition for `a1ccEqBcaUD`, which `/thing/tsl/get` answers with types and ranges |
 | `[unverified]` | named by the definition and never answered by this unit, so its behaviour here is not observed |
 
@@ -83,8 +83,10 @@ Every key below is labelled by where the shape came from:
 ## Commands (`/thing/service/invoke`)
 
 The definition answers with the commands the machine accepts and their arguments.
-Every name below is `[definition]`; only `feedOnce` has been seen working on this
-machine (`[this unit]`, see §Feeding).
+Every name below comes from the definition; five have also been seen working on this
+machine and carry `[this unit]`: the meal `feedOnce` (see §Feeding), the two resets
+`resetDrierTime` and `resetScaleZero` (pressed and read back on 2026-11-23), and the two
+read commands `getVoltage` and `iotRead`.
 
 | Command | Arguments | What it does |
 |---|---|---|
@@ -93,9 +95,9 @@ machine (`[this unit]`, see §Feeding).
 | `feedOnce` `[this unit]` | `{food 0…60 g, water 0…600 g, bSaveAsDef bool}` | deliver one meal; the flag keeps the amounts as the defaults |
 | `feedCtrl` | `{ctrlType enum}` | the auto-feeding control; asked with meal amounts it times out, so it is not one-meal feeding |
 | `bowlCtrl` | `{ctrlType enum}` | act on the bowl |
-| `resetScaleZero` | `{bowlGram int 0…200 g}` | re-zero the scale against a known bowl weight — the bowl-weight calibration |
-| `fdCalbration` | `{kVal 0…100, kX100 0…200, objVal/bkgVal/diffVal 0…2000}` | recalibrate the food scale's reading |
-| `resetDrierTime` | `{drierEffeDays 1…60}` | record a desiccant change and re-count from the new budget |
+| `resetScaleZero` `[this unit]` | `{bowlGram int 0…200 g}` | re-zero the scale against a known bowl weight — the bowl-weight calibration; pressed on 2026-11-23 with the machine's own stored tare, and the empty-scale offset it was carrying came out of the next reading |
+| `fdCalbration` | `{kVal 0…100, kX100 0…200, objVal/bkgVal/diffVal 0…2000}` | recalibrate the food scale's reading — not asked on this unit, which has never reported the coefficients it is defined to take |
+| `resetDrierTime` `[this unit]` | `{drierEffeDays 1…60}` | record a desiccant change and re-count from the new budget; pressed on 2026-11-23 and the countdown came back at the budget it was handed |
 | `deepWashing` | `{type enum}` | start the bowl wash |
 | `ledScreenDisplay` | `{animeType int 0…24}` | put an animation on the front display |
 | `foodProvide`, `waterProvide` | `{bOnOff bool}` | start or stop providing food / water |
