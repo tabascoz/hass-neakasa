@@ -777,6 +777,80 @@ async def test_a_failed_update_starts_the_next_with_a_fresh_budget(
     assert renew.await_count == MAX_SESSION_RECOVERY_ATTEMPTS * 2
 
 
+async def test_update_fails_when_no_device_returns_data(
+    hass: HomeAssistant,
+    mock_config_entry: MagicMock,
+    mock_get_shared_api: MagicMock,
+) -> None:
+    """An update that retrieved nothing is a failed update.
+
+    Measured on 2026-11-23 with the account gateway blackholed: every device
+    failed inside the gather, the payload came back empty, and the scan still
+    logged a complete update while each entity displayed unknown.
+    """
+    coordinator = _make_coordinator(hass, mock_config_entry)
+
+    with (
+        patch.object(
+            coordinator,
+            "_discover_devices",
+            new=AsyncMock(return_value=[{"iotId": "iot-001"}, {"iotId": "iot-002"}]),
+        ),
+        patch.object(
+            coordinator,
+            "_fetch_single_device",
+            new=AsyncMock(
+                side_effect=NeakasaApiClientCommunicationError("cannot connect")
+            ),
+        ),
+        pytest.raises(UpdateFailed) as failed,
+    ):
+        await coordinator.async_update_data()
+
+    assert str(failed.value) == "No data retrieved from 2 device(s)"
+
+
+async def test_a_partial_payload_is_still_a_successful_update(
+    hass: HomeAssistant,
+    mock_config_entry: MagicMock,
+    mock_get_shared_api: MagicMock,
+) -> None:
+    """One unreachable device must not make the devices that answered unavailable."""
+    coordinator = _make_coordinator(hass, mock_config_entry)
+    good = _build_device_snapshot("iot-001", "T1", FAKE_DEVDATA, {}, 0)
+
+    with (
+        patch.object(
+            coordinator,
+            "_discover_devices",
+            new=AsyncMock(return_value=[{"iotId": "iot-001"}, {"iotId": "iot-002"}]),
+        ),
+        patch.object(
+            coordinator,
+            "_fetch_single_device",
+            new=AsyncMock(
+                side_effect=[good, NeakasaApiClientCommunicationError("boom")]
+            ),
+        ),
+    ):
+        data = await coordinator.async_update_data()
+
+    assert "iot-001" in data
+    assert "iot-002" not in data
+
+
+async def test_an_account_without_devices_is_not_a_failure(
+    hass: HomeAssistant,
+    mock_config_entry: MagicMock,
+    mock_get_shared_api: MagicMock,
+) -> None:
+    """An account with nothing on it returns an empty payload, not an error."""
+    coordinator = _make_coordinator(hass, mock_config_entry)
+
+    with patch.object(coordinator, "_discover_devices", new=AsyncMock(return_value=[])):
+        assert await coordinator.async_update_data() == {}
+
+
 async def test_update_data_identity_id_blank(
     hass: HomeAssistant,
     mock_config_entry: MagicMock,

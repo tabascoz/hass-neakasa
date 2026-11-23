@@ -2070,6 +2070,17 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                 # a per-device gap in this update.
                 return await self._recover_session_expired(session_failures[0])
 
+            if self._device_ids and not payload:
+                # Every device we know about failed this round. Reporting that
+                # as a finished update leaves each entity displaying unknown
+                # while the entry itself claims to be healthy, and nothing
+                # retries until the next tick anyway: an update that retrieved
+                # nothing is a failed update. A genuinely empty account is not,
+                # which is why this checks for expected devices rather than an
+                # empty payload alone.
+                msg = f"No data retrieved from {len(self._device_ids)} device(s)"
+                raise UpdateFailed(msg)
+
             _LOGGER.debug("Coordinator update complete: %d devices", len(payload))
             await self._run_debug_probe(payload)
             return payload  # noqa: TRY300
