@@ -58,7 +58,8 @@ Every key below is labelled by where the shape came from:
 | `DeviceVer` | `{FW_Version, HW_Version, type, bRegionLock}` | observed `FW_Version`=`1.0.0-0033`, `HW_Version`=`1.00.01`; the definition caps each version string at 16 characters. `/thing/info/get` repeats the firmware under `firmwareVersion` |
 | `disconn` | `{lockCnt, rssi, disconnReason, reconnFailed, ts}` | connectivity record (observed `disconnReason`=200, `rssi`=-62) |
 | `timestamp` | str ms | device clock |
-| `userOpenId`, `regionBaseurl`, `region`, `timeZoneMsg`, `GenHighSvcEnv`, `httpData`, `catPermit`, `newbieProgress` `[definition]` | account/routing metadata and the onboarding walk-through |
+| `timeZoneMsg` `[this unit]` | `{timeZoneID text ≤20, zone int −20…20, dst, year, dstStartTimeOne, dstEndTimeOne}` | the hour the panel draws: the zone handed over by the account and the summer rule that goes with it. Answered here as Madrid on 2026-11-23 and as Lisbon after that choice was made again; the definition carries it among the inputs of `set`, though nothing here has written it, and its `dst` is second-hand — see §The machine's own hour |
+| `userOpenId`, `regionBaseurl`, `region`, `GenHighSvcEnv`, `httpData`, `catPermit`, `newbieProgress` `[definition]` | account/routing metadata and the onboarding walk-through |
 | `unit_pref`, `weightUnit` `[definition]` | the unit the front display and the app print food and water in; this unit has not answered either |
 | `is12HourFormat`, `battSavingMode`, `showDisplayAtIdle`, `pwrMode`, `scannerCfg` `[definition]` | clock format, long-battery mode, the display-while-idle switch as the definition spells it, power mode, the multi-pet recognition config |
 
@@ -83,10 +84,12 @@ Every key below is labelled by where the shape came from:
 ## Commands (`/thing/service/invoke`)
 
 The definition answers with the commands the machine accepts and their arguments.
-Every name below comes from the definition; five have also been seen working on this
-machine and carry `[this unit]`: the meal `feedOnce` (see §Feeding), the two resets
-`resetDrierTime` and `resetScaleZero` (pressed and read back on 2026-11-23), and the two
-read commands `getVoltage` and `iotRead`.
+Every name below comes from the definition; six carry `[this unit]` because this machine
+answered them: the meal `feedOnce` (see §Feeding), the two resets `resetDrierTime` and
+`resetScaleZero` (pressed and read back on 2026-11-23), the two read commands
+`getVoltage` and `iotRead`, and `updateTime` - which accepted both of its enum values on
+2026-11-23 without an observable change, so its acceptance is recorded and no effect is
+claimed for it.
 
 | Command | Arguments | What it does |
 |---|---|---|
@@ -101,11 +104,11 @@ read commands `getVoltage` and `iotRead`.
 | `deepWashing` | `{type enum}` | start the bowl wash |
 | `ledScreenDisplay` | `{animeType int 0…24}` | put an animation on the front display |
 | `foodProvide`, `waterProvide` | `{bOnOff bool}` | start or stop providing food / water |
-| `updateTime` | `{type enum}` | correct the device clock |
+| `updateTime` `[this unit]` | `{type enum 0 从后台获取 / 1 从阿里云获取}` | ask the machine to fetch its own time; both values were accepted here on 2026-11-23 and neither moved the stated hour, because its epoch was already right — see §The machine's own hour |
 | `errorBan` | `{errCode 0…1000, bCleanBan bool}` | mute or unmute a fault the machine keeps reporting |
 | `errPostDebug` | `{errCode 0…100, module ≤20, error ≤32, param 0…1000}` | report a fault on demand |
 | `getVoltage` | `{chanIdx enum, val 0…10000}` | read one of the machine's own measurements — `[this unit]` answered `chanIdx` 0 with `{"val": 12097}` and `12095` on 2026-10-27, the same order the battery's `batVoltage` states in mV, so the value moves with the ask |
-| `iotRead` `[this unit]` | `{readType enum 0 设备时间 / 1 设备唤醒时间 / **2 称重** / 3 电源状态 / 4 粮仓状态 / 5 水位状态}` | ask the machine to read state back, and it answers: `readType` 2 replied `{"type": "scale", "str": {"bowlGram": 68, "gram": 89.08}}` and, fourteen seconds later, `89.1` — 21 g above the tare its own answer states, against the 67 g the cloud's copy of `bowlStatus` held all day. `3` replied `{"bat": {"vol": 12094, "lv": 4, "state": "Using", "percent": 85}, "pwr": "DC"}` (the live percent against the stored 90), `4` replied `{"curLv": 2, "curVal": 312, "displayLv": 2}`, `5` replied `{"vol": 1677, "lv": 3}` and `0` replied `{"time": "2026-10-27 14:44:07", "dst": 0}`, all with `ReturnCode` 0 and a `messageId` but no timestamp of their own. The reply does not refresh the property set — it is a separate answer, kept separately |
+| `iotRead` `[this unit]` | `{readType enum 0 设备时间 / 1 设备唤醒时间 / **2 称重** / 3 电源状态 / 4 粮仓状态 / 5 水位状态}` | ask the machine to read state back, and it answers: `readType` 2 replied `{"type": "scale", "str": {"bowlGram": 68, "gram": 89.08}}` and, fourteen seconds later, `89.1` — 21 g above the tare its own answer states, against the 67 g the cloud's copy of `bowlStatus` held all day. `3` replied `{"bat": {"vol": 12094, "lv": 4, "state": "Using", "percent": 85}, "pwr": "DC"}` (the live percent against the stored 90), `4` replied `{"curLv": 2, "curVal": 312, "displayLv": 2}`, `5` replied `{"vol": 1677, "lv": 3}` and `0` replied `{"time": "2026-10-27 14:44:07", "dst": 0}`, all with `ReturnCode` 0 and a `messageId` but no timestamp of their own. The reply does not refresh the property set — it is a separate answer, kept separately; `readType` 0 asked again on 2026-11-23 labelled its answer `type: "localTime"` |
 | `cfgRead`, `cfgWrite` | `{cfgFile ≤1024, cfgMsg ≤1024}` / `{cfgFile, cfgValStr, bCreate bool}` | read or write one of the machine's config files |
 | `fileSrv` | `{keepAliveSec 0…1000, bSW enum, bEncryption enum}` | the file service the machine talks to |
 | `udpCmd` | `{bOnOff bool}` | a raw machine command |
@@ -482,6 +485,35 @@ difference between them is the whole reason the number was wrong:
   which matched our wall clock) — and `getVoltage` reads one channel's value.
   Only the weighing is read today; the others are recorded so a later release
   does not have to rediscover them.
+
+## The machine's own hour (measured 2026-11-23)
+
+The panel clock ran one hour ahead of the owner's wall clock for reasons that had
+nothing to do with the machine's time base. `updateTime` is defined with one enum -
+`0` 从后台获取 "obtain from the backend", `1` 从阿里云获取 "obtain from Aliyun" - and
+takes no time value at all, so it cannot write a wrong clock from here. This unit
+accepted both, each answering `{"data": {}, "messageId": …}`, and neither moved its
+stated hour by a minute: the device's epoch was already `-0.431 s` from the gateway's
+own receipt stamp, leaving a time source nothing to correct.
+
+The hour came from the zone. The stored `timeZoneMsg` read
+`{"timeZoneID": "Europe/Madrid", "zone": 1, "dst": 1}`, and Madrid in November is
+UTC+1, so the machine was drawing precisely the time it had been told to draw. The same
+key read `{"timeZoneID": "Europe/Lisbon", "zone": 0}` on 2026-10-23, which means the
+wrong zone arrived somewhere between those days and sat there until the account's own
+timezone choice was *made again*: setting it elsewhere and back carried `zone: 0` and
+`Europe/Lisbon` to the machine, and the read that followed stated the local hour
+`-0.0 min` from the real clock. A zone recorded correctly is not a zone the device
+holds - the write rides the change, not the setting.
+
+Two claims about that hour disagree, and both are kept. The live read answers
+`{"type": "localTime", "str": {"time": "2026-11-23 14:32:12", "dst": 0}}` while the
+stored property holds `dst: 1` for a zone whose summer ended on 25 October; the panel
+follows the live answer, so the stored flag is no evidence of what the machine shows.
+Nothing HA reports was ever at risk either way: `feed_time` is stamped in true epoch
+seconds, which the six presses between 2026-10-25 and 2026-10-28 already proved across
+the switch-over itself - filed 4 m 07 s to 6 m 47 s after the request, not an hour and
+five minutes after it. The device's own display was the only thing an hour off.
 
 ## Naming note
 
