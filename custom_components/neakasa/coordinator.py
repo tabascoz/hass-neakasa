@@ -1485,60 +1485,6 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         await self.set_property(iot_id, "feed_cfg", payload)
 
     # ------------------------------------------------------------------
-    # Debug probe (opt-in via options flow; never affects normal polling)
-    # ------------------------------------------------------------------
-
-    _DEBUG_PROBES: ClassVar[dict[str, tuple[str, str]]] = {
-        "set_fresh_mgr_on": ("freshMgrCfg", "on"),
-        "set_fresh_mgr_off": ("freshMgrCfg", "off"),
-        "set_deep_clean_on": ("deepCleanCfg", "on"),
-        "set_deep_clean_off": ("deepCleanCfg", "off"),
-    }
-
-    async def _run_debug_probe(self, payload: NeakasaPayload) -> None:
-        """
-        Exercise a user-selected write action once and log the wire result.
-
-        Opt-in only (``debug_probe`` option); errors are swallowed so a
-        mis-guessed identifier can never break polling. Runs a single time per
-        selected probe rather than on every update. What the run writes to the
-        journal, and what was seen on the unit, is in docs/app-session-experiments.md.
-        """
-        probe = self.config_entry.options.get("debug_probe", "none")
-        if probe == "none" or not payload:
-            return
-        if getattr(self, "_debug_probe_done", None) == (probe, self._device_ids):
-            return
-
-        target_iot_id = next(iter(payload), "")
-        client = await self._get_client()
-        try:
-            match probe:
-                case "invoke_custom":
-                    identifier = str(
-                        self.config_entry.options.get("debug_invoke_identifier", "")
-                    )
-                    raw_args = self.config_entry.options.get(
-                        "debug_invoke_args_json", "{}"
-                    )
-                    args = json.loads(raw_args) if isinstance(raw_args, str) else {}
-                    _LOGGER.debug("Debug probe invoke: %s %s", identifier, args)
-                    await client.invoke_service(target_iot_id, identifier, args)
-                case _ if probe in self._DEBUG_PROBES:
-                    wire_key, mode = self._DEBUG_PROBES[probe]
-                    current = await client.get_device_properties(target_iot_id)
-                    cfg = dict(_property_value(current, wire_key, {}) or {})
-                    cfg["bOnOff"] = 1 if mode == "on" else 0
-                    _LOGGER.debug("Debug probe set %s=%s", wire_key, cfg)
-                    await client.set_device_properties(target_iot_id, {wire_key: cfg})
-                case _:
-                    return
-        except NeakasaApiClientError as err:
-            _LOGGER.warning("Debug probe '%s' failed (ignored): %s", probe, err)
-        else:
-            self._debug_probe_done = (probe, list(self._device_ids))
-
-    # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
@@ -2082,7 +2028,6 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                 raise UpdateFailed(msg)
 
             _LOGGER.debug("Coordinator update complete: %d devices", len(payload))
-            await self._run_debug_probe(payload)
             return payload  # noqa: TRY300
 
         except NeakasaApiClientSessionExpiredError as err:

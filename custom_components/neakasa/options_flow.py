@@ -10,9 +10,6 @@ from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
-    SelectSelector,
-    SelectSelectorConfig,
-    SelectSelectorMode,
 )
 
 
@@ -29,11 +26,6 @@ class NeakasaOptionsFlow(OptionsFlow):
 
         current_scan = self.config_entry.options.get("scan_interval", 60)
         current_lookback = self.config_entry.options.get("stats_lookback_days", 7)
-        current_probe = self.config_entry.options.get("debug_probe", "none")
-        current_identifier = self.config_entry.options.get(
-            "debug_invoke_identifier", ""
-        )
-        current_args = self.config_entry.options.get("debug_invoke_args_json", "{}")
         current_keep_defaults = self.config_entry.options.get(
             "feed_keep_as_new_defaults", False
         )
@@ -68,30 +60,6 @@ class NeakasaOptionsFlow(OptionsFlow):
                     "feed_keep_as_new_defaults",
                     default=current_keep_defaults,
                 ): bool,
-                # Temporary test tools for the token paths: `debug_probe` runs one
-                # named write per scan and `invoke_custom` sends an identifier you
-                # type in. Both are dropped before v1.5.0 ships;
-                # docs/app-session-experiments.md says what each one measures.
-                vol.Required(
-                    "debug_probe",
-                    default=current_probe,
-                ): SelectSelector(
-                    SelectSelectorConfig(
-                        options=[
-                            "none",
-                            "set_fresh_mgr_on",
-                            "set_fresh_mgr_off",
-                            "set_deep_clean_on",
-                            "set_deep_clean_off",
-                            "invoke_custom",
-                        ],
-                        mode=SelectSelectorMode.DROPDOWN,
-                    ),
-                ),
-                vol.Optional(
-                    "debug_invoke_identifier", default=current_identifier
-                ): str,
-                vol.Optional("debug_invoke_args_json", default=current_args): str,
             },
         )
 

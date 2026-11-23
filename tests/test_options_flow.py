@@ -26,10 +26,14 @@ async def test_options_flow_show_form(hass: HomeAssistant) -> None:
     schema = result["data_schema"].schema
     assert "scan_interval" in schema
     assert "stats_lookback_days" in schema
-    assert "debug_probe" in schema
     assert "feed_keep_as_new_defaults" in schema
     assert "account_session_window_minutes" not in schema
     assert "session_regain_policy" not in schema
+    # The temporary write harness is gone: a device write must never be one
+    # settings save away again, so these keys stay out of the form.
+    assert "debug_probe" not in schema
+    assert "debug_invoke_identifier" not in schema
+    assert "debug_invoke_args_json" not in schema
 
 
 async def test_options_flow_uses_existing_options(hass: HomeAssistant) -> None:
@@ -48,6 +52,8 @@ async def test_options_flow_uses_existing_options(hass: HomeAssistant) -> None:
             "debug_invoke_args_json": "{}",
         },
     )
+    # The debug keys this entry still carries are ones a pre-removal install
+    # saved: the form must not offer them, and saving must drop them.
     entry.add_to_hass(hass)
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
@@ -59,9 +65,6 @@ async def test_options_flow_uses_existing_options(hass: HomeAssistant) -> None:
             "scan_interval": 150,
             "stats_lookback_days": 21,
             "feed_keep_as_new_defaults": True,
-            "debug_probe": "invoke_custom",
-            "debug_invoke_identifier": "feedNow",
-            "debug_invoke_args_json": '{"bStartFeed":1}',
         },
     )
     assert result2["type"] is FlowResultType.CREATE_ENTRY
@@ -69,7 +72,4 @@ async def test_options_flow_uses_existing_options(hass: HomeAssistant) -> None:
         "scan_interval": 150,
         "stats_lookback_days": 21,
         "feed_keep_as_new_defaults": True,
-        "debug_probe": "invoke_custom",
-        "debug_invoke_identifier": "feedNow",
-        "debug_invoke_args_json": '{"bStartFeed":1}',
     }

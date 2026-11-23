@@ -9,6 +9,27 @@ other is busy. What is needed is a measured answer to two questions:
 1. **HA to app:** which of our calls makes the app ask to sign in again?
 2. **App to HA:** which of the app's calls makes our next scan fail?
 
+## The options-flow write harness is gone
+
+The options dialog used to carry `debug_probe`, `debug_invoke_identifier` and
+`debug_invoke_args_json`: one selected write per scan, or one identifier typed
+into a text box. They are removed along with the code that ran them. That code
+carried a comment pointing here for what each probe measured, and nothing was
+ever written here, which is part of how a "temporary" harness survived into
+release after release.
+
+They are not coming back as hidden settings. The harness chose its target by
+payload order rather than by any user choice, so on an account holding both a
+feeder and a litter box a feeder property could be sent to the machine that has
+no such key; the once-only guard lived in memory while the setting did not, so a
+forgotten selection wrote again after every restart; and the JSON box was parsed
+inside a handler that caught only `NeakasaApiClientError`, so a stray character
+raised a `ValueError` clean past it and failed every update.
+
+The entity controls cover the same ground one deliberate press at a time, and
+each press logs `Cloud write: /thing/service/invoke …` at INFO, which is the
+line to read when reproducing anything below.
+
 ## What is already measured
 
 From `journalctl -u homeassistant` on 2026-10-26:

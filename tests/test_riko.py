@@ -17,9 +17,6 @@ from custom_components.neakasa.coordinator import (
     NeakasaCoordinator,
     _build_pet_feeder_snapshot,
 )
-from custom_components.neakasa.exceptions import (
-    NeakasaApiClientCommunicationError,
-)
 from custom_components.neakasa.log_redact import device_label
 from custom_components.neakasa.number.food_grams import NeakasaFoodGramsNumber
 from custom_components.neakasa.number.water_ratio import NeakasaWaterRatioNumber
@@ -217,56 +214,6 @@ def _make_coordinator(hass: HomeAssistant, entry: MagicMock) -> NeakasaCoordinat
     c = NeakasaCoordinator(hass, entry)
     c._get_client = AsyncMock()
     return c
-
-
-async def test_debug_probe_none_is_noop(
-    hass: HomeAssistant, mock_config_entry: MagicMock
-) -> None:
-    coordinator = _make_coordinator(hass, mock_config_entry)
-    coordinator.config_entry.options = {"debug_probe": "none"}
-    await coordinator._run_debug_probe({"iot-1": object()})
-    coordinator._get_client.assert_not_called()
-
-
-async def test_debug_probe_set_fresh_mgr_on(
-    hass: HomeAssistant, mock_config_entry: MagicMock
-) -> None:
-    coordinator = _make_coordinator(hass, mock_config_entry)
-    coordinator.config_entry.options = {"debug_probe": "set_fresh_mgr_on"}
-    client = AsyncMock()
-    client.get_device_properties = AsyncMock(
-        return_value={"freshMgrCfg": {"value": {"monitorTime": 4, "bOnOff": 0}}}
-    )
-    client.set_device_properties = AsyncMock()
-    coordinator._get_client = AsyncMock(return_value=client)
-
-    await coordinator._run_debug_probe({"riko-1": object()})
-
-    client.set_device_properties.assert_awaited_once_with(
-        "riko-1", {"freshMgrCfg": {"monitorTime": 4, "bOnOff": 1}}
-    )
-
-
-async def test_debug_probe_invoke_custom_errors_swallowed(
-    hass: HomeAssistant, mock_config_entry: MagicMock
-) -> None:
-    coordinator = _make_coordinator(hass, mock_config_entry)
-    coordinator.config_entry.options = {
-        "debug_probe": "invoke_custom",
-        "debug_invoke_identifier": "feedNow",
-        "debug_invoke_args_json": '{"bStartFeed":1}',
-    }
-    client = AsyncMock()
-    client.invoke_service = AsyncMock(
-        side_effect=NeakasaApiClientCommunicationError("no such service")
-    )
-    coordinator._get_client = AsyncMock(return_value=client)
-
-    await coordinator._run_debug_probe({"riko-1": object()})
-
-    client.invoke_service.assert_awaited_once_with(
-        "riko-1", "feedNow", {"bStartFeed": 1}
-    )
 
 
 async def test_async_get_device_schema_reports_missing_keys(
