@@ -354,9 +354,23 @@ The commands are asked for, not assumed to work: `resetDrierTime{drierEffeDays}`
 the day budget the machine states (or the longest the definition allows when it states
 none), `resetScaleZero{bowlGram}` uses the bowl weight the machine states and refuses
 with a message when it states none, and `fdCalbration` is asked with no coefficients
-because this unit has never reported any. What each of those answers is what a press
-in Home Assistant finds out, and the answer is written in the journal at debug level
-by the same cloud-write line the feeding path already produces.
+because this unit has never reported any.
+
+`resetDrierTime` answers, measured on the pet feeder on 2026-11-23. The countdown read
+14 days left against a stated budget of 40; a press at 11:48:52 sent
+`{"drierEffeDays": 40}` and the scan at 11:49:55, 63 s later, reported 40 days left.
+The number that moved came from the machine's own read rather than from the request, so
+the entity followed the machine and the command re-counts from the budget it is handed.
+What `resetScaleZero` and `fdCalbration` answer is still open: neither has been pressed
+on this unit, and the calibration is held back on purpose, because it goes out with no
+coefficients and a wrong answer there costs dosing accuracy rather than appearance.
+
+A press that logs nothing has not necessarily done nothing. The cloud-write line this
+path logs is INFO, and this box runs `logger: default: warn`, so neither it nor
+anything at debug reaches the journal until the integration's own level is raised - and
+raising it does not survive a restart. Whether a command was accepted is answered
+instead by whether the call raised, which the write path makes meaningful by refusing
+to turn a refusal into a success.
 
 The daily intake is read from the pet feeder's own records endpoint, and it answers.
 `GET {baseurl}/feeder/record`, signed with the account session this client already
