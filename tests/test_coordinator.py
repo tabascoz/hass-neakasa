@@ -453,6 +453,24 @@ async def test_get_device_name_variants(
     assert coordinator._device_names["iot-missing"] == "iot-missing"
 
 
+def test_display_name_follows_the_label_then_the_wire_name() -> None:
+    """
+    The owner's label names the device; the wire name and iotId are fallbacks.
+
+    The wire name is what the record and statistics endpoints key on, so it stays
+    on the snapshot untouched - only the name Home Assistant shows moves.
+    """
+    snap = _build_device_snapshot("iot-001", "SERIAL-1", {}, {}, 0)
+    assert snap.display_name == "SERIAL-1"
+
+    snap.label = "Caixinha"
+    assert snap.display_name == "Caixinha"
+
+    # A device list that gave the machine no name at all still resolves to a word.
+    unnamed = _build_device_snapshot("iot-002", "", {}, {}, 0)
+    assert unnamed.display_name == "iot-002"
+
+
 async def test_get_records_cached(
     hass: HomeAssistant,
     mock_config_entry: MagicMock,

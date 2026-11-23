@@ -43,7 +43,7 @@ async def async_setup_entry(
             if snap.category_key != "petFeeder":
                 continue
             device_info = DeviceInfo(
-                name=snap.device_name,
+                name=snap.display_name,
                 model=snap.product_key or None,
                 manufacturer="Neakasa",
                 identifiers={(DOMAIN, iot_id)},

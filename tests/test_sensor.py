@@ -470,3 +470,40 @@ async def test_sensor_async_setup_entry(hass) -> None:
     # Third pass with unchanged data adds nothing
     rediscover()
     assert len(collected) == before + 8
+
+
+async def test_device_is_named_by_the_owners_label(hass) -> None:
+    """
+    The registry name follows the app label, and the wire name when there is none.
+
+    The record and statistics endpoints key on the wire name, which on the units
+    measured is the machine's serial, so the serial cannot simply be swapped out
+    of the snapshot - only the name Home Assistant shows moves. An owner who has
+    not named a machine still gets the serial rather than an unnamed device.
+    """
+    from custom_components.neakasa.const import DOMAIN
+
+    labelled = _cat_weight_snap([])
+    labelled.label = "Caixinha"
+    unlabelled = _cat_weight_snap([])
+    unlabelled.iot_id = "iot-002"
+
+    coordinator = MagicMock()
+    coordinator.data = {"iot-001": labelled, "iot-002": unlabelled}
+    coordinator.async_add_listener = MagicMock()
+
+    config_entry = MagicMock()
+    config_entry.runtime_data.coordinator = coordinator
+    config_entry.async_on_unload = MagicMock()
+    config_entry.domain = DOMAIN
+
+    collected: list = []
+    await async_setup_entry(hass, config_entry, collected.extend)
+
+    names = {
+        entity._iot_id: entity.device_info["name"]
+        for entity in collected
+        if hasattr(entity, "_iot_id") and entity.device_info
+    }
+    assert names["iot-001"] == "Caixinha"
+    assert names["iot-002"] == "T1 Plus"

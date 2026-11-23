@@ -24,8 +24,10 @@ do when we call them. The product's own software is not quoted, named or referen
 | `nickName` | `PETLABEL` — the user-facing label lives here, not in `deviceName` |
 
 > Contrast: the M1's wire `deviceName` is a machine serial with its own `nickName`.
-> The existing `_get_device_name()` reads `deviceName`, so for Riko it would surface
-> the serial. See §Naming.
+> Both products behave the same way here: the wire `deviceName` is the serial and the
+> label the owner set lives in `nickName`. `_get_device_name()` keeps reading
+> `deviceName` because the record and statistics endpoints key on it; the label is
+> what names the device in HA. See §Naming.
 
 ## Property set (`/thing/properties/get`)
 
@@ -519,6 +521,20 @@ five minutes after it. The device's own display was the only thing an hour off.
 
 ## Naming note
 
-The current `NeakasaCoordinator._get_device_name()` returns wire `deviceName`.
-For Riko that is the machine serial. Prefer `nickName` when present so HA shows
-the user-facing label. Decide whether to change this globally or per-product.
+Wire `deviceName` is the machine serial on both products, and the record, statistics
+and feeder-record endpoints key on that value — `/catbox/record`, `/catbox/toilet/
+statistics` and `/feeder/record` all take it as the `deviceName` parameter — so it
+cannot be replaced on the snapshot without breaking those calls. It stays what
+`_get_device_name()` resolves and what the `device_serial` sensor reports.
+
+What names the device in Home Assistant is `NeakasaDeviceSnapshot.display_name`:
+`nickName` when the owner has set one, the wire name when they have not, the iotId
+if the device list named the machine nothing at all. Applied to both products, since
+the two behave identically. Confirmed on 2026-11-23 against the account's two
+devices: the device list carries a non-empty `nickName` for each, and neither
+matches its `deviceName`.
+
+Renaming a machine in the app therefore renames the HA device on the next refresh,
+but not the entity ids: Home Assistant does not rewrite an object id once it is
+registered, so entities created while the device was unnamed keep the serial in their
+entity id. `log_redact.py` handles both shapes.

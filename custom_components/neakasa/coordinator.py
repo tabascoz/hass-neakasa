@@ -247,6 +247,20 @@ class NeakasaDeviceSnapshot:
     meal_times: tuple[int, ...] = ()
     device_serial: str = ""
 
+    @property
+    def display_name(self) -> str:
+        """
+        Return the name to show this machine under in Home Assistant.
+
+        The label the owner gave the machine in the Neakasa app is what they
+        recognise it by, so it names the device whenever they have set one. The
+        wire ``deviceName`` is the machine's serial on every unit measured and is
+        what the record and statistics endpoints key on, so it stays the fallback
+        here and stays what the ``device_serial`` sensor reports; the iotId is the
+        last resort, for a device list that named the machine no name at all.
+        """
+        return self.label or self.device_name or self.iot_id
+
 
 NeakasaPayload = dict[str, NeakasaDeviceSnapshot]
 
@@ -1589,7 +1603,14 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         return self._records_caches[iot_id], self._properties_caches[iot_id]
 
     async def _get_device_name(self, iot_id: str) -> str:
-        """Resolve a user-facing device name, preferring the fetched device list."""
+        """
+        Resolve the wire ``deviceName`` for *iot_id*.
+
+        This is the name the record, statistics and feeder-record endpoints key
+        on, and on every unit measured it is the machine's serial rather than
+        anything the owner would recognise. It is deliberately not what the device
+        registry shows: that is ``NeakasaDeviceSnapshot.display_name``.
+        """
         if iot_id in self._device_names:
             return self._device_names[iot_id]
         for d in self._account_devices:

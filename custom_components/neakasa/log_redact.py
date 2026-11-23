@@ -40,10 +40,14 @@ _DEVICE_PAIR = re.compile(
 # `name=value` keeps its name and only the value is dropped.
 _OPAQUE_RUN = re.compile(r"[A-Za-z0-9+/_-]{20,}")
 # Inside an entity id a machine is one word: Home Assistant builds the object id as
-# `{slug(device_name)}_{slug(entity_name)}` and this integration's device name is the
-# wire deviceName, the machine's serial on the units measured. Only that segment is
-# replaced - the platform prefix and the entity's own name are what the counters read,
-# and the word put back is the iotId's label, the one every other line uses.
+# `{slug(device_name)}_{slug(entity_name)}`, and this integration's device name is the
+# owner's app label when they have set one and the wire deviceName - the machine's
+# serial on the units measured - otherwise. An id registered before the device was
+# labelled carries the serial and keeps it, because Home Assistant does not rewrite an
+# entity id when a device is renamed, so the segment is located by the entity's own
+# device name first and by the serial's shape second. Only that segment is replaced -
+# the platform prefix and the entity's own name are what the counters read, and the
+# word put back is the iotId's label, the one every other line uses.
 _OBJECT_ID_DEVICE_SEGMENT = re.compile(r"[a-z0-9]{15,}")
 
 

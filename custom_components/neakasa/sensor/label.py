@@ -19,9 +19,11 @@ class NeakasaLabelSensor(CoordinatorEntity[NeakasaCoordinator], SensorEntity):
     """
     The friendly name the owner gave the device in the Neakasa app.
 
-    The integration names devices by their wire serial (stable, and what the
-    cloud record endpoints key on); this sensor surfaces the human label so
-    users can tell their devices apart. It applies to every product type.
+    The device itself is named by this label where one is set, so the sensor is
+    not how a user tells their machines apart in the UI: it is how an automation
+    reads the label as a value, and how a machine the owner has not named yet
+    can be seen to have no label. The wire serial the cloud record endpoints key
+    on stays its own sensor. It applies to every product type.
     """
 
     _attr_should_poll = False
