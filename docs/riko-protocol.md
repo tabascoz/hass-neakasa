@@ -361,9 +361,25 @@ because this unit has never reported any.
 `{"drierEffeDays": 40}` and the scan at 11:49:55, 63 s later, reported 40 days left.
 The number that moved came from the machine's own read rather than from the request, so
 the entity followed the machine and the command re-counts from the budget it is handed.
-What `resetScaleZero` and `fdCalbration` answer is still open: neither has been pressed
-on this unit, and the calibration is held back on purpose, because it goes out with no
-coefficients and a wrong answer there costs dosing accuracy rather than appearance.
+Of the two commands whose answer was open, `resetScaleZero` has now been asked on this
+unit; `fdCalbration` has not.
+
+`resetScaleZero` answers, measured on the same unit the same day with the food bowl out
+of the machine, which is the sequence the device itself asks for. The scale had been
+reading 88.14 g against the 68 g tare it stores, so 20 g of contents; lifting the bowl
+left the machine stating 1.35 g on an empty scale, and that is the offset error this
+command exists to take away. A press at 13:04:19 sent `{"bowlGram": 68}` - the tare the
+machine already stores, because the press reads it off the device rather than weighing
+anything, which is why taking the bowl out does not change what goes out - and the
+invoke was accepted 262 ms later. With the bowl back the machine stated 86.97 g, then
+86.94 g a minute later, so the correction held across the next ask instead of settling
+back: about 1.2 g against the 1.35 g measured on the empty scale. The contents figure
+followed to 19 g, one gram lower, and that gram is the rounding of the same 1.2 g
+rather than food having left the bowl; the stored tare stayed 68, the value sent.
+
+`fdCalbration` stays unasked on purpose: it is the one of the three that goes out with
+no coefficients at all, and a wrong answer to it would surface as dosing that is quietly
+off rather than as a figure that looks wrong.
 
 A press that logs nothing has not necessarily done nothing. The cloud-write line this
 path logs is INFO, and this box runs `logger: default: warn`, so neither it nor
