@@ -99,7 +99,7 @@ claimed for it.
 | `feedCtrl` | `{ctrlType enum}` | the auto-feeding control; asked with meal amounts it times out, so it is not one-meal feeding |
 | `bowlCtrl` | `{ctrlType enum}` | act on the bowl |
 | `resetScaleZero` `[this unit]` | `{bowlGram int 0…200 g}` | re-zero the scale against a known bowl weight — the bowl-weight calibration; pressed on 2026-11-23 with the machine's own stored tare, and the empty-scale offset it was carrying came out of the next reading |
-| `fdCalbration` | `{kVal 0…100, kX100 0…200, objVal/bkgVal/diffVal 0…2000}` | recalibrate the food scale's reading — not asked on this unit, which has never reported the coefficients it is defined to take |
+| `fdCalbration` `[this unit]` | `{kVal 0…100, kX100 0…200, objVal/bkgVal/diffVal 0…2000}` | recalibrate the food-bin level sensor; pressed on 2026-11-23 with empty args after filling food to the sensor level as the app instructs, and the machine acknowledged with a beep — the coefficients the definition names are what the machine sets itself, not what the caller supplies |
 | `resetDrierTime` `[this unit]` | `{drierEffeDays 1…60}` | record a desiccant change and re-count from the new budget; pressed on 2026-11-23 and the countdown came back at the budget it was handed |
 | `deepWashing` | `{type enum}` | start the bowl wash |
 | `ledScreenDisplay` | `{animeType int 0…24}` | put an animation on the front display |
@@ -361,8 +361,8 @@ entities follow the machine instead of the request.
 The commands are asked for, not assumed to work: `resetDrierTime{drierEffeDays}` uses
 the day budget the machine states (or the longest the definition allows when it states
 none), `resetScaleZero{bowlGram}` uses the bowl weight the machine states and refuses
-with a message when it states none, and `fdCalbration` is asked with no coefficients
-because this unit has never reported any.
+with a message when it states none, and `fdCalbration` is asked with no arguments
+because the coefficients its definition names are what the machine sets itself.
 
 `resetDrierTime` answers, measured on the pet feeder on 2026-11-23. The countdown read
 14 days left against a stated budget of 40; a press at 11:48:52 sent
@@ -370,7 +370,7 @@ because this unit has never reported any.
 The number that moved came from the machine's own read rather than from the request, so
 the entity followed the machine and the command re-counts from the budget it is handed.
 Of the two commands whose answer was open, `resetScaleZero` has now been asked on this
-unit; `fdCalbration` has not.
+unit; `fdCalbration` has too.
 
 `resetScaleZero` answers, measured on the same unit the same day with the food bowl out
 of the machine, which is the sequence the device itself asks for. The scale had been
@@ -385,9 +385,11 @@ back: about 1.2 g against the 1.35 g measured on the empty scale. The contents f
 followed to 19 g, one gram lower, and that gram is the rounding of the same 1.2 g
 rather than food having left the bowl; the stored tare stayed 68, the value sent.
 
-`fdCalbration` stays unasked on purpose: it is the one of the three that goes out with
-no coefficients at all, and a wrong answer to it would surface as dosing that is quietly
-off rather than as a figure that looks wrong.
+`fdCalbration` was asked on 2026-11-23 with empty args, following the app's procedure of
+filling food to the sensor level first. The machine acknowledged with a beep. The
+coefficients the definition names are what the machine sets itself; the caller supplies
+none. The food-level reading did not change in the next scan, which is expected: the
+calibration updates the sensor's internal thresholds, not the current fill level.
 
 A press that logs nothing has not necessarily done nothing. The cloud-write line this
 path logs is INFO, and this box runs `logger: default: warn`, so neither it nor

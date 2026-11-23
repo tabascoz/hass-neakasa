@@ -22,9 +22,10 @@ class NeakasaCalibrateFoodScaleButton(
     """
     Ask for the food-scale recalibration the machine can do by itself.
 
-    The command asked for is `fdCalbration`. Its definition names coefficients
-    the machine sets itself, and this unit has never answered with any of them,
-    so nothing is invented here: the press asks and the machine answers.
+    The command asked for is `fdCalbration`. It goes out with no arguments:
+    the coefficients its definition names are what the machine sets itself.
+    The app's procedure is to fill food to the sensor level first, then press;
+    the machine acknowledges with a beep. Asked on this unit on 2026-11-23.
     """
 
     _attr_should_poll = False
