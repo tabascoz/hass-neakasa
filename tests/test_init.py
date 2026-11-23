@@ -18,6 +18,7 @@ from custom_components.neakasa import (
     async_setup_entry,
     async_unload_entry,
 )
+from custom_components.neakasa.config_flow import NeakasaConfigFlow
 from custom_components.neakasa.log_redact import device_label
 
 
@@ -96,7 +97,7 @@ async def test_async_unload_entry(
 
 
 async def test_async_migrate_entry_v1() -> None:
-    """Test migrating a V1 config entry to V2."""
+    """A V1 entry is carried to the current version in a single write."""
     hass = MagicMock()
     hass.config_entries.async_update_entry = MagicMock()
     entry = MagicMock()
@@ -106,6 +107,7 @@ async def test_async_migrate_entry_v1() -> None:
         CONF_USERNAME: "User@Example.com",
         CONF_PASSWORD: "hunter2",
     }
+    entry.options = {"scan_interval": 90, "debug_probe": True}
 
     result = await async_migrate_entry(hass, entry)
 
@@ -117,15 +119,52 @@ async def test_async_migrate_entry_v1() -> None:
         CONF_PASSWORD: "hunter2",
     }
     assert call_kwargs["unique_id"] == "account:user@example.com"
-    assert call_kwargs["version"] == 2
+    assert call_kwargs["version"] == NeakasaConfigFlow.VERSION
+    assert call_kwargs["options"] == {"scan_interval": 90}
 
 
-async def test_async_migrate_entry_v2_already() -> None:
-    """Test that V2 entries are left untouched."""
+async def test_async_migrate_entry_prunes_options_no_form_offers() -> None:
+    """A V2 entry keeps the settings it has and loses the ones nothing reads.
+
+    The debug keys are what a temporary write harness saved on entries already
+    installed when it was removed, and the session keys what an earlier settings
+    step saved. An options save only rewrites the keys its form shows, so these
+    stayed, and they were copied verbatim into a shared diagnostics file.
+    """
     hass = MagicMock()
     hass.config_entries.async_update_entry = MagicMock()
     entry = MagicMock()
     entry.version = 2
+    entry.entry_id = "entry-1"
+    entry.options = {
+        "scan_interval": 120,
+        "stats_lookback_days": 14,
+        "feed_keep_as_new_defaults": True,
+        "account_session_window_minutes": 45,
+        "session_regain_policy": "never",
+        "debug_probe": True,
+        "debug_invoke_identifier": "setFeed",
+        "debug_invoke_args_json": "{}",
+    }
+
+    result = await async_migrate_entry(hass, entry)
+
+    assert result is True
+    call_kwargs = hass.config_entries.async_update_entry.call_args.kwargs
+    assert call_kwargs["options"] == {
+        "scan_interval": 120,
+        "stats_lookback_days": 14,
+        "feed_keep_as_new_defaults": True,
+    }
+    assert call_kwargs["version"] == NeakasaConfigFlow.VERSION
+
+
+async def test_async_migrate_entry_current_version_untouched() -> None:
+    """An entry already at the current version is not rewritten."""
+    hass = MagicMock()
+    hass.config_entries.async_update_entry = MagicMock()
+    entry = MagicMock()
+    entry.version = NeakasaConfigFlow.VERSION
 
     result = await async_migrate_entry(hass, entry)
 

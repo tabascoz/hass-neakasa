@@ -49,7 +49,7 @@ async def _validate_credentials(
 class NeakasaConfigFlow(ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]  # HA __init_subclass__ convention
     """Handle a config flow for Neakasa."""
 
-    VERSION = 2
+    VERSION = 3
 
     @staticmethod
     def async_get_options_flow(_config_entry: ConfigEntry) -> NeakasaOptionsFlow:

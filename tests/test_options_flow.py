@@ -6,7 +6,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.neakasa.const import DOMAIN
+from custom_components.neakasa.const import DOMAIN, OPTION_KEYS
 
 
 async def test_options_flow_show_form(hass: HomeAssistant) -> None:
@@ -34,6 +34,11 @@ async def test_options_flow_show_form(hass: HomeAssistant) -> None:
     assert "debug_probe" not in schema
     assert "debug_invoke_identifier" not in schema
     assert "debug_invoke_args_json" not in schema
+
+    # The form and the config-entry migration read one list of keys. This is what
+    # keeps them from drifting again the way the retired keys above once did.
+    offered = {key.schema if hasattr(key, "schema") else key for key in schema}
+    assert offered == OPTION_KEYS
 
 
 async def test_options_flow_uses_existing_options(hass: HomeAssistant) -> None:

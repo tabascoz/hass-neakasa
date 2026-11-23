@@ -21,6 +21,15 @@ AES_IV_DEFAULT = b"QB8GC2X6WK39FF93"
 
 SUPPORTED_CATEGORY_KEYS: frozenset[str] = frozenset({"CatLitter", "petFeeder"})
 
+# The options this integration offers, named in one place so the settings form and
+# the config-entry migration cannot drift apart. A settings step that is removed
+# leaves its keys on every entry already installed: nothing reads them, but they
+# reach the diagnostics file a user shares, so the migration prunes anything
+# outside this set.
+OPTION_KEYS: frozenset[str] = frozenset(
+    {"scan_interval", "stats_lookback_days", "feed_keep_as_new_defaults"}
+)
+
 # Riko wet-meal feeder portion bounds and water ratio (product UI ranges).
 FEED_FOOD_MIN_G = 3
 FEED_FOOD_MAX_G = 15

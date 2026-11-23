@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from homeassistant.const import (
     CONF_PASSWORD,
@@ -18,7 +18,8 @@ from homeassistant.helpers.device_registry import (
 )
 
 from .api_manager import clear_shared_api
-from .const import _LOGGER, DOMAIN
+from .config_flow import NeakasaConfigFlow
+from .const import _LOGGER, DOMAIN, OPTION_KEYS
 from .coordinator import NeakasaCoordinator
 from .data import NeakasaConfigEntry, NeakasaData
 from .log_redact import device_label, entry_label
@@ -111,17 +112,34 @@ async def async_remove_config_entry_device(
     )
 
 
+def _current_options(config_entry: ConfigEntry) -> dict[str, Any]:
+    """
+    Return *config_entry*'s options keeping only the keys this integration offers.
+
+    The keys are the ones ``OPTION_KEYS`` names, which is also the set the options
+    form shows, so an entry cannot carry a setting no step reads.
+    """
+    return {
+        key: value for key, value in config_entry.options.items() if key in OPTION_KEYS
+    }
+
+
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """
-    Migrate config entry from VERSION 1 → 2.
+    Bring a config entry up to the current version.
 
     V1 entries stored ``device_id``, ``friendly_name``, ``username``, ``password``
     in data and used the device IOT ID as the unique_id.  V2 keeps only
     ``username`` + ``password`` and uses ``account:{username}`` as the unique_id.
+    V3 drops options no settings step offers any more. A temporary write harness
+    saved ``debug_probe`` and its two companions on entries that were already
+    installed when it was removed, and an options save only rewrites the keys the
+    form shows, so those keys stayed: nothing reads them, but they are copied
+    verbatim into the diagnostics file a user shares to ask what is wrong.
     """
     if config_entry.version == 1:
         _LOGGER.debug(
-            "Migrating config entry %s from V1 to V2",
+            "Migrating config entry %s from V1",
             entry_label(config_entry.entry_id),
         )
 
@@ -138,10 +156,18 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
             config_entry,
             data=new_data,
             unique_id=new_unique_id,
-            version=2,
+            options=_current_options(config_entry),
+            version=NeakasaConfigFlow.VERSION,
         )
+    elif config_entry.version < NeakasaConfigFlow.VERSION:
         _LOGGER.debug(
-            "Migrated config entry %s to V2", entry_label(config_entry.entry_id)
+            "Pruning options no settings step offers on config entry %s",
+            entry_label(config_entry.entry_id),
+        )
+        hass.config_entries.async_update_entry(
+            config_entry,
+            options=_current_options(config_entry),
+            version=NeakasaConfigFlow.VERSION,
         )
     return True
 
