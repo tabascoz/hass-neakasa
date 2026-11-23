@@ -70,8 +70,8 @@ FULL_REAUTH_COOLDOWN_SECONDS = 600
 # The wordings the account web API uses when the login token aged; that token
 # is what /catbox/record sends, so only a sign-in replaces it.
 _TOKEN_INVALID_PHRASES: tuple[str, ...] = ("tokeninvalid", "token is abnormal")
-# Consecutive recoveries inside one update, so a persistently rejected token
-# cannot keep asking for sessions.
+# Consecutive recoveries inside one scheduled update, so a persistently
+# rejected token cannot keep asking for sessions.
 MAX_SESSION_RECOVERY_ATTEMPTS = 2
 # Presenting the account to the cloud is what moves the session away from
 # whoever else holds it, whether the request is accepted or refused, and the
@@ -1966,8 +1966,11 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
 
         A rejected IoT token is renewed with one call; a rejected account
         token goes straight to a sign-in, which the cooldown bounds. Recovery
-        inside one update is attempted at most `MAX_SESSION_RECOVERY_ATTEMPTS`
-        times, and the scan raises :class:`UpdateFailed` when it cannot recover.
+        inside one scheduled update is attempted at most
+        `MAX_SESSION_RECOVERY_ATTEMPTS` times, and the scan raises
+        :class:`UpdateFailed` when it cannot recover. A recovery re-enters
+        :meth:`_scan_once` rather than the scheduled entry, so it cannot spend
+        a budget it did not already have.
         """
         self.force_refresh_devices()
         self._recovery_attempts += 1
@@ -1979,11 +1982,11 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             raise UpdateFailed(msg)
         renew_without_signing_in = err is None or not self._needs_full_reauth(err)
         if renew_without_signing_in and await self._renew_cloud_session():
-            return await self.async_update_data()
+            return await self._scan_once()
         if not await self._force_full_reauth(reason):
             msg = f"Cloud session unusable and re-auth cooling down: {reason}"
             raise UpdateFailed(msg)
-        return await self.async_update_data()
+        return await self._scan_once()
 
     async def _reconnect_clear_and_retry(
         self, err: BaseException | None = None
@@ -2017,11 +2020,25 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         return payload
 
     # ------------------------------------------------------------------
-    # Main update loop
+    # Scheduled update entry, and one scan of the account
     # ------------------------------------------------------------------
 
     async def async_update_data(self) -> NeakasaPayload:
-        """Fetch fresh data from all CatLitter devices on the account."""
+        """
+        Run one scheduled update, with a recovery budget that is its own.
+
+        Home Assistant calls this on the scan interval and turns an
+        :class:`UpdateFailed` into a logged failure and another try at the next
+        tick, so an outage that outlasts one scan belongs to the interval
+        rather than to this call. The budget is reset here, at the entry, and
+        not in :meth:`_scan_once`: recovery re-enters the scan, so it cannot
+        top itself back up.
+        """
+        self._recovery_attempts = 0  # each scheduled cycle recovers for itself
+        return await self._scan_once()
+
+    async def _scan_once(self) -> NeakasaPayload:
+        """Read the account once, recovering a rejected session if it can."""
         try:
             client = await self._get_client()
             devices = await self._discover_devices(client)
@@ -2054,7 +2071,6 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                 return await self._recover_session_expired(session_failures[0])
 
             _LOGGER.debug("Coordinator update complete: %d devices", len(payload))
-            self._recovery_attempts = 0  # a finished update ends any recovery run
             await self._run_debug_probe(payload)
             return payload  # noqa: TRY300
 
@@ -2080,20 +2096,11 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                 _LOGGER.debug("IdentityId error, attempting automatic reconnection")
                 return await self._reconnect_clear_and_retry(err)
 
-            _LOGGER.warning("API communication error (retrying): %s", err)
-            for delay in (2, 4, 8, 16, 32):
-                _LOGGER.debug("Retrying after %ds ...", delay)
-                await asyncio.sleep(delay)
-                try:
-                    return await self.async_update_data()
-                except (
-                    NeakasaApiClientCommunicationError
-                ):  # pragma: no cover - never propagates
-                    # The nested update recurses into this same retry loop, so
-                    # this branch is unreachable in practice.
-                    continue  # pragma: no cover
-            _LOGGER.error(  # pragma: no cover - retries recurse until recovery
-                "API communication error after all retries: %s", err
-            )
-            msg = f"Communication error after 5 retries: {err}"  # pragma: no cover
-            raise UpdateFailed(msg) from err  # pragma: no cover
+            # The scan interval does the retrying. This used to sleep and call
+            # a fresh update per attempt, and because the nested call opens its
+            # own ladder the stack grew one frame every two seconds until
+            # Python raised RecursionError, leaving the refresh task pending
+            # for whatever length the outage turned out to have.
+            _LOGGER.warning("API communication error, failing the update: %s", err)
+            msg = f"Communication error: {err}"
+            raise UpdateFailed(msg) from err

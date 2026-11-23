@@ -593,7 +593,7 @@ async def test_reconnect_and_retry_success(
 ) -> None:
     """Test that a failed token renewal falls back to a full reconnect."""
     coordinator = _make_coordinator(hass, mock_config_entry)
-    coordinator.async_update_data = AsyncMock(return_value={"iot-001": MagicMock()})
+    coordinator._scan_once = AsyncMock(return_value={"iot-001": MagicMock()})
     client = AsyncMock()
     client.refresh_session = AsyncMock(
         side_effect=NeakasaApiClientSessionExpiredError("rejected")
@@ -714,38 +714,67 @@ async def test_update_data_session_expired_reconnect_fails(
         await coordinator.async_update_data()
 
 
-async def test_update_data_comm_retry_succeeds(
+async def test_update_data_communication_error_fails_the_update(
     hass: HomeAssistant,
     mock_config_entry: MagicMock,
     mock_get_shared_api: MagicMock,
 ) -> None:
-    """Test that a communication error is retried and can succeed."""
+    """A communication error is reported, not retried from inside the scan.
+
+    The ladder this replaces slept and called a fresh update per attempt, and
+    because the nested call opens a ladder of its own the stack grew one frame
+    every two seconds until Python raised RecursionError, leaving the refresh
+    task pending for whatever length the outage turned out to have.
+    """
     coordinator = _make_coordinator(hass, mock_config_entry)
-    good = _build_device_snapshot("iot-001", "T1", FAKE_DEVDATA, {}, 0)
 
     with (
         patch("asyncio.sleep", new=AsyncMock()) as sleep_mock,
         patch.object(
             coordinator,
             "_discover_devices",
-            new=AsyncMock(
-                side_effect=[
-                    NeakasaApiClientCommunicationError("boom"),
-                    [{"iotId": "iot-001"}],
-                ]
-            ),
+            new=AsyncMock(side_effect=NeakasaApiClientCommunicationError("boom")),
         ) as discover,
+        pytest.raises(UpdateFailed) as failed,
+    ):
+        await coordinator.async_update_data()
+
+    assert str(failed.value) == "Communication error: boom"
+    assert isinstance(failed.value.__cause__, NeakasaApiClientCommunicationError)
+    assert sleep_mock.await_count == 0
+    assert discover.await_count == 1
+
+
+async def test_a_failed_update_starts_the_next_with_a_fresh_budget(
+    hass: HomeAssistant,
+    mock_config_entry: MagicMock,
+    mock_get_shared_api: MagicMock,
+) -> None:
+    """Spending the recoveries in one update must not stick the entry.
+
+    The counter was cleared only by an update that finished, so once one had
+    used its two recoveries every later session expiry raised straight away
+    and the entry stayed failed until something reloaded it.
+    """
+    coordinator = _make_coordinator(hass, mock_config_entry)
+
+    with (
         patch.object(
             coordinator,
-            "_fetch_single_device",
-            new=AsyncMock(return_value=good),
+            "_discover_devices",
+            new=AsyncMock(side_effect=NeakasaApiClientSessionExpiredError("expired")),
         ),
+        patch.object(
+            coordinator,
+            "_renew_cloud_session",
+            new=AsyncMock(return_value=True),
+        ) as renew,
     ):
-        data = await coordinator.async_update_data()
+        for _ in range(2):
+            with pytest.raises(UpdateFailed):
+                await coordinator.async_update_data()
 
-    assert "iot-001" in data
-    assert sleep_mock.await_count == 1
-    assert discover.await_count == 2
+    assert renew.await_count == MAX_SESSION_RECOVERY_ATTEMPTS * 2
 
 
 async def test_update_data_identity_id_blank(
