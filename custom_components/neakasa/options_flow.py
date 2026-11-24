@@ -25,7 +25,6 @@ class NeakasaOptionsFlow(OptionsFlow):
             return self.async_create_entry(data=user_input)
 
         current_scan = self.config_entry.options.get("scan_interval", 60)
-        current_lookback = self.config_entry.options.get("stats_lookback_days", 7)
         current_keep_defaults = self.config_entry.options.get(
             "feed_keep_as_new_defaults", False
         )
@@ -41,18 +40,6 @@ class NeakasaOptionsFlow(OptionsFlow):
                         max=300,
                         step=5,
                         unit_of_measurement="seconds",
-                        mode=NumberSelectorMode.BOX,
-                    ),
-                ),
-                vol.Required(
-                    "stats_lookback_days",
-                    default=current_lookback,
-                ): NumberSelector(
-                    NumberSelectorConfig(
-                        min=1,
-                        max=30,
-                        step=1,
-                        unit_of_measurement="days",
                         mode=NumberSelectorMode.BOX,
                     ),
                 ),

@@ -48,10 +48,11 @@ The integration follows the HA `DataUpdateCoordinator` + `entry.runtime_data` pa
 platform adds its entities from the coordinator's payload. Current layout:
 
 ```
-config_flow.py     → single-step credentials, VERSION = 2, unique_id `account:{username}`;
+config_flow.py     → single-step credentials, VERSION = 4, unique_id `account:{username}`;
                      async_step_user / async_step_reauth / async_step_reauth_confirm / async_step_reconfigure
-options_flow.py    → scan_interval (10–300 s, default 60) and stats_lookback_days (1–30 d, default 7)
-__init__.py        → async_migrate_entry for pre-V2 entries, creates the coordinator, forwards to platforms,
+options_flow.py    → scan_interval (10–300 s, default 60) and feed_keep_as_new_defaults
+__init__.py        → async_migrate_entry for older entries, pruning options no step offers,
+                     creates the coordinator, forwards to platforms,
                      clears the shared client on unload
 api_manager.py     → shared client cache keyed by credentials (`_shared_clients`, `_shared_locks`)
                      and the get_shared_api / clear_shared_api / force_reconnect_api helpers

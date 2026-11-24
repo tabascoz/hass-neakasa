@@ -26,9 +26,7 @@ SUPPORTED_CATEGORY_KEYS: frozenset[str] = frozenset({"CatLitter", "petFeeder"})
 # leaves its keys on every entry already installed: nothing reads them, but they
 # reach the diagnostics file a user shares, so the migration prunes anything
 # outside this set.
-OPTION_KEYS: frozenset[str] = frozenset(
-    {"scan_interval", "stats_lookback_days", "feed_keep_as_new_defaults"}
-)
+OPTION_KEYS: frozenset[str] = frozenset({"scan_interval", "feed_keep_as_new_defaults"})
 
 # Riko wet-meal feeder portion bounds and water ratio (product UI ranges).
 FEED_FOOD_MIN_G = 3

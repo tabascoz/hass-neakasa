@@ -148,7 +148,7 @@ def mock_config_entry(hass: HomeAssistant) -> MagicMock:
         CONF_USERNAME: "test@example.com",
         CONF_PASSWORD: "hunter2",
     }
-    entry.options = {"scan_interval": 60, "stats_lookback_days": 7}
+    entry.options = {"scan_interval": 60}
     entry.entry_id = "mock-entry-id"
     entry.unique_id = "account:test@example.com"
     entry.runtime_data = MagicMock()

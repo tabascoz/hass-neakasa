@@ -128,8 +128,11 @@ async def test_async_migrate_entry_prunes_options_no_form_offers() -> None:
 
     The debug keys are what a temporary write harness saved on entries already
     installed when it was removed, and the session keys what an earlier settings
-    step saved. An options save only rewrites the keys its form shows, so these
-    stayed, and they were copied verbatim into a shared diagnostics file.
+    step saved. ``stats_lookback_days`` belongs to the same kind of leftover: a
+    settings form offered it as a history window, but no code ever read one, so
+    it goes with the others. An options save only rewrites the keys its form
+    shows, so these stayed, and they were copied verbatim into a shared
+    diagnostics file.
     """
     hass = MagicMock()
     hass.config_entries.async_update_entry = MagicMock()
@@ -153,7 +156,6 @@ async def test_async_migrate_entry_prunes_options_no_form_offers() -> None:
     call_kwargs = hass.config_entries.async_update_entry.call_args.kwargs
     assert call_kwargs["options"] == {
         "scan_interval": 120,
-        "stats_lookback_days": 14,
         "feed_keep_as_new_defaults": True,
     }
     assert call_kwargs["version"] == NeakasaConfigFlow.VERSION

@@ -136,6 +136,12 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
     installed when it was removed, and an options save only rewrites the keys the
     form shows, so those keys stayed: nothing reads them, but they are copied
     verbatim into the diagnostics file a user shares to ask what is wrong.
+    V4 prunes ``stats_lookback_days`` for the same reason. The form offered it as
+    a window over the cloud's history, but no code ever read it - the record
+    request has always asked for the seven days ``api.py`` computes itself - so
+    the setting promised a thing nothing did. Entries installed before it was
+    dropped still carry it until this version moves them to the keys the form
+    actually shows.
     """
     if config_entry.version == 1:
         _LOGGER.debug(
