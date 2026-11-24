@@ -22,6 +22,7 @@ from custom_components.neakasa.exceptions import (
     NeakasaApiClientCommunicationError,
     NeakasaApiClientSessionExpiredError,
 )
+from custom_components.neakasa.log_redact import account_label
 
 # ---------------------------------------------------------------------------
 # Wire-value helpers (unit tests, no HA needed)
@@ -781,6 +782,39 @@ async def test_update_data_communication_error_fails_the_update(
     assert isinstance(failed.value.__cause__, NeakasaApiClientCommunicationError)
     assert sleep_mock.await_count == 0
     assert discover.await_count == 1
+
+
+async def test_a_failed_update_loses_the_account_words(
+    hass: HomeAssistant,
+    mock_config_entry: MagicMock,
+    mock_get_shared_api: MagicMock,
+) -> None:
+    """What the cloud answered stays out of the message Home Assistant prints.
+
+    The exception carries the cloud's own answer, because the token phrases have
+    to stay matchable in it, so the account's words leave at the point where
+    they would otherwise be written down.
+    """
+    coordinator = _make_coordinator(hass, mock_config_entry)
+
+    with (
+        patch.object(
+            coordinator,
+            "_discover_devices",
+            new=AsyncMock(
+                side_effect=NeakasaApiClientCommunicationError(
+                    "Error in /catbox/record: owner@example.com refused"
+                )
+            ),
+        ),
+        pytest.raises(UpdateFailed) as failed,
+    ):
+        await coordinator.async_update_data()
+
+    message = str(failed.value)
+    assert "owner@example.com" not in message
+    assert account_label("owner@example.com") in message
+    assert "Error in /catbox/record" in message
 
 
 async def test_a_failed_update_starts_the_next_with_a_fresh_budget(

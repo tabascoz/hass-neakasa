@@ -37,7 +37,7 @@ from .exceptions import (
     NeakasaApiClientError,
     NeakasaApiClientSessionExpiredError,
 )
-from .log_redact import device_label, entry_label
+from .log_redact import device_label, entry_label, redact_text
 from .value_cacher import ValueCacher
 
 if TYPE_CHECKING:
@@ -1394,7 +1394,8 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
                 )
             except NeakasaApiClientError as err:
                 _LOGGER.warning(
-                    "Failed to store the fed amounts as new defaults: %s", err
+                    "Failed to store the fed amounts as new defaults: %s",
+                    redact_text(err),
                 )
         elif self.data and iot_id in self.data:
             self._mark_state_changed(iot_id)
@@ -1826,7 +1827,13 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         self._refused_when = None
 
     def _note_account_refused(self, what: str, err: BaseException) -> None:
-        """Record that the account refused one of our calls."""
+        """
+        Record that the account refused one of our calls.
+
+        The exception quotes what the cloud said, and that answer is where the
+        account's own words are, so the line logs it through ``redact_text``:
+        which call was refused and why stays readable, the account does not appear.
+        """
         self._session_owner = SESSION_OWNER_NOT_HOME_ASSISTANT
         self._session_refused = True
         self._refused_when = _utc_stamp()
@@ -1834,7 +1841,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             "The account refused '%s' (%s): another client holds the session, "
             "so its values stay as cached and the account sensor says so",
             what,
-            err,
+            redact_text(err),
         )
 
     async def take_account_session_back(self, reason: str) -> None:
@@ -1915,7 +1922,7 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             client = await self._get_client()
             await client.refresh_session()
         except NeakasaApiClientError as err:
-            _LOGGER.debug("Cloud session renewal failed: %s", err)
+            _LOGGER.debug("Cloud session renewal failed: %s", redact_text(err))
             return False
         _LOGGER.debug("Renewed the cloud session without a full re-auth")
         return True
@@ -2012,11 +2019,13 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         Shared by a whole-update expiry and by devices that failed because the
         session behind their token was gone, so both read the same in logs.
         """
-        _LOGGER.warning("Session expired, reconnecting silently: %s", err)
+        _LOGGER.warning("Session expired, reconnecting silently: %s", redact_text(err))
         try:
             payload = await self._reconnect_and_retry("session expired", err)
         except Exception as exc:
-            _LOGGER.warning("Reconnect+retry FAILED after session expiry: %s", exc)
+            _LOGGER.warning(
+                "Reconnect+retry FAILED after session expiry: %s", redact_text(exc)
+            )
             raise
         _LOGGER.info(
             "Reconnect+retry SUCCEEDED after session expiry — %d devices",
@@ -2062,7 +2071,9 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             for iot_id, result in zip(self._device_ids, snapshots, strict=False):
                 if isinstance(result, BaseException):
                     _LOGGER.error(
-                        "Failed to fetch device %s: %s", device_label(iot_id), result
+                        "Failed to fetch device %s: %s",
+                        device_label(iot_id),
+                        redact_text(result),
                     )
                     if isinstance(result, NeakasaApiClientSessionExpiredError):
                         session_failures.append(result)
@@ -2093,7 +2104,9 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             return await self._recover_session_expired(err)
 
         except NeakasaApiClientAuthenticationError as err:
-            _LOGGER.warning("Authentication error, attempting reconnect: %s", err)
+            _LOGGER.warning(
+                "Authentication error, attempting reconnect: %s", redact_text(err)
+            )
             try:
                 return await self._reconnect_and_retry("authentication error", err)
             except UpdateFailed:
@@ -2116,6 +2129,8 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
             # own ladder the stack grew one frame every two seconds until
             # Python raised RecursionError, leaving the refresh task pending
             # for whatever length the outage turned out to have.
-            _LOGGER.warning("API communication error, failing the update: %s", err)
-            msg = f"Communication error: {err}"
+            _LOGGER.warning(
+                "API communication error, failing the update: %s", redact_text(err)
+            )
+            msg = f"Communication error: {redact_text(err)}"
             raise UpdateFailed(msg) from err

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import ast
+import pathlib
+
 from custom_components.neakasa.log_redact import (
     account_label,
     device_label,
@@ -9,6 +12,13 @@ from custom_components.neakasa.log_redact import (
     redact_entity_id,
     redact_text,
 )
+
+_PACKAGE = pathlib.Path("custom_components/neakasa")
+
+# The names this integration binds a cloud answer to. The exceptions keep that
+# answer whole so the token phrases stay matchable, which is why the redaction
+# belongs where the line is written rather than where the error is raised.
+_EXCEPTION_NAMES = {"err", "exc", "e", "result", "reconnect_err"}
 
 _LOGIN_BODY = (
     '{"code":0,"data":{"login_token":"abcdefghij0123456789KLMNOPQRST",'
@@ -166,3 +176,30 @@ def test_a_value_that_is_not_an_entity_id_is_left_alone() -> None:
     """There is no segment here to replace, so the value stays as it is."""
     unchanged = redact_entity_id("wl03002g26270011577", "4TQDtRLglcQJ5goDNlug000000")
     assert unchanged == "wl03002g26270011577"
+
+
+def test_no_journal_line_prints_a_cloud_answer_unredacted() -> None:
+    """Every exception text handed to the logger goes through redact_text."""
+    offenders: list[str] = []
+    for path in sorted(_PACKAGE.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            called = node.func
+            if not (
+                isinstance(called, ast.Attribute)
+                and isinstance(called.value, ast.Name)
+                and called.value.id == "_LOGGER"
+            ):
+                continue
+            for arg in node.args[1:]:
+                source = ast.unparse(arg)
+                if "redact_text" in source or "__name__" in source:
+                    continue
+                if any(
+                    isinstance(part, ast.Name) and part.id in _EXCEPTION_NAMES
+                    for part in ast.walk(arg)
+                ):
+                    offenders.append(f"{path}:{node.lineno}: {source}")
+    assert not offenders, f"unredacted exception text logged at: {offenders}"

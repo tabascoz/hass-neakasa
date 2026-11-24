@@ -202,7 +202,7 @@ class NeakasaAPI:
                     text = await response.text()
                     _LOGGER.error(
                         "Failed to parse base URL JSON: %s. Body: %s",
-                        e,
+                        redact_text(e),
                         redact_text(text[:400]),
                     )
                     raise APIConnectionError("Error connecting to api.") from e
@@ -266,7 +266,7 @@ class NeakasaAPI:
                     text = await response.text()
                     _LOGGER.error(
                         "Failed to parse login JSON: %s. Body: %s",
-                        e,
+                        redact_text(e),
                         redact_text(text[:500]),
                     )
                     raise APIConnectionError("Error connecting to api.") from e
@@ -474,7 +474,7 @@ class NeakasaAPI:
         try:
             self._iot_token = await self._get_iot_token_by_sid(self._sid)
         except APIAuthError as err:
-            _LOGGER.warning("IoT token refresh rejected: %s", err)
+            _LOGGER.warning("IoT token refresh rejected: %s", redact_text(err))
 
     async def refresh_session(self) -> None:
         """Exchange the current session for a fresh IoT token, keeping errors.
