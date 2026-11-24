@@ -41,6 +41,22 @@
             "no_devices_found": "No supported Neakasa devices found for this account."
         }
     },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Neakasa options",
+                "description": "Settings for the whole account. The feeding default is only a starting point: each feeder has its own switch.",
+                "data": {
+                    "scan_interval": "Refresh interval",
+                    "feed_keep_as_new_defaults": "Keep fed amounts as the new defaults"
+                },
+                "data_description": {
+                    "scan_interval": "How often Home Assistant asks Neakasa for new data.",
+                    "feed_keep_as_new_defaults": "Starting point for each feeder's own switch, which overrides it."
+                }
+            }
+        }
+    },
     "entity": {
         "button": {
             "clean": {

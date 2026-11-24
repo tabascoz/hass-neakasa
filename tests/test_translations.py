@@ -5,6 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResultType
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from custom_components.neakasa.const import DOMAIN
 from custom_components.neakasa.coordinator import CLOUD_SESSION_OWNERS
 
 TRANSLATIONS_DIR = Path("custom_components/neakasa/translations")
@@ -205,4 +210,40 @@ def test_the_session_states_are_labelled_in_every_language() -> None:
         assert all(label.strip() for label in labels.values()), f"{name}: empty label"
         assert entity["state_attributes"]["options"]["state"] == labels, (
             f"{name}: the picker and the state disagree"
+        )
+
+
+async def test_every_option_the_form_offers_is_labelled(
+    hass: HomeAssistant,
+) -> None:
+    """The settings dialog must never fall back to printing a raw key.
+
+    The form and the label files are two lists of the same thing, so a field
+    added to one without the other is what this catches - the way every option
+    once rendered as its own snake_case name.
+    """
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        version=2,
+        unique_id="account:user@example.com",
+        data={},
+        options={},
+    )
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] is FlowResultType.FORM
+    offered = {
+        key.schema if hasattr(key, "schema") else key
+        for key in result["data_schema"].schema
+    }
+    assert offered, "the form offers nothing, so this test would prove nothing"
+
+    for name in EXPECTED_FILES:
+        init = _load_json(TRANSLATIONS_DIR / name)["options"]["step"]["init"]
+        assert set(init["data"]) == offered, f"{name}: labels differ from the form"
+        assert set(init["data_description"]) == offered, (
+            f"{name}: help text differs from the form"
+        )
+        assert all(label.strip() for label in init["data"].values()), (
+            f"{name}: empty label"
         )

@@ -41,6 +41,22 @@
             "no_devices_found": "Nie znaleziono urządzeń CatLitter na tym koncie."
         }
     },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Opcje Neakasa",
+                "description": "Ustawienia dla całego konta. Domyślna wartość karmienia jest tylko punktem wyjścia: każdy karmnik ma własny przełącznik.",
+                "data": {
+                    "scan_interval": "Częstotliwość odświeżania",
+                    "feed_keep_as_new_defaults": "Zapisuj wydane ilości jako nowe wartości domyślne"
+                },
+                "data_description": {
+                    "scan_interval": "Jak często Home Assistant żąda nowych danych od Neakasa.",
+                    "feed_keep_as_new_defaults": "Punkt wyjścia dla własnego przełącznika karmnika, który ma pierwszeństwo."
+                }
+            }
+        }
+    },
     "entity": {
         "button": {
             "clean": {

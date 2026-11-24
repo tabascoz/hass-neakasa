@@ -41,6 +41,22 @@
             "no_devices_found": "Não foram encontrados dispositivos Neakasa suportados para esta conta."
         }
     },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Opções do Neakasa",
+                "description": "Definições de toda a conta. O valor predefinido da alimentação é apenas um ponto de partida: cada comedouro tem o seu próprio interruptor.",
+                "data": {
+                    "scan_interval": "Intervalo de atualização",
+                    "feed_keep_as_new_defaults": "Guardar as quantidades dadas como novos valores predefinidos"
+                },
+                "data_description": {
+                    "scan_interval": "Com que frequência o Home Assistant pede dados novos à Neakasa.",
+                    "feed_keep_as_new_defaults": "Ponto de partida para o interruptor próprio de cada comedouro, que tem prioridade."
+                }
+            }
+        }
+    },
     "entity": {
         "button": {
             "clean": {

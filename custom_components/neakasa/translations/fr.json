@@ -41,6 +41,22 @@
             "no_devices_found": "Aucun appareil CatLitter trouvé pour ce compte."
         }
     },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Options Neakasa",
+                "description": "Réglages pour l'ensemble du compte. La valeur par défaut de distribution n'est qu'un point de départ : chaque distributeur a son propre interrupteur.",
+                "data": {
+                    "scan_interval": "Intervalle de rafraîchissement",
+                    "feed_keep_as_new_defaults": "Enregistrer les quantités distribuées comme nouveaux réglages par défaut"
+                },
+                "data_description": {
+                    "scan_interval": "À quelle fréquence Home Assistant demande des données nouvelles à Neakasa.",
+                    "feed_keep_as_new_defaults": "Point de départ de l'interrupteur propre à chaque distributeur, qui le remplace."
+                }
+            }
+        }
+    },
     "entity": {
         "button": {
             "clean": {

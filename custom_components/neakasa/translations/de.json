@@ -41,6 +41,22 @@
             "no_devices_found": "Keine CatLitter-Geräte für dieses Konto gefunden."
         }
     },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Neakasa-Optionen",
+                "description": "Einstellungen für das gesamte Konto. Die Fütterungs-Standardeinstellung ist nur ein Ausgangspunkt: Jeder Futterautomat hat einen eigenen Schalter.",
+                "data": {
+                    "scan_interval": "Aktualisierungsintervall",
+                    "feed_keep_as_new_defaults": "Gefütterte Mengen als neue Standardwerte speichern"
+                },
+                "data_description": {
+                    "scan_interval": "Wie oft Home Assistant neue Daten bei Neakasa anfordert.",
+                    "feed_keep_as_new_defaults": "Ausgangspunkt für den eigenen Schalter des Futterautomaten, der ihn übersteuert."
+                }
+            }
+        }
+    },
     "entity": {
         "button": {
             "clean": {
