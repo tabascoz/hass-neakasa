@@ -22,7 +22,9 @@ class NeakasaResetBowlScaleButton(CoordinatorEntity[NeakasaCoordinator], ButtonE
 
     The command asked for is `resetScaleZero`; the grams used are the bowl
     weight the machine states, and the press fails with a message when the
-    machine has never stated one.
+    machine has never stated one. Asked on this unit on 2026-11-23 with the
+    tare it already stores, and the empty-scale offset it was carrying came out
+    of the next reading.
     """
 
     _attr_should_poll = False

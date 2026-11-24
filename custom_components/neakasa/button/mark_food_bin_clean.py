@@ -23,8 +23,9 @@ class NeakasaMarkFoodBinCleanButton(
     Record on the machine that its food bin was cleaned now.
 
     The mark is the property the machine's definition names for the last
-    cleaning; this unit has never answered with one, so the press is what
-    shows whether this firmware stores it.
+    cleaning. Asked on this unit on 2026-11-23: the key appeared the moment a
+    press wrote it and the machine stated the stamp back unchanged through the
+    scans after, the same behaviour as the water tank key beside it.
     """
 
     _attr_should_poll = False

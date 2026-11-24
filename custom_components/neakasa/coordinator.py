@@ -1216,8 +1216,10 @@ class NeakasaCoordinator(DataUpdateCoordinator[NeakasaPayload]):
         Invoke one of the feeder's own commands with its arguments.
 
         The command names and argument keys come from the machine's definition
-        for the product; only ``feedOnce`` has been seen working here, so the
-        answer of the others is whatever this firmware says. A refusal is not
+        for the product. The commands that reach this method -- the desiccant
+        reset, the bowl-scale re-zero and the food-scale calibration -- have
+        each been asked on a real feeder and answered there, and
+        docs/riko-protocol.md records what each one returned. A refusal is not
         turned into a silent success: it reaches the caller as an error.
         """
         snap = self.data.get(iot_id) if self.data else None

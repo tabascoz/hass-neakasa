@@ -21,8 +21,9 @@ class NeakasaResetDesiccantButton(CoordinatorEntity[NeakasaCoordinator], ButtonE
     Tell the machine the pack was changed, so its countdown restarts.
 
     The command asked for is `resetDrierTime` with the day budget the machine
-    states; this unit has not been asked to run it before, so what it answers is
-    what this press finds out.
+    states. Asked on this unit on 2026-11-23: the countdown came back at the
+    budget it was handed, read from the machine rather than echoed from the
+    request, so the entity follows what the feeder says.
     """
 
     _attr_should_poll = False

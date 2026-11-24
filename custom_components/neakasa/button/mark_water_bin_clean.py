@@ -23,8 +23,10 @@ class NeakasaMarkWaterBinCleanButton(
     Record on the machine that its water tank was cleaned now.
 
     The mark is the property the machine's definition names for the last
-    cleaning; this unit has never answered with one, so the press is what
-    shows whether this firmware stores it.
+    cleaning. Asked on this unit on 2026-11-23: the key appeared the moment a
+    press wrote it and the machine stated the stamp back unchanged through the
+    scans after, so it records a mark the user made rather than a cleaning the
+    machine noticed on its own.
     """
 
     _attr_should_poll = False
