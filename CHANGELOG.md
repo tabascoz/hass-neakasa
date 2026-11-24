@@ -8,6 +8,34 @@ the written record of the line — entries must keep matching the tags, newest f
 
 No `v1.2` was ever cut; the line goes `v1.1` → `v1.3.0`.
 
+## [1.5.3](https://github.com/tabascoz/hass-neakasa/compare/v1.5.2...v1.5.3) (2026-11-24)
+
+* **Cloud Resilience:**
+  * Every cloud call carries a timeout, so a stalled request can no longer hold a scan open.
+  * A failed update is retried on the next scheduled scan instead of retrying inside the update until the call stack gives out.
+  * An update that retrieved nothing from the devices it knows reports as failed rather than as a successful empty update.
+
+* **Privacy:**
+  * A diagnostics download labels each device with the same masked identifier the journal prints, so sharing the file no longer hands over the cloud device id.
+  * Cloud failures written to the journal or to a diagnostics download no longer carry the account address or a device name taken from the provider's reply.
+  * The unedited provider text is still what the sign-in check reads, so a session that really has expired still asks for new credentials.
+  * The product catalogue block is gone from diagnostics; it never returned a row for a feeder and cost a cloud call.
+
+* **Device Naming:**
+  * Devices appear under the nickname given to them in the Neakasa app instead of their hardware serial.
+  * Existing entity IDs keep their serial prefix, and the wire name used for records and statistics is unchanged.
+  * Each device in a diagnostics download says which field named it — the app nickname, the wire name, or the serial fallback — as a field name and a length only.
+
+* **Settings:**
+  * The history-window number is gone from the settings form; nothing ever read it, because the record window the integration asks the cloud for is fixed at seven days.
+  * Option keys the settings form does not offer are pruned from installed entries at startup, and the config entry version moves to 4.
+  * The settings form now names both remaining controls and says what each one does, in every language the integration publishes.
+  * The temporary device-write harness that let any command and arguments be typed into the options form is removed.
+
+* **Feeder Controls:**
+  * The desiccant reset, the bowl-scale re-zero and the food-scale calibration are confirmed on a real feeder, so a press now does what the button says.
+  * Marking the water tank or the food bin clean stores the stamp on the machine, which states it back on later scans.
+
 ## [1.5.3-beta3](https://github.com/tabascoz/hass-neakasa/compare/v1.5.3-beta2...v1.5.3-beta3) (2026-11-24)
 
 * **Settings:**
