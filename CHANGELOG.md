@@ -8,6 +8,63 @@ the written record of the line — entries must keep matching the tags, newest f
 
 No `v1.2` was ever cut; the line goes `v1.1` → `v1.3.0`.
 
+## [1.5.3-beta3](https://github.com/tabascoz/hass-neakasa/compare/v1.5.3-beta2...v1.5.3-beta3) (2026-11-24)
+
+* **Settings:**
+  * The history-window number is gone from the settings form — nothing ever read it, because the record window the integration asks the cloud for is fixed at seven days.
+  * The config entry version moves to 4, so an installed entry loses that stale key at startup; the update interval and the feeder-default switch keep their values.
+
+* **Translations:**
+  * The settings form now names both controls and says what each one does, in every language the integration publishes.
+
+* **Logging:**
+  * Cloud failures written to the journal or to a diagnostics download no longer carry the account address or a device name from the provider's reply.
+  * The unedited text is still what the sign-in check reads, so a session that really has expired still asks for new credentials.
+
+## [1.5.3-beta2](https://github.com/tabascoz/hass-neakasa/compare/v1.5.3-beta1...v1.5.3-beta2) (2026-11-23)
+
+* **Device Naming:**
+  * Devices now appear under the nickname given to them in the Neakasa app instead of their hardware serial.
+  * The wire `deviceName` is unchanged, so record and statistics calls and the device serial sensor still use the serial.
+  * Existing entity IDs keep their serial prefix; only the displayed device name changes.
+
+* **Configuration:**
+  * Option keys no longer offered by the settings form are pruned from installed entries during startup.
+  * The valid option keys are defined once and shared by the settings form and the migration.
+  * The config entry version moves to 3.
+
+* **Logging:**
+  * Entity ID redaction accounts for a device named by its app label as well as by its serial.
+
+* **Diagnostics:**
+  * Each device entry now says which field named it: the app nickname, the wire name, or the serial fallback.
+  * That is the field's name and the length of the nickname only — no nickname, serial or account value is written to the file.
+  * The name Home Assistant shows and the source in the download come from one resolution path, so they cannot drift apart.
+
+* **Protocol Documentation:**
+  * The split between the app nickname and the wire serial is recorded, including the entity ID limitation.
+
+## [1.5.3-beta1](https://github.com/tabascoz/hass-neakasa/compare/v1.5.2...v1.5.3-beta1) (2026-11-23)
+
+* **Cloud Resilience:**
+  * Every cloud call now carries a client timeout so a stalled request cannot hold the scan open.
+  * An update that retrieved nothing is reported as failed rather than silently succeeding.
+  * A failed update is retried on the next scheduled scan instead of exhausting its recovery budget in one pass.
+
+* **Diagnostics:**
+  * Device entries in the diagnostics download are labelled with the same masked identifier the journal uses.
+  * The product catalogue block is removed — it never returned a row for a feeder and added an unnecessary cloud call.
+
+* **Protocol Documentation:**
+  * The desiccant reset, bowl-scale re-zero, food-scale calibration, and both clean-stamp buttons were pressed on the unit and their answers recorded.
+  * The machine's clock source was traced to the stored timezone rather than a DST flag or a wrong epoch.
+  * The meal-sound enum and the filing gap after a feeding press are documented.
+  * Evidence tags now state what each tag covers and when it was measured.
+
+* **Housekeeping:**
+  * The temporary device-write harness in the options flow is removed.
+  * Commit bodies are written as prose paragraphs rather than labelled sections.
+
 ## [1.5.2](https://github.com/tabascoz/hass-neakasa/compare/v1.5.1...v1.5.2) (2026-10-30)
 
 * **Food Served Today Tracking:**
